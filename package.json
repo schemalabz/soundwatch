@@ -9,7 +9,8 @@
     "lint": "eslint",
     "test": "vitest run",
     "test:watch": "vitest",
-    "ingester": "tsx mqtt-ingester/index.ts"
+    "ingester": "tsx mqtt-ingester/index.ts",
+    "simulate": "tsx scripts/simulate-sensor.ts"
   },
   "dependencies": {
     "@prisma/client": "^7.8.0",
