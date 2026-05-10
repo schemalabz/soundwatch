@@ -81,7 +81,7 @@ export function parseSensorPayload(raw: string): ParsedReading | null {
 
     const fieldName = SENSOR_FIELD_MAP[sensor.id];
     if (fieldName && fieldName in reading) {
-      (reading as Record<string, unknown>)[fieldName] = sensor.value;
+      (reading as unknown as Record<string, unknown>)[fieldName] = sensor.value;
     }
   }
 

@@ -1,7 +1,16 @@
-export default function Home() {
-  return (
-    <main className="flex min-h-screen items-center justify-center">
-      <h1 className="text-4xl font-bold">Soundwatch Athens</h1>
-    </main>
-  );
+import { MapSection } from "@/components/map/MapSection";
+
+async function getSensors() {
+  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000";
+  const res = await fetch(`${baseUrl}/api/sensors`, {
+    cache: "no-store",
+  });
+  if (!res.ok) return [];
+  return res.json();
+}
+
+export default async function Home() {
+  const sensors = await getSensors();
+
+  return <MapSection sensors={sensors} />;
 }
