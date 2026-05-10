@@ -1,0 +1,12 @@
+node_modules
+.next
+.git
+.env*
+!.env.production.example
+docs
+*.md
+.superpowers
+mosquitto/data
+mosquitto/log
+flake.nix
+flake.lock
