@@ -1,5 +1,5 @@
 import mqtt from "mqtt";
-import { PrismaClient } from "../src/generated/prisma";
+import { PrismaClient } from "@prisma/client";
 import { extractDeviceId, parseSensorPayload } from "./parser";
 
 const MQTT_BROKER_URL = process.env.MQTT_BROKER_URL || "mqtt://localhost:1883";

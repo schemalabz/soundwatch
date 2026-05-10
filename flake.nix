@@ -2,22 +2,26 @@
   description = "Soundwatch Athens - live noise monitoring platform";
 
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+    # Pin to nixos-24.11 which has Prisma 5.x engines matching our Prisma version
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-24.11";
+    nixpkgs-unstable.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
     flake-utils.url = "github:numtide/flake-utils";
   };
 
-  outputs = { self, nixpkgs, flake-utils }:
+  outputs = { self, nixpkgs, nixpkgs-unstable, flake-utils }:
     flake-utils.lib.eachDefaultSystem (system:
       let
         pkgs = nixpkgs.legacyPackages.${system};
+        pkgs-unstable = nixpkgs-unstable.legacyPackages.${system};
       in
       {
         devShells.default = pkgs.mkShell {
-          buildInputs = with pkgs; [
-            nodejs_22
-            corepack_22
-            docker-compose
-            openssl
+          buildInputs = [
+            pkgs-unstable.nodejs_22
+            pkgs-unstable.corepack_22
+            pkgs.docker-compose
+            pkgs.openssl
+            pkgs.prisma-engines
           ];
 
           env = {

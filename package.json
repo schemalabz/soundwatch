@@ -13,7 +13,7 @@
     "simulate": "tsx scripts/simulate-sensor.ts"
   },
   "dependencies": {
-    "@prisma/client": "^7.8.0",
+    "@prisma/client": "^5.22.0",
     "mqtt": "^5.15.1",
     "next": "16.2.6",
     "react": "19.2.4",
@@ -24,10 +24,9 @@
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
-    "dotenv": "^17.4.2",
     "eslint": "^9",
     "eslint-config-next": "16.2.6",
-    "prisma": "^7.8.0",
+    "prisma": "^5.22.0",
     "tailwindcss": "^4",
     "tsx": "^4.21.0",
     "typescript": "^5",
