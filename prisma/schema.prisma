@@ -1,0 +1,47 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Sensor {
+  id                String    @id @default(uuid())
+  deviceId          String    @unique @map("device_id")
+  name              String?
+  latitude          Float?
+  longitude         Float?
+  address           String?
+  firmwareVersion   String?   @map("firmware_version")
+  readingIntervalS  Int       @default(60) @map("reading_interval_s")
+  isActive          Boolean   @default(true) @map("is_active")
+  lastSeenAt        DateTime? @map("last_seen_at")
+  createdAt         DateTime  @default(now()) @map("created_at")
+
+  readings Reading[]
+
+  @@map("sensors")
+}
+
+model Reading {
+  id          BigInt   @id @default(autoincrement())
+  sensorId    String   @map("sensor_id")
+  recordedAt  DateTime @map("recorded_at")
+  noiseDba    Float?   @map("noise_dba")
+  temperature Float?
+  humidity    Float?
+  lightLux    Float?   @map("light_lux")
+  pressurePa  Float?   @map("pressure_pa")
+  uvIndex     Float?   @map("uv_index")
+  pm1         Float?
+  pm25        Float?
+  pm4         Float?
+  pm10        Float?
+
+  sensor Sensor @relation(fields: [sensorId], references: [id])
+
+  @@index([sensorId, recordedAt(sort: Desc)], map: "idx_readings_sensor_time")
+  @@map("readings")
+}
