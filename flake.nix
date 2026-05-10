@@ -16,11 +16,14 @@
           buildInputs = with pkgs; [
             nodejs_22
             corepack_22
+            docker-compose
           ];
 
           shellHook = ''
             echo "Soundwatch Athens dev shell"
             echo "Node.js $(node --version)"
+            echo ""
+            echo "Start dev services: docker compose -f docker-compose.dev.yml up -d"
           '';
         };
       });
