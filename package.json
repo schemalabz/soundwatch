@@ -10,7 +10,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "ingester": "tsx mqtt-ingester/index.ts",
-    "simulate": "tsx scripts/simulate-sensor.ts"
+    "simulate": "tsx scripts/simulate-sensor.ts",
+    "seed": "tsx scripts/seed-sensors.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",
