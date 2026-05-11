@@ -61,12 +61,12 @@ export default function AdminPage() {
             value={token}
             onChange={(e) => setToken(e.target.value)}
             placeholder="Admin token"
-            className="w-full px-4 py-2 border rounded-lg"
+            className="w-full px-4 py-2 border border-border rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
           />
-          {error && <p className="text-red-500 text-sm">{error}</p>}
+          {error && <p className="text-[#ef4444] text-sm">{error}</p>}
           <button
             type="submit"
-            className="w-full bg-black text-white py-2 rounded-lg hover:bg-gray-800"
+            className="w-full bg-primary text-white py-2 rounded-lg font-semibold hover:bg-primary-dark transition-colors"
           >
             Login
           </button>
@@ -83,49 +83,49 @@ export default function AdminPage() {
     <div className="max-w-6xl mx-auto p-6">
       <div className="flex items-center justify-between mb-6">
         <div>
-          <Link href="/" className="text-blue-600 text-sm hover:underline">
+          <Link href="/" className="text-primary text-sm hover:underline">
             ← Back to map
           </Link>
           <h1 className="text-2xl font-bold mt-2">Sensor Admin</h1>
         </div>
-        <div className="flex gap-4 text-sm">
-          <span className="text-green-600 font-medium">{online} online</span>
-          <span className="text-red-600 font-medium">{offline} offline</span>
-          <span className="text-gray-400">{neverSeen} never seen</span>
+        <div className="flex gap-4 text-sm font-medium">
+          <span className="text-[#22c55e]">{online} online</span>
+          <span className="text-[#ef4444]">{offline} offline</span>
+          <span className="text-muted">{neverSeen} never seen</span>
         </div>
       </div>
 
-      <div className="bg-white rounded-xl border overflow-hidden">
+      <div className="bg-white rounded-xl border border-border overflow-hidden">
         <table className="w-full text-sm">
-          <thead className="bg-gray-50 border-b">
+          <thead className="bg-light border-b border-border">
             <tr>
-              <th className="text-left p-3">Status</th>
-              <th className="text-left p-3">Device ID</th>
-              <th className="text-left p-3">Name</th>
-              <th className="text-left p-3">Address</th>
-              <th className="text-left p-3">Interval</th>
-              <th className="text-left p-3">Last Seen</th>
+              <th className="text-left p-3 text-muted font-medium">Status</th>
+              <th className="text-left p-3 text-muted font-medium">Device ID</th>
+              <th className="text-left p-3 text-muted font-medium">Name</th>
+              <th className="text-left p-3 text-muted font-medium">Address</th>
+              <th className="text-left p-3 text-muted font-medium">Interval</th>
+              <th className="text-left p-3 text-muted font-medium">Last Seen</th>
             </tr>
           </thead>
           <tbody>
             {sensors.map((sensor) => (
-              <tr key={sensor.id} className="border-b hover:bg-gray-50">
+              <tr key={sensor.id} className="border-b border-border/50 hover:bg-light/50 transition-colors">
                 <td className="p-3">
                   <span
                     className={`inline-block w-2.5 h-2.5 rounded-full ${
                       sensor.status === "online"
-                        ? "bg-green-500"
+                        ? "bg-[#22c55e]"
                         : sensor.status === "offline"
-                          ? "bg-red-500"
-                          : "bg-gray-300"
+                          ? "bg-[#ef4444]"
+                          : "bg-[#a8a29e]"
                     }`}
                   />
                 </td>
                 <td className="p-3 font-mono text-xs">{sensor.deviceId}</td>
                 <td className="p-3">{sensor.name || "—"}</td>
-                <td className="p-3 text-gray-500">{sensor.address || "—"}</td>
+                <td className="p-3 text-muted">{sensor.address || "—"}</td>
                 <td className="p-3">{sensor.readingIntervalS}s</td>
-                <td className="p-3 text-gray-500">
+                <td className="p-3 text-muted">
                   {sensor.lastSeenAt
                     ? new Date(sensor.lastSeenAt).toLocaleString()
                     : "Never"}

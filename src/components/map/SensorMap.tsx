@@ -37,7 +37,7 @@ export default function SensorMap({ sensors }: SensorMapProps) {
     mapboxgl.accessToken = token;
     map.current = new mapboxgl.Map({
       container: mapContainer.current,
-      style: "mapbox://styles/mapbox/light-v11",
+      style: "mapbox://styles/mapbox/streets-v12",
       center: [ATHENS_CENTER.lng, ATHENS_CENTER.lat],
       zoom: ATHENS_ZOOM,
     });
@@ -60,7 +60,7 @@ export default function SensorMap({ sensors }: SensorMapProps) {
       if (sensor.latitude == null || sensor.longitude == null) continue;
 
       const dba = sensor.latestReading?.noiseDba;
-      const color = dba != null ? getNoiseLevelColor(dba) : "#9ca3af";
+      const color = dba != null ? getNoiseLevelColor(dba) : "#a8a29e";
 
       const el = document.createElement("div");
       el.style.width = "24px";
@@ -68,15 +68,15 @@ export default function SensorMap({ sensors }: SensorMapProps) {
       el.style.borderRadius = "50%";
       el.style.backgroundColor = color;
       el.style.border = "3px solid white";
-      el.style.boxShadow = "0 2px 4px rgba(0,0,0,0.3)";
+      el.style.boxShadow = "0 2px 6px rgba(0,0,0,0.25)";
       el.style.cursor = "pointer";
 
       const popup = new mapboxgl.Popup({ offset: 15 }).setHTML(`
         <div style="font-family: system-ui; padding: 4px;">
-          <strong>${sensor.name || sensor.deviceId}</strong><br/>
-          ${dba != null ? `<span style="font-size: 1.2em; font-weight: bold;">${dba.toFixed(1)} dBA</span>` : "No data"}
+          <strong style="color: #1c1917;">${sensor.name || sensor.deviceId}</strong><br/>
+          ${dba != null ? `<span style="font-size: 1.2em; font-weight: bold; color: ${color};">${dba.toFixed(1)} dBA</span>` : '<span style="color: #78716c;">No data</span>'}
           <br/>
-          <a href="/sensors/${sensor.id}" style="color: #2563eb; text-decoration: underline; font-size: 0.85em;">View details →</a>
+          <a href="/sensors/${sensor.id}" style="color: #c2410c; text-decoration: underline; font-size: 0.85em;">View details →</a>
         </div>
       `);
 

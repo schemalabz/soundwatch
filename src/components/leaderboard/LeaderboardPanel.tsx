@@ -31,9 +31,9 @@ export default function LeaderboardPanel({
     });
 
   return (
-    <div className="space-y-2">
+    <div className="space-y-1">
       {withNoise.length === 0 && (
-        <p className="text-sm text-gray-500">No sensor data available</p>
+        <p className="text-sm text-muted">No sensor data available</p>
       )}
       {withNoise.map((sensor, i) => {
         const dba = sensor.latestReading!.noiseDba!;
@@ -44,28 +44,28 @@ export default function LeaderboardPanel({
           <Link
             key={sensor.id}
             href={`/sensors/${sensor.id}`}
-            className="flex items-center gap-3 p-3 rounded-lg hover:bg-gray-50 transition-colors"
+            className="flex items-center gap-3 p-3 rounded-lg hover:bg-light transition-colors"
           >
-            <span className="text-lg font-bold text-gray-400 w-6 text-right">
+            <span className="text-lg font-bold text-muted/50 w-6 text-right">
               {i + 1}
             </span>
             <span
-              className="w-3 h-3 rounded-full flex-shrink-0"
+              className="w-2.5 h-2.5 rounded-full flex-shrink-0"
               style={{ backgroundColor: color }}
             />
             <div className="flex-1 min-w-0">
-              <p className="font-medium truncate">
+              <p className="font-semibold text-sm truncate">
                 {sensor.name || sensor.deviceId}
               </p>
               {sensor.address && (
-                <p className="text-xs text-gray-500 truncate">
+                <p className="text-xs text-muted truncate">
                   {sensor.address}
                 </p>
               )}
             </div>
             <div className="text-right flex-shrink-0">
-              <p className="font-bold">{dba.toFixed(1)} dBA</p>
-              <p className="text-xs" style={{ color }}>
+              <p className="font-bold text-sm">{dba.toFixed(1)} dBA</p>
+              <p className="text-xs font-semibold" style={{ color }}>
                 {label}
               </p>
             </div>

@@ -16,7 +16,7 @@ interface Reading {
 
 export function SensorChartSection({ readings }: { readings: Reading[] }) {
   return (
-    <div className="bg-white rounded-xl border p-6 mb-8">
+    <div className="bg-white rounded-xl border border-border p-6 mb-8">
       <h2 className="text-lg font-bold mb-4">Noise History</h2>
       <ReadingsChart readings={readings} metric="noiseDba" />
     </div>

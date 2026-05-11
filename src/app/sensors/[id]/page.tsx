@@ -33,10 +33,10 @@ export default async function SensorDetailPage({
 
   if (!sensor) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
+      <div className="flex items-center justify-center min-h-[60vh]">
         <div className="text-center">
           <h1 className="text-2xl font-bold mb-2">Sensor not found</h1>
-          <Link href="/" className="text-blue-600 underline">
+          <Link href="/" className="text-primary underline">
             Back to map
           </Link>
         </div>
@@ -45,12 +45,12 @@ export default async function SensorDetailPage({
   }
 
   const dba = sensor.latestReading?.noiseDba;
-  const color = dba != null ? getNoiseLevelColor(dba) : "#9ca3af";
+  const color = dba != null ? getNoiseLevelColor(dba) : "#a8a29e";
   const label = dba != null ? getNoiseLevelLabel(dba) : "No data";
 
   return (
     <div className="max-w-4xl mx-auto p-6">
-      <Link href="/" className="text-blue-600 text-sm hover:underline">
+      <Link href="/" className="text-primary text-sm hover:underline">
         ← Back to map
       </Link>
 
@@ -59,39 +59,39 @@ export default async function SensorDetailPage({
           {sensor.name || sensor.deviceId}
         </h1>
         {sensor.address && (
-          <p className="text-gray-500 mt-1">{sensor.address}</p>
+          <p className="text-muted mt-1">{sensor.address}</p>
         )}
       </div>
 
       {/* Current readings */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-        <div className="bg-white rounded-xl border p-4">
-          <p className="text-sm text-gray-500">Noise</p>
+        <div className="bg-light rounded-xl border border-border p-4">
+          <p className="text-sm text-muted">Noise</p>
           <p className="text-2xl font-bold" style={{ color }}>
             {dba != null ? `${dba.toFixed(1)} dBA` : "—"}
           </p>
-          <p className="text-xs" style={{ color }}>
+          <p className="text-xs font-semibold" style={{ color }}>
             {label}
           </p>
         </div>
-        <div className="bg-white rounded-xl border p-4">
-          <p className="text-sm text-gray-500">Temperature</p>
+        <div className="bg-light rounded-xl border border-border p-4">
+          <p className="text-sm text-muted">Temperature</p>
           <p className="text-2xl font-bold">
             {sensor.latestReading?.temperature != null
               ? `${sensor.latestReading.temperature.toFixed(1)}°C`
               : "—"}
           </p>
         </div>
-        <div className="bg-white rounded-xl border p-4">
-          <p className="text-sm text-gray-500">Humidity</p>
+        <div className="bg-light rounded-xl border border-border p-4">
+          <p className="text-sm text-muted">Humidity</p>
           <p className="text-2xl font-bold">
             {sensor.latestReading?.humidity != null
               ? `${sensor.latestReading.humidity.toFixed(1)}%`
               : "—"}
           </p>
         </div>
-        <div className="bg-white rounded-xl border p-4">
-          <p className="text-sm text-gray-500">PM2.5</p>
+        <div className="bg-light rounded-xl border border-border p-4">
+          <p className="text-sm text-muted">PM2.5</p>
           <p className="text-2xl font-bold">
             {sensor.latestReading?.pm25 != null
               ? `${sensor.latestReading.pm25.toFixed(1)}`
@@ -104,22 +104,22 @@ export default async function SensorDetailPage({
       <SensorChartSection readings={readingsData.readings} />
 
       {/* Sensor info */}
-      <div className="bg-white rounded-xl border p-6">
+      <div className="bg-white rounded-xl border border-border p-6">
         <h2 className="text-lg font-bold mb-4">Sensor Info</h2>
         <dl className="grid grid-cols-2 gap-x-8 gap-y-3 text-sm">
-          <dt className="text-gray-500">Device ID</dt>
+          <dt className="text-muted">Device ID</dt>
           <dd className="font-mono">{sensor.deviceId}</dd>
-          <dt className="text-gray-500">Firmware</dt>
+          <dt className="text-muted">Firmware</dt>
           <dd>{sensor.firmwareVersion || "—"}</dd>
-          <dt className="text-gray-500">Reading Interval</dt>
+          <dt className="text-muted">Reading Interval</dt>
           <dd>{sensor.readingIntervalS}s</dd>
-          <dt className="text-gray-500">Last Seen</dt>
+          <dt className="text-muted">Last Seen</dt>
           <dd>
             {sensor.lastSeenAt
               ? new Date(sensor.lastSeenAt).toLocaleString()
               : "Never"}
           </dd>
-          <dt className="text-gray-500">Coordinates</dt>
+          <dt className="text-muted">Coordinates</dt>
           <dd>
             {sensor.latitude != null && sensor.longitude != null
               ? `${sensor.latitude.toFixed(4)}, ${sensor.longitude.toFixed(4)}`
