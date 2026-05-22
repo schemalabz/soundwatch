@@ -22,6 +22,7 @@
             pkgs.docker-compose
             pkgs.openssl
             pkgs.prisma-engines
+            pkgs-unstable.doctl
           ];
 
           env = {
