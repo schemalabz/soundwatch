@@ -33,12 +33,13 @@ services:
     restart: unless-stopped
 
   mosquitto:
-    image: eclipse-mosquitto:2
+    build:
+      context: .
+      dockerfile: Dockerfile.mosquitto
     ports:
       - "${MQTT_PORT:-1883}:1883"
       - "${MQTTS_PORT:-8883}:8883"
     volumes:
-      - ./mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf
       - mosquitto_data:/mosquitto/data
     restart: unless-stopped
 
