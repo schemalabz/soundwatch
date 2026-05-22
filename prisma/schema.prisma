@@ -15,6 +15,7 @@ model Sensor {
   longitude         Float?
   address           String?
   firmwareVersion   String?   @map("firmware_version")
+  targetFirmwareVersion String? @map("target_firmware_version")
   readingIntervalS  Int       @default(60) @map("reading_interval_s")
   isActive          Boolean   @default(true) @map("is_active")
   lastSeenAt        DateTime? @map("last_seen_at")
