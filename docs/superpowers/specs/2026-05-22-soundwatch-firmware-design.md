@@ -163,7 +163,7 @@ The sensor subscribes to `soundwatch/sensors/{device_id}/config` on connect. The
 ### Firmware-Side Flow
 
 1. Every 24 hours (configurable via `soundwatch.json`), or immediately on `check_update` MQTT command, the sensor makes an HTTP GET to the OTA URL.
-2. Request includes header: `X-Firmware-Version: 1.0.0` (current version).
+2. Request includes headers: `X-Firmware-Version: 1.0.0` (current version) and `X-Device-Id: sck-store-042` (device identity, for per-device version targeting).
 3. If server responds `200` with a binary: download, verify SHA-256 checksum against `X-Firmware-Checksum` header, flash via standard ESP8266 OTA (`ESP.flashWrite`).
 4. If server responds `304 Not Modified`: no update needed.
 5. On successful flash, the ESP8266 reboots automatically.
@@ -176,6 +176,7 @@ The sensor subscribes to `soundwatch/sensors/{device_id}/config` on connect. The
 | Header | Purpose |
 |---|---|
 | `X-Firmware-Version` | Current version running on sensor |
+| `X-Device-Id` | Device identity for per-device version targeting |
 
 **Response:**
 
