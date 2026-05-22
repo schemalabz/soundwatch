@@ -4,6 +4,8 @@ import { extractDeviceId, parseSensorPayload } from "./parser";
 
 const MQTT_BROKER_URL = process.env.MQTT_BROKER_URL || "mqtt://localhost:1883";
 const READINGS_TOPIC = "soundwatch/sensors/+/readings";
+const STATUS_TOPIC = "soundwatch/sensors/+/status";
+const STATUS_TOPIC_REGEX = /^soundwatch\/sensors\/([^/]+)\/status$/;
 
 const prisma = new PrismaClient();
 
@@ -60,25 +62,53 @@ async function handleMessage(topic: string, message: Buffer): Promise<void> {
   }
 }
 
+async function handleStatusMessage(topic: string, message: Buffer): Promise<void> {
+  const match = topic.match(STATUS_TOPIC_REGEX);
+  if (!match) return;
+
+  const deviceId = match[1];
+
+  try {
+    const data = JSON.parse(message.toString());
+    if (data.status === "online") {
+      await prisma.sensor.updateMany({
+        where: { deviceId },
+        data: { lastSeenAt: new Date() },
+      });
+      console.log(`Sensor ${deviceId} came online`);
+    } else if (data.status === "offline") {
+      console.log(`Sensor ${deviceId} went offline`);
+    }
+  } catch {
+    console.warn(`Failed to parse status message from ${deviceId}`);
+  }
+}
+
 function main(): void {
   console.log(`Connecting to MQTT broker at ${MQTT_BROKER_URL}...`);
   const client = mqtt.connect(MQTT_BROKER_URL);
 
   client.on("connect", () => {
     console.log("Connected to MQTT broker");
-    client.subscribe(READINGS_TOPIC, (err) => {
+    client.subscribe([READINGS_TOPIC, STATUS_TOPIC], (err) => {
       if (err) {
         console.error("Failed to subscribe:", err);
         process.exit(1);
       }
-      console.log(`Subscribed to ${READINGS_TOPIC}`);
+      console.log(`Subscribed to ${READINGS_TOPIC} and ${STATUS_TOPIC}`);
     });
   });
 
   client.on("message", (topic, message) => {
-    handleMessage(topic, message).catch((err) => {
-      console.error("Unhandled error in message handler:", err);
-    });
+    if (topic.endsWith("/status")) {
+      handleStatusMessage(topic, message).catch((err) => {
+        console.error("Unhandled error in status handler:", err);
+      });
+    } else {
+      handleMessage(topic, message).catch((err) => {
+        console.error("Unhandled error in message handler:", err);
+      });
+    }
   });
 
   client.on("error", (err) => {
