@@ -24,6 +24,7 @@ export async function PATCH(
     "address",
     "isActive",
     "readingIntervalS",
+    "targetFirmwareVersion",
   ] as const;
 
   const data: Record<string, unknown> = {};
