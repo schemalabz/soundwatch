@@ -2,6 +2,7 @@ import { SENSOR_FIELD_MAP } from "@/types/sensor";
 
 export interface ParsedReading {
   deviceId: string;
+  firmwareVersion?: string;
   recordedAt: Date;
   noiseDba: number | null;
   temperature: number | null;
@@ -54,8 +55,15 @@ export function parseSensorPayload(raw: string): ParsedReading | null {
     return null;
   }
 
+  const firmwareVersion =
+    "firmware_version" in (data as Record<string, unknown>) &&
+    typeof (data as Record<string, unknown>).firmware_version === "string"
+      ? ((data as Record<string, unknown>).firmware_version as string)
+      : undefined;
+
   const reading: ParsedReading = {
     deviceId: obj.device_id,
+    firmwareVersion,
     recordedAt: new Date(obj.recorded_at),
     noiseDba: null,
     temperature: null,

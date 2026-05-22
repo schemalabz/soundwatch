@@ -101,6 +101,31 @@ describe("parseSensorPayload", () => {
     expect(parseSensorPayload(payload)).toBeNull();
   });
 
+  it("extracts firmware_version when present", () => {
+    const payload = JSON.stringify({
+      device_id: "sck-test-001",
+      firmware_version: "1.2.3",
+      recorded_at: "2026-06-15T14:30:00Z",
+      sensors: [{ id: "noise_dba", value: 65.0 }],
+    });
+
+    const result = parseSensorPayload(payload);
+    expect(result).not.toBeNull();
+    expect(result!.firmwareVersion).toBe("1.2.3");
+  });
+
+  it("firmware_version is undefined when not present", () => {
+    const payload = JSON.stringify({
+      device_id: "sck-test-001",
+      recorded_at: "2026-06-15T14:30:00Z",
+      sensors: [{ id: "noise_dba", value: 65.0 }],
+    });
+
+    const result = parseSensorPayload(payload);
+    expect(result).not.toBeNull();
+    expect(result!.firmwareVersion).toBeUndefined();
+  });
+
   it("ignores unknown sensor ids", () => {
     const payload = JSON.stringify({
       device_id: "sck-store-042",

@@ -7,10 +7,13 @@ const READINGS_TOPIC = "soundwatch/sensors/+/readings";
 
 const prisma = new PrismaClient();
 
-async function upsertSensor(deviceId: string): Promise<string> {
+async function upsertSensor(deviceId: string, firmwareVersion?: string): Promise<string> {
   const sensor = await prisma.sensor.upsert({
     where: { deviceId },
-    update: { lastSeenAt: new Date() },
+    update: {
+      lastSeenAt: new Date(),
+      ...(firmwareVersion && { firmwareVersion }),
+    },
     create: { deviceId },
   });
   return sensor.id;
@@ -30,7 +33,7 @@ async function handleMessage(topic: string, message: Buffer): Promise<void> {
   }
 
   try {
-    const sensorId = await upsertSensor(deviceId);
+    const sensorId = await upsertSensor(deviceId, reading.firmwareVersion);
 
     await prisma.reading.create({
       data: {
