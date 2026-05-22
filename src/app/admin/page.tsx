@@ -11,6 +11,7 @@ interface SensorWithStatus {
   latitude: number | null;
   longitude: number | null;
   firmwareVersion: string | null;
+  targetFirmwareVersion: string | null;
   readingIntervalS: number;
   isActive: boolean;
   lastSeenAt: string | null;
@@ -18,11 +19,24 @@ interface SensorWithStatus {
   status: "online" | "offline" | "never_seen";
 }
 
+interface EditForm {
+  name: string;
+  address: string;
+  latitude: string;
+  longitude: string;
+  readingIntervalS: string;
+  targetFirmwareVersion: string;
+  isActive: boolean;
+}
+
 export default function AdminPage() {
   const [sensors, setSensors] = useState<SensorWithStatus[]>([]);
   const [token, setToken] = useState("");
   const [authenticated, setAuthenticated] = useState(false);
   const [error, setError] = useState("");
+  const [editingSensor, setEditingSensor] = useState<SensorWithStatus | null>(null);
+  const [editForm, setEditForm] = useState<EditForm | null>(null);
+  const [saving, setSaving] = useState(false);
 
   async function fetchSensors(adminToken: string) {
     const res = await fetch("/api/admin/sensors", {
@@ -42,6 +56,64 @@ export default function AdminPage() {
   function handleLogin(e: React.FormEvent) {
     e.preventDefault();
     fetchSensors(token);
+  }
+
+  function openEdit(sensor: SensorWithStatus) {
+    setEditingSensor(sensor);
+    setEditForm({
+      name: sensor.name || "",
+      address: sensor.address || "",
+      latitude: sensor.latitude?.toString() || "",
+      longitude: sensor.longitude?.toString() || "",
+      readingIntervalS: sensor.readingIntervalS.toString(),
+      targetFirmwareVersion: sensor.targetFirmwareVersion || "",
+      isActive: sensor.isActive,
+    });
+  }
+
+  async function handleSave() {
+    if (!editingSensor || !editForm) return;
+    setSaving(true);
+
+    const body: Record<string, unknown> = {
+      name: editForm.name || null,
+      address: editForm.address || null,
+      latitude: editForm.latitude ? parseFloat(editForm.latitude) : null,
+      longitude: editForm.longitude ? parseFloat(editForm.longitude) : null,
+      readingIntervalS: parseInt(editForm.readingIntervalS, 10),
+      targetFirmwareVersion: editForm.targetFirmwareVersion || null,
+      isActive: editForm.isActive,
+    };
+
+    const res = await fetch(`/api/admin/sensors/${editingSensor.id}`, {
+      method: "PATCH",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(body),
+    });
+
+    if (res.ok) {
+      if (parseInt(editForm.readingIntervalS, 10) !== editingSensor.readingIntervalS) {
+        await fetch(`/api/admin/sensors/${editingSensor.id}/config`, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            command: "update_config",
+            readingIntervalS: parseInt(editForm.readingIntervalS, 10),
+          }),
+        });
+      }
+      setEditingSensor(null);
+      setEditForm(null);
+      fetchSensors(token);
+    }
+
+    setSaving(false);
   }
 
   useEffect(() => {
@@ -95,45 +167,160 @@ export default function AdminPage() {
         </div>
       </div>
 
-      <div className="bg-white rounded-xl border border-border overflow-hidden">
-        <table className="w-full text-sm">
-          <thead className="bg-light border-b border-border">
-            <tr>
-              <th className="text-left p-3 text-muted font-medium">Status</th>
-              <th className="text-left p-3 text-muted font-medium">Device ID</th>
-              <th className="text-left p-3 text-muted font-medium">Name</th>
-              <th className="text-left p-3 text-muted font-medium">Address</th>
-              <th className="text-left p-3 text-muted font-medium">Interval</th>
-              <th className="text-left p-3 text-muted font-medium">Last Seen</th>
-            </tr>
-          </thead>
-          <tbody>
-            {sensors.map((sensor) => (
-              <tr key={sensor.id} className="border-b border-border/50 hover:bg-light/50 transition-colors">
-                <td className="p-3">
-                  <span
-                    className={`inline-block w-2.5 h-2.5 rounded-full ${
-                      sensor.status === "online"
-                        ? "bg-[#22c55e]"
-                        : sensor.status === "offline"
-                          ? "bg-[#ef4444]"
-                          : "bg-[#a8a29e]"
-                    }`}
-                  />
-                </td>
-                <td className="p-3 font-mono text-xs">{sensor.deviceId}</td>
-                <td className="p-3">{sensor.name || "—"}</td>
-                <td className="p-3 text-muted">{sensor.address || "—"}</td>
-                <td className="p-3">{sensor.readingIntervalS}s</td>
-                <td className="p-3 text-muted">
-                  {sensor.lastSeenAt
-                    ? new Date(sensor.lastSeenAt).toLocaleString()
-                    : "Never"}
-                </td>
+      <div className="flex gap-6">
+        <div className="flex-1 bg-white rounded-xl border border-border overflow-hidden">
+          <table className="w-full text-sm">
+            <thead className="bg-light border-b border-border">
+              <tr>
+                <th className="text-left p-3 text-muted font-medium">Status</th>
+                <th className="text-left p-3 text-muted font-medium">Device ID</th>
+                <th className="text-left p-3 text-muted font-medium">Name</th>
+                <th className="text-left p-3 text-muted font-medium">Address</th>
+                <th className="text-left p-3 text-muted font-medium">Interval</th>
+                <th className="text-left p-3 text-muted font-medium">Last Seen</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {sensors.map((sensor) => (
+                <tr
+                  key={sensor.id}
+                  onClick={() => openEdit(sensor)}
+                  className={`border-b border-border/50 cursor-pointer transition-colors ${
+                    editingSensor?.id === sensor.id
+                      ? "bg-light"
+                      : "hover:bg-light/50"
+                  }`}
+                >
+                  <td className="p-3">
+                    <span
+                      className={`inline-block w-2.5 h-2.5 rounded-full ${
+                        sensor.status === "online"
+                          ? "bg-[#22c55e]"
+                          : sensor.status === "offline"
+                            ? "bg-[#ef4444]"
+                            : "bg-[#a8a29e]"
+                      }`}
+                    />
+                  </td>
+                  <td className="p-3 font-mono text-xs">{sensor.deviceId}</td>
+                  <td className="p-3">{sensor.name || "—"}</td>
+                  <td className="p-3 text-muted">{sensor.address || "—"}</td>
+                  <td className="p-3">{sensor.readingIntervalS}s</td>
+                  <td className="p-3 text-muted">
+                    {sensor.lastSeenAt
+                      ? new Date(sensor.lastSeenAt).toLocaleString()
+                      : "Never"}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        {editForm && editingSensor && (
+          <div className="w-80 bg-white rounded-xl border border-border p-5 space-y-4 self-start">
+            <div className="flex items-center justify-between">
+              <h3 className="font-bold">Edit Sensor</h3>
+              <button
+                onClick={() => { setEditingSensor(null); setEditForm(null); }}
+                className="text-muted hover:text-foreground text-lg"
+              >
+                ✕
+              </button>
+            </div>
+
+            <p className="font-mono text-xs text-muted">{editingSensor.deviceId}</p>
+
+            <label className="block">
+              <span className="text-xs text-muted">Name</span>
+              <input
+                value={editForm.name}
+                onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                className="w-full mt-1 px-3 py-1.5 border border-border rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary/30"
+              />
+            </label>
+
+            <label className="block">
+              <span className="text-xs text-muted">Address</span>
+              <input
+                value={editForm.address}
+                onChange={(e) => setEditForm({ ...editForm, address: e.target.value })}
+                className="w-full mt-1 px-3 py-1.5 border border-border rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary/30"
+              />
+            </label>
+
+            <div className="grid grid-cols-2 gap-3">
+              <label className="block">
+                <span className="text-xs text-muted">Latitude</span>
+                <input
+                  value={editForm.latitude}
+                  onChange={(e) => setEditForm({ ...editForm, latitude: e.target.value })}
+                  className="w-full mt-1 px-3 py-1.5 border border-border rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary/30"
+                />
+              </label>
+              <label className="block">
+                <span className="text-xs text-muted">Longitude</span>
+                <input
+                  value={editForm.longitude}
+                  onChange={(e) => setEditForm({ ...editForm, longitude: e.target.value })}
+                  className="w-full mt-1 px-3 py-1.5 border border-border rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary/30"
+                />
+              </label>
+            </div>
+
+            <label className="block">
+              <span className="text-xs text-muted">Reading Interval (seconds)</span>
+              <input
+                type="number"
+                value={editForm.readingIntervalS}
+                onChange={(e) => setEditForm({ ...editForm, readingIntervalS: e.target.value })}
+                className="w-full mt-1 px-3 py-1.5 border border-border rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary/30"
+              />
+            </label>
+
+            <label className="block">
+              <span className="text-xs text-muted">Target Firmware Version</span>
+              <input
+                value={editForm.targetFirmwareVersion}
+                onChange={(e) => setEditForm({ ...editForm, targetFirmwareVersion: e.target.value })}
+                placeholder="Leave empty for latest"
+                className="w-full mt-1 px-3 py-1.5 border border-border rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary/30"
+              />
+            </label>
+
+            <label className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={editForm.isActive}
+                onChange={(e) => setEditForm({ ...editForm, isActive: e.target.checked })}
+                className="rounded border-border"
+              />
+              <span className="text-sm">Active</span>
+            </label>
+
+            <div className="flex gap-2 pt-2">
+              <button
+                onClick={handleSave}
+                disabled={saving}
+                className="flex-1 bg-primary text-white py-2 rounded-lg font-semibold hover:bg-primary-dark transition-colors disabled:opacity-50"
+              >
+                {saving ? "Saving..." : "Save"}
+              </button>
+              <button
+                onClick={() => { setEditingSensor(null); setEditForm(null); }}
+                className="px-4 py-2 border border-border rounded-lg text-sm hover:bg-light transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
+
+            {editingSensor.firmwareVersion && (
+              <p className="text-xs text-muted pt-2">
+                Current firmware: {editingSensor.firmwareVersion}
+              </p>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );
