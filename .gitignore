@@ -52,6 +52,9 @@ docs/superpowers/plans/
 # Mosquitto
 mosquitto/data/
 mosquitto/log/
+mosquitto/passwd
+mosquitto/certs/
+!mosquitto/certs/.gitkeep
 
 # Prisma
 prisma/*.db

@@ -41,6 +41,8 @@ services:
       - "${MQTTS_PORT:-8883}:8883"
     volumes:
       - mosquitto_data:/mosquitto/data
+      - ${MOSQUITTO_CERTS_PATH:-./mosquitto/certs}:/mosquitto/certs:ro
+      - ${MOSQUITTO_PASSWD_PATH:-./mosquitto/passwd}:/mosquitto/config/passwd:ro
     restart: unless-stopped
 
   postgres:
