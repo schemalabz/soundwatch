@@ -9,11 +9,22 @@ export interface ParsedReading {
   humidity: number | null;
   lightLux: number | null;
   pressurePa: number | null;
-  uvIndex: number | null;
+  uvA: number | null;
+  uvB: number | null;
+  uvC: number | null;
   pm1: number | null;
   pm25: number | null;
   pm4: number | null;
   pm10: number | null;
+  pn05: number | null;
+  pn10: number | null;
+  pn25: number | null;
+  pn40: number | null;
+  pn100: number | null;
+  tps: number | null;
+  battery: number | null;
+  rssi: number | null;
+  sdCard: number | null;
 }
 
 const TOPIC_REGEX = /^soundwatch\/sensors\/([^/]+)\/readings$/;
@@ -70,11 +81,22 @@ export function parseSensorPayload(raw: string): ParsedReading | null {
     humidity: null,
     lightLux: null,
     pressurePa: null,
-    uvIndex: null,
+    uvA: null,
+    uvB: null,
+    uvC: null,
     pm1: null,
     pm25: null,
     pm4: null,
     pm10: null,
+    pn05: null,
+    pn10: null,
+    pn25: null,
+    pn40: null,
+    pn100: null,
+    tps: null,
+    battery: null,
+    rssi: null,
+    sdCard: null,
   };
 
   for (const sensor of obj.sensors) {

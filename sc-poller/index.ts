@@ -12,9 +12,22 @@ const SENSOR_MAP: Record<number, string> = {
   56: "humidity",       // Humidity (%)
   14: "lightLux",      // Light (lux)
   58: "pressurePa",    // Barometric Pressure (kPa → Pa)
-  89: "pm1",           // PM1
-  87: "pm25",          // PM2.5
-  88: "pm10",          // PM10
+  214: "uvA",           // UVA (uW/cm²)
+  215: "uvB",           // UVB (uW/cm²)
+  216: "uvC",           // UVC (uW/cm²)
+  193: "pm1",           // PM1 (µg/m³)
+  194: "pm25",          // PM2.5 (µg/m³)
+  195: "pm4",           // PM4.0 (µg/m³)
+  196: "pm10",          // PM10 (µg/m³)
+  197: "pn05",          // PN0.5 (#/0.1l)
+  198: "pn10",          // PN1.0 (#/0.1l)
+  199: "pn25",          // PN2.5 (#/0.1l)
+  200: "pn40",          // PN4.0 (#/0.1l)
+  201: "pn100",         // PN10.0 (#/0.1l)
+  202: "tps",           // Typical Particle Size (µm)
+  10: "battery",        // Battery (%)
+  220: "rssi",          // WiFi RSSI (dBm)
+  221: "sdCard",        // SD Card presence
 };
 
 const UNIT_CONVERSIONS: Record<string, (v: number) => number> = {
@@ -147,9 +160,22 @@ async function pollDevice(mapping: DeviceMapping): Promise<void> {
       humidity: values.humidity ?? null,
       lightLux: values.lightLux ?? null,
       pressurePa: values.pressurePa ?? null,
+      uvA: values.uvA ?? null,
+      uvB: values.uvB ?? null,
+      uvC: values.uvC ?? null,
       pm1: values.pm1 ?? null,
       pm25: values.pm25 ?? null,
+      pm4: values.pm4 ?? null,
       pm10: values.pm10 ?? null,
+      pn05: values.pn05 ?? null,
+      pn10: values.pn10 ?? null,
+      pn25: values.pn25 ?? null,
+      pn40: values.pn40 ?? null,
+      pn100: values.pn100 ?? null,
+      tps: values.tps ?? null,
+      battery: values.battery ?? null,
+      rssi: values.rssi ?? null,
+      sdCard: values.sdCard ?? null,
     },
   });
   console.log(

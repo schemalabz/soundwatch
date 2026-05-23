@@ -15,11 +15,22 @@ export const SENSOR_FIELD_MAP: Record<string, string> = {
   humidity: "humidity",
   light_lux: "lightLux",
   pressure_pa: "pressurePa",
-  uv_index: "uvIndex",
+  uv_a: "uvA",
+  uv_b: "uvB",
+  uv_c: "uvC",
   pm1: "pm1",
   pm25: "pm25",
   pm4: "pm4",
   pm10: "pm10",
+  pn05: "pn05",
+  pn10: "pn10",
+  pn25: "pn25",
+  pn40: "pn40",
+  pn100: "pn100",
+  tps: "tps",
+  battery: "battery",
+  rssi: "rssi",
+  sd_card: "sdCard",
 } as const;
 
 export type SensorField = keyof typeof SENSOR_FIELD_MAP;

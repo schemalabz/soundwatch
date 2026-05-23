@@ -34,20 +34,6 @@ export async function GET(
     isActive: sensor.isActive,
     lastSeenAt: sensor.lastSeenAt,
     createdAt: sensor.createdAt,
-    latestReading: latest
-      ? {
-          recordedAt: latest.recordedAt,
-          noiseDba: latest.noiseDba,
-          temperature: latest.temperature,
-          humidity: latest.humidity,
-          lightLux: latest.lightLux,
-          pressurePa: latest.pressurePa,
-          uvIndex: latest.uvIndex,
-          pm1: latest.pm1,
-          pm25: latest.pm25,
-          pm4: latest.pm4,
-          pm10: latest.pm10,
-        }
-      : null,
+    latestReading: latest,
   });
 }

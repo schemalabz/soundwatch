@@ -1,0 +1,20 @@
+-- Replace uvIndex with separate UVA/UVB/UVC channels
+ALTER TABLE "readings" DROP COLUMN IF EXISTS "uv_index";
+ALTER TABLE "readings" ADD COLUMN "uv_a" DOUBLE PRECISION;
+ALTER TABLE "readings" ADD COLUMN "uv_b" DOUBLE PRECISION;
+ALTER TABLE "readings" ADD COLUMN "uv_c" DOUBLE PRECISION;
+
+-- Particle number counts
+ALTER TABLE "readings" ADD COLUMN "pn_05" DOUBLE PRECISION;
+ALTER TABLE "readings" ADD COLUMN "pn_10" DOUBLE PRECISION;
+ALTER TABLE "readings" ADD COLUMN "pn_25" DOUBLE PRECISION;
+ALTER TABLE "readings" ADD COLUMN "pn_40" DOUBLE PRECISION;
+ALTER TABLE "readings" ADD COLUMN "pn_100" DOUBLE PRECISION;
+
+-- Typical particle size
+ALTER TABLE "readings" ADD COLUMN "tps" DOUBLE PRECISION;
+
+-- Sensor health metrics
+ALTER TABLE "readings" ADD COLUMN "battery" DOUBLE PRECISION;
+ALTER TABLE "readings" ADD COLUMN "rssi" DOUBLE PRECISION;
+ALTER TABLE "readings" ADD COLUMN "sd_card" DOUBLE PRECISION;

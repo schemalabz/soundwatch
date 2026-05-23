@@ -31,7 +31,7 @@ describe("parseSensorPayload", () => {
         { id: "humidity", value: 54.2 },
         { id: "light_lux", value: 340.0 },
         { id: "pressure_pa", value: 101325.0 },
-        { id: "uv_index", value: 3.2 },
+        { id: "uv_a", value: 3.2 },
         { id: "pm1", value: 8.1 },
         { id: "pm25", value: 12.4 },
         { id: "pm4", value: 15.0 },
@@ -49,7 +49,7 @@ describe("parseSensorPayload", () => {
     expect(reading.humidity).toBe(54.2);
     expect(reading.lightLux).toBe(340.0);
     expect(reading.pressurePa).toBe(101325.0);
-    expect(reading.uvIndex).toBe(3.2);
+    expect(reading.uvA).toBe(3.2);
     expect(reading.pm1).toBe(8.1);
     expect(reading.pm25).toBe(12.4);
     expect(reading.pm4).toBe(15.0);

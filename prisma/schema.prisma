@@ -36,11 +36,22 @@ model Reading {
   humidity    Float?
   lightLux    Float?   @map("light_lux")
   pressurePa  Float?   @map("pressure_pa")
-  uvIndex     Float?   @map("uv_index")
+  uvA         Float?   @map("uv_a")
+  uvB         Float?   @map("uv_b")
+  uvC         Float?   @map("uv_c")
   pm1         Float?
   pm25        Float?
   pm4         Float?
   pm10        Float?
+  pn05        Float?   @map("pn_05")
+  pn10        Float?   @map("pn_10")
+  pn25        Float?   @map("pn_25")
+  pn40        Float?   @map("pn_40")
+  pn100       Float?   @map("pn_100")
+  tps         Float?
+  battery     Float?
+  rssi        Float?
+  sdCard      Float?   @map("sd_card")
 
   sensor Sensor @relation(fields: [sensorId], references: [id])
 
