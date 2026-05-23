@@ -21,7 +21,9 @@ export async function GET(
     return NextResponse.json({ error: "Sensor not found" }, { status: 404 });
   }
 
-  const latest = sensor.readings[0] ?? null;
+  const raw = sensor.readings[0] ?? null;
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const latestReading = raw ? (({ id: _id, sensorId: _sid, ...rest }) => rest)(raw) : null;
   return NextResponse.json({
     id: sensor.id,
     deviceId: sensor.deviceId,
@@ -34,6 +36,6 @@ export async function GET(
     isActive: sensor.isActive,
     lastSeenAt: sensor.lastSeenAt,
     createdAt: sensor.createdAt,
-    latestReading: latest,
+    latestReading,
   });
 }
