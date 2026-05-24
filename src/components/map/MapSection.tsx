@@ -3,6 +3,7 @@
 import { useState } from "react";
 import dynamic from "next/dynamic";
 import LeaderboardPanel from "@/components/leaderboard/LeaderboardPanel";
+import SensorPreviewPanel from "@/components/map/SensorPreviewPanel";
 
 const SensorMap = dynamic(() => import("@/components/map/SensorMap"), {
   ssr: false,
@@ -20,25 +21,39 @@ interface SensorData {
   address: string | null;
   latitude: number | null;
   longitude: number | null;
-  latestReading: {
-    noiseDba: number | null;
-  } | null;
+  latestReading: Record<string, unknown> | null;
 }
 
 export function MapSection({ sensors }: { sensors: SensorData[] }) {
   const [showLeaderboard, setShowLeaderboard] = useState(false);
+  const [selectedSensor, setSelectedSensor] = useState<SensorData | null>(null);
 
   return (
     <div className="flex flex-1 flex-col md:flex-row relative">
       <div className="flex-1 relative min-h-[60vh] md:min-h-0">
-        <SensorMap sensors={sensors} />
-        {/* Mobile toggle button */}
-        <button
-          onClick={() => setShowLeaderboard(!showLeaderboard)}
-          className="md:hidden absolute bottom-4 left-1/2 -translate-x-1/2 bg-primary text-white px-4 py-2 rounded-lg font-semibold shadow-lg z-10"
-        >
-          {showLeaderboard ? "Show Map" : "Leaderboard"}
-        </button>
+        <SensorMap
+          sensors={sensors}
+          selectedSensorId={selectedSensor?.id}
+          onSensorClick={(sensor) => setSelectedSensor(sensor as SensorData)}
+        />
+
+        {/* Preview panel */}
+        {selectedSensor && (
+          <SensorPreviewPanel
+            sensor={selectedSensor}
+            onClose={() => setSelectedSensor(null)}
+          />
+        )}
+
+        {/* Mobile toggle button — hide when preview panel is open */}
+        {!selectedSensor && (
+          <button
+            onClick={() => setShowLeaderboard(!showLeaderboard)}
+            className="md:hidden absolute bottom-4 left-1/2 -translate-x-1/2 bg-primary text-white px-4 py-2 rounded-lg font-semibold shadow-lg z-10"
+          >
+            {showLeaderboard ? "Show Map" : "Leaderboard"}
+          </button>
+        )}
       </div>
       <aside
         className={`${

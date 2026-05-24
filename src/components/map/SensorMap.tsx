@@ -18,12 +18,20 @@ interface SensorData {
 
 interface SensorMapProps {
   sensors: SensorData[];
+  selectedSensorId?: string | null;
+  onSensorClick: (sensor: SensorData) => void;
 }
 
-export default function SensorMap({ sensors }: SensorMapProps) {
+export default function SensorMap({
+  sensors,
+  selectedSensorId,
+  onSensorClick,
+}: SensorMapProps) {
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<mapboxgl.Map | null>(null);
-  const markersRef = useRef<mapboxgl.Marker[]>([]);
+  const markersRef = useRef<Map<string, mapboxgl.Marker>>(new Map());
+  const onSensorClickRef = useRef(onSensorClick);
+  onSensorClickRef.current = onSensorClick;
 
   useEffect(() => {
     if (!mapContainer.current) return;
@@ -54,7 +62,7 @@ export default function SensorMap({ sensors }: SensorMapProps) {
 
     // Clear existing markers
     markersRef.current.forEach((m) => m.remove());
-    markersRef.current = [];
+    markersRef.current.clear();
 
     for (const sensor of sensors) {
       if (sensor.latitude == null || sensor.longitude == null) continue;
@@ -70,26 +78,34 @@ export default function SensorMap({ sensors }: SensorMapProps) {
       el.style.border = "3px solid white";
       el.style.boxShadow = "0 2px 6px rgba(0,0,0,0.25)";
       el.style.cursor = "pointer";
+      el.style.transition = "transform 0.2s";
 
-      const popup = new mapboxgl.Popup({ offset: 15 }).setHTML(`
-        <div style="font-family: system-ui; padding: 4px;">
-          <strong style="color: #1c1917;">${sensor.name || sensor.deviceId}</strong><br/>
-          ${dba != null ? `<span style="font-size: 1.2em; font-weight: bold; color: ${color};">${dba.toFixed(1)} dBA</span>` : '<span style="color: #78716c;">No data</span>'}
-          <br/>
-          <a href="/sensors/${sensor.id}" style="color: #c2410c; text-decoration: underline; font-size: 0.85em;">View details →</a>
-        </div>
-      `);
+      el.addEventListener("click", (e) => {
+        e.stopPropagation();
+        onSensorClickRef.current(sensor);
+      });
 
       const marker = new mapboxgl.Marker(el)
         .setLngLat([sensor.longitude, sensor.latitude])
-        .setPopup(popup)
         .addTo(map.current!);
 
-      markersRef.current.push(marker);
+      markersRef.current.set(sensor.id, marker);
     }
   }, [sensors]);
 
-  return (
-    <div ref={mapContainer} className="w-full h-full" />
-  );
+  // Highlight selected marker
+  useEffect(() => {
+    markersRef.current.forEach((marker, id) => {
+      const el = marker.getElement();
+      if (id === selectedSensorId) {
+        el.style.transform = "scale(1.4)";
+        el.style.zIndex = "10";
+      } else {
+        el.style.transform = "scale(1)";
+        el.style.zIndex = "1";
+      }
+    });
+  }, [selectedSensorId]);
+
+  return <div ref={mapContainer} className="w-full h-full" />;
 }
