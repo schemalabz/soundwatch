@@ -10,49 +10,44 @@ import {
   ResponsiveContainer,
 } from "recharts";
 import { format } from "date-fns";
-
-interface Reading {
-  recordedAt: string;
-  noiseDba: number | null;
-  temperature: number | null;
-  humidity: number | null;
-}
+import { getMetricDef, NOISE_METRIC } from "@/lib/metrics";
 
 interface ReadingsChartProps {
-  readings: Reading[];
-  metric?: "noiseDba" | "temperature" | "humidity";
+  readings: Record<string, unknown>[];
+  metricKey: string;
+  height?: number;
 }
-
-const METRIC_CONFIG = {
-  noiseDba: { label: "Noise (dBA)", color: "#c2410c", unit: "dBA" },
-  temperature: { label: "Temperature (°C)", color: "#fb923c", unit: "°C" },
-  humidity: { label: "Humidity (%)", color: "#0d9488", unit: "%" },
-};
 
 export default function ReadingsChart({
   readings,
-  metric = "noiseDba",
+  metricKey,
+  height = 300,
 }: ReadingsChartProps) {
-  const config = METRIC_CONFIG[metric];
+  const def = getMetricDef(metricKey) ?? NOISE_METRIC;
 
   const data = readings
-    .filter((r) => r[metric] != null)
+    .filter((r) => r[metricKey] != null)
     .map((r) => ({
-      time: new Date(r.recordedAt).getTime(),
-      value: r[metric],
+      time: new Date(r.recordedAt as string).getTime(),
+      value: metricKey === "pressurePa"
+        ? (r[metricKey] as number) / 1000
+        : (r[metricKey] as number),
     }))
     .reverse();
 
   if (data.length === 0) {
     return (
-      <div className="flex items-center justify-center h-64 text-muted">
+      <div
+        className="flex items-center justify-center text-muted"
+        style={{ height }}
+      >
         No data available
       </div>
     );
   }
 
   return (
-    <ResponsiveContainer width="100%" height={300}>
+    <ResponsiveContainer width="100%" height={height}>
       <LineChart data={data}>
         <CartesianGrid strokeDasharray="3 3" stroke="#e7e0d5" />
         <XAxis
@@ -61,10 +56,19 @@ export default function ReadingsChart({
           fontSize={12}
           stroke="#78716c"
         />
-        <YAxis fontSize={12} unit={` ${config.unit}`} stroke="#78716c" />
+        <YAxis
+          fontSize={12}
+          unit={` ${def.unit}`}
+          stroke="#78716c"
+        />
         <Tooltip
-          labelFormatter={(t) => format(new Date(t as number), "MMM d, HH:mm:ss")}
-          formatter={(v) => [`${Number(v).toFixed(1)} ${config.unit}`, config.label]}
+          labelFormatter={(t) =>
+            format(new Date(t as number), "MMM d, HH:mm:ss")
+          }
+          formatter={(v) => [
+            `${Number(v).toFixed(def.decimals ?? 1)} ${def.unit}`,
+            def.label,
+          ]}
           contentStyle={{
             borderRadius: "8px",
             border: "1px solid #e7e0d5",
@@ -74,7 +78,7 @@ export default function ReadingsChart({
         <Line
           type="monotone"
           dataKey="value"
-          stroke={config.color}
+          stroke={def.color}
           strokeWidth={2}
           dot={false}
         />
