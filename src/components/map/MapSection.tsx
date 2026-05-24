@@ -29,8 +29,8 @@ export function MapSection({ sensors }: { sensors: SensorData[] }) {
   const [selectedSensor, setSelectedSensor] = useState<SensorData | null>(null);
 
   return (
-    <div className="flex flex-1 flex-col md:flex-row relative">
-      <div className="flex-1 relative min-h-[60vh] md:min-h-0">
+    <div className="flex flex-1 flex-col md:flex-row relative overflow-hidden">
+      <div className="flex-1 relative min-h-0">
         <SensorMap
           sensors={sensors}
           selectedSensorId={selectedSensor?.id}

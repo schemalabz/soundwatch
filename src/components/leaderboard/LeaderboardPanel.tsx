@@ -8,9 +8,7 @@ interface SensorData {
   deviceId: string;
   name: string | null;
   address: string | null;
-  latestReading: {
-    noiseDba: number | null;
-  } | null;
+  latestReading: Record<string, unknown> | null;
 }
 
 interface LeaderboardPanelProps {
@@ -23,10 +21,10 @@ export default function LeaderboardPanel({
   mode = "noisiest",
 }: LeaderboardPanelProps) {
   const withNoise = sensors
-    .filter((s) => s.latestReading?.noiseDba != null)
+    .filter((s) => (s.latestReading?.noiseDba as number | undefined) != null)
     .sort((a, b) => {
-      const aDb = a.latestReading!.noiseDba!;
-      const bDb = b.latestReading!.noiseDba!;
+      const aDb = a.latestReading!.noiseDba as number;
+      const bDb = b.latestReading!.noiseDba as number;
       return mode === "noisiest" ? bDb - aDb : aDb - bDb;
     });
 
@@ -36,7 +34,7 @@ export default function LeaderboardPanel({
         <p className="text-sm text-muted">No sensor data available</p>
       )}
       {withNoise.map((sensor, i) => {
-        const dba = sensor.latestReading!.noiseDba!;
+        const dba = sensor.latestReading!.noiseDba as number;
         const color = getNoiseLevelColor(dba);
         const label = getNoiseLevelLabel(dba);
 

@@ -1,0 +1,882 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Soundwatch Athens - Wiring Guide</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: #1a1a2e;
+    color: #e0e0e0;
+    padding: 20px;
+    min-height: 100vh;
+  }
+  .page {
+    max-width: 860px;
+    margin: 0 auto;
+  }
+  h1 {
+    text-align: center;
+    margin-bottom: 6px;
+    font-size: 22px;
+    color: #fff;
+  }
+  .subtitle {
+    text-align: center;
+    color: #888;
+    margin-bottom: 30px;
+    font-size: 13px;
+  }
+
+  /* Warning banner */
+  .danger {
+    background: #4a1a1a;
+    border: 2px solid #e74c3c;
+    border-radius: 10px;
+    padding: 16px 20px;
+    margin-bottom: 25px;
+    text-align: center;
+    font-size: 15px;
+    line-height: 1.6;
+  }
+  .danger strong { color: #e74c3c; }
+
+  /* What you have section */
+  .inventory {
+    background: #2d2d44;
+    border-radius: 10px;
+    padding: 20px;
+    margin-bottom: 25px;
+  }
+  .inventory h2 {
+    font-size: 16px;
+    margin-bottom: 15px;
+    color: #fff;
+  }
+  .inventory-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: 10px;
+  }
+  .inv-item {
+    background: #1a1a2e;
+    border-radius: 8px;
+    padding: 12px;
+    text-align: center;
+    border: 1px solid #444;
+  }
+  .inv-item .name { font-weight: 600; font-size: 13px; margin-bottom: 4px; }
+  .inv-item .qty { font-size: 20px; font-weight: 700; color: #3498db; }
+  .inv-item .note { font-size: 11px; color: #888; margin-top: 4px; }
+
+  /* Overview */
+  .overview {
+    margin: 25px 0;
+    padding: 20px;
+    background: #2d2d44;
+    border-radius: 12px;
+  }
+  .overview h2 {
+    font-size: 16px;
+    margin-bottom: 15px;
+    color: #fff;
+    text-align: center;
+  }
+  .overview-flow {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0;
+    flex-wrap: wrap;
+    padding: 10px;
+  }
+  .overview-box {
+    padding: 14px 18px;
+    border-radius: 10px;
+    text-align: center;
+    min-width: 130px;
+  }
+  .overview-box.mains-box {
+    background: rgba(231,76,60,0.15);
+    border: 2px solid #e74c3c;
+  }
+  .overview-box.fuse-box {
+    background: rgba(243,156,18,0.15);
+    border: 2px solid #f39c12;
+  }
+  .overview-box.converter-box {
+    background: rgba(46,204,113,0.15);
+    border: 2px solid #2ecc71;
+  }
+  .overview-box.sensor-box {
+    background: rgba(52,152,219,0.15);
+    border: 2px solid #3498db;
+  }
+  .overview-box .ob-title {
+    font-weight: 700;
+    font-size: 14px;
+    margin-bottom: 4px;
+  }
+  .overview-box .ob-detail {
+    font-size: 11px;
+    color: #aaa;
+  }
+  .overview-arrow {
+    font-size: 24px;
+    color: #555;
+    padding: 0 8px;
+    flex-shrink: 0;
+  }
+
+  /* Cable identification */
+  .cable-id {
+    background: #2d2d44;
+    border-radius: 10px;
+    padding: 20px;
+    margin-bottom: 25px;
+  }
+  .cable-id h2 {
+    font-size: 16px;
+    margin-bottom: 15px;
+    color: #fff;
+  }
+  .cable-group {
+    margin-bottom: 15px;
+    padding: 15px;
+    background: #1a1a2e;
+    border-radius: 8px;
+  }
+  .cable-group-title {
+    font-weight: 700;
+    font-size: 14px;
+    margin-bottom: 10px;
+  }
+  .wire-id {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 6px 0;
+    font-size: 14px;
+  }
+  .color-swatch {
+    width: 40px;
+    height: 14px;
+    border-radius: 7px;
+    flex-shrink: 0;
+    border: 1px solid rgba(255,255,255,0.15);
+  }
+  .color-swatch.brown { background: #8B4513; }
+  .color-swatch.blue { background: #2980b9; }
+  .color-swatch.red { background: #e74c3c; }
+  .color-swatch.black { background: #333; border-color: #666; }
+  .wire-role { font-weight: 600; min-width: 80px; }
+  .wire-desc { color: #aaa; font-size: 13px; }
+
+  /* Steps */
+  .steps-section {
+    margin-bottom: 25px;
+  }
+  .steps-section h2 {
+    font-size: 18px;
+    margin-bottom: 5px;
+    color: #fff;
+  }
+  .steps-section .section-desc {
+    font-size: 13px;
+    color: #888;
+    margin-bottom: 20px;
+  }
+
+  .step {
+    margin-bottom: 20px;
+    border: 2px solid #333;
+    border-radius: 12px;
+    overflow: hidden;
+  }
+  .step-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 18px;
+    font-size: 16px;
+    font-weight: 700;
+  }
+  .step-num {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+    font-weight: 700;
+    color: #fff;
+    flex-shrink: 0;
+  }
+  .step-body {
+    padding: 0 18px 18px 18px;
+  }
+
+  /* Color coded steps */
+  .step-prep .step-header { background: rgba(155,89,182,0.15); }
+  .step-prep { border-color: #9b59b6; }
+  .step-prep .step-num { background: #9b59b6; }
+
+  .step-ac .step-header { background: rgba(192,57,43,0.15); }
+  .step-ac { border-color: #c0392b; }
+  .step-ac .step-num { background: #c0392b; }
+
+  .step-dc .step-header { background: rgba(52,152,219,0.15); }
+  .step-dc { border-color: #3498db; }
+  .step-dc .step-num { background: #3498db; }
+
+  .step-fuse .step-header { background: rgba(243,156,18,0.15); }
+  .step-fuse { border-color: #f39c12; }
+  .step-fuse .step-num { background: #f39c12; }
+
+  .step-gland .step-header { background: rgba(149,165,166,0.15); }
+  .step-gland { border-color: #95a5a6; }
+  .step-gland .step-num { background: #95a5a6; }
+
+  .step-check .step-header { background: rgba(46,204,113,0.15); }
+  .step-check { border-color: #2ecc71; }
+  .step-check .step-num { background: #2ecc71; }
+
+  .step-test .step-header { background: rgba(230,126,34,0.15); }
+  .step-test { border-color: #e67e22; }
+  .step-test .step-num { background: #e67e22; }
+
+  .step-sensor .step-header { background: rgba(52,152,219,0.15); }
+  .step-sensor { border-color: #3498db; }
+  .step-sensor .step-num { background: #3498db; }
+
+  /* Connector visual */
+  .connector-visual {
+    margin: 15px 0;
+    padding: 15px;
+    background: #1a1a2e;
+    border-radius: 10px;
+  }
+  .connector-label {
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 10px;
+  }
+  .connector-box {
+    display: inline-flex;
+    border: 3px solid;
+    border-radius: 10px;
+    overflow: hidden;
+    margin-bottom: 8px;
+  }
+  .connector-pin {
+    width: 120px;
+    padding: 10px 8px;
+    text-align: center;
+    font-size: 12px;
+    line-height: 1.4;
+  }
+  .connector-pin + .connector-pin {
+    border-left: 2px solid;
+  }
+  .connector-pin .pin-label {
+    font-size: 10px;
+    color: #888;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 4px;
+  }
+  .connector-pin .pin-wire {
+    font-weight: 700;
+    font-size: 13px;
+  }
+  .connector-pin .pin-detail {
+    font-size: 10px;
+    color: #aaa;
+    margin-top: 3px;
+  }
+
+  /* IRM-10-5 specific */
+  .irm-box { border-color: #2ecc71; }
+  .irm-box .connector-pin { border-color: #2ecc71; }
+  .irm-label { color: #2ecc71; }
+
+  /* Instruction text */
+  .instruction {
+    font-size: 14px;
+    line-height: 1.7;
+    color: #ccc;
+  }
+  .instruction p {
+    margin-bottom: 10px;
+  }
+  .instruction .do {
+    color: #2ecc71;
+    font-weight: 600;
+  }
+  .instruction .dont {
+    color: #e74c3c;
+    font-weight: 600;
+  }
+  .instruction .highlight {
+    background: rgba(255,255,255,0.08);
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-weight: 600;
+  }
+  .instruction ol, .instruction ul {
+    padding-left: 20px;
+    margin-bottom: 10px;
+  }
+  .instruction li {
+    margin-bottom: 6px;
+  }
+
+  /* Visual tip boxes */
+  .tip {
+    margin: 12px 0;
+    padding: 12px 15px;
+    border-radius: 8px;
+    font-size: 13px;
+    line-height: 1.5;
+  }
+  .tip-info {
+    background: rgba(52,152,219,0.1);
+    border-left: 3px solid #3498db;
+  }
+  .tip-warn {
+    background: rgba(243,156,18,0.1);
+    border-left: 3px solid #f39c12;
+  }
+  .tip-danger {
+    background: rgba(231,76,60,0.1);
+    border-left: 3px solid #e74c3c;
+  }
+  .tip strong { color: #fff; }
+
+  /* Checklist */
+  .checklist {
+    list-style: none;
+    margin: 10px 0;
+  }
+  .checklist li {
+    padding: 6px 0;
+    font-size: 14px;
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+  }
+  .checklist li::before {
+    content: '';
+    width: 18px;
+    height: 18px;
+    border: 2px solid #555;
+    border-radius: 4px;
+    flex-shrink: 0;
+    margin-top: 2px;
+  }
+
+  /* Complete wiring table */
+  .where-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 15px 0;
+    font-size: 13px;
+  }
+  .where-table th {
+    background: #1a1a2e;
+    padding: 10px 12px;
+    text-align: left;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: #888;
+  }
+  .where-table td {
+    padding: 10px 12px;
+    border-bottom: 1px solid #333;
+  }
+  .where-table tr:hover td { background: #1a1a2e; }
+
+  @media (max-width: 650px) {
+    body { padding: 12px; }
+    .connector-pin { width: 90px; padding: 8px 5px; }
+    .overview-flow { flex-direction: column; }
+    .overview-arrow { transform: rotate(90deg); }
+    .inventory-grid { grid-template-columns: 1fr 1fr; }
+  }
+  @media print {
+    body { background: #fff; color: #333; }
+    .step { border-color: #ccc; }
+    .step-body, .instruction { color: #333; }
+    .tip strong { color: #000; }
+    .inventory, .cable-id, .overview, .cable-id { background: #f5f5f5; }
+    .connector-visual { background: #f5f5f5; }
+    .inv-item { background: #fff; border-color: #ccc; }
+    .cable-group { background: #fff; }
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+<h1>Soundwatch Sensor Wiring Guide</h1>
+<p class="subtitle">Per-sensor power assembly. Follow steps in order. Each step completes before the next.</p>
+
+<!-- DANGER -->
+<div class="danger">
+  <strong>230V MAINS MUST BE DISCONNECTED</strong> during all wiring/soldering steps.<br>
+  Only connect to mains at Step 7 (testing). If you need to change anything, <strong>disconnect mains first</strong>.
+</div>
+
+<!-- OVERVIEW -->
+<div class="overview">
+  <h2>The Big Picture</h2>
+  <p style="text-align:center; font-size:13px; color:#aaa; margin-bottom:15px;">
+    230V from the store's junction box gets converted to 5V DC to power a noise sensor.
+  </p>
+  <div class="overview-flow">
+    <div class="overview-box mains-box">
+      <div class="ob-title">Klema</div>
+      <div class="ob-detail">230V AC from<br>junction box</div>
+    </div>
+    <div class="overview-arrow">&rarr;</div>
+    <div class="overview-box fuse-box">
+      <div class="ob-title">Fuse</div>
+      <div class="ob-detail">1.6A protection<br>(on Live wire only)</div>
+    </div>
+    <div class="overview-arrow">&rarr;</div>
+    <div class="overview-box converter-box">
+      <div class="ob-title">IRM-10-5</div>
+      <div class="ob-detail">230V AC &rarr; 5V DC<br>MeanWell converter</div>
+    </div>
+    <div class="overview-arrow">&rarr;</div>
+    <div class="overview-box sensor-box">
+      <div class="ob-title">SCK 2.3</div>
+      <div class="ob-detail">Noise sensor<br>via micro USB</div>
+    </div>
+  </div>
+</div>
+
+<!-- WHAT YOU NEED -->
+<div class="inventory">
+  <h2>What You Need On The Table</h2>
+  <div class="inventory-grid">
+    <div class="inv-item">
+      <div class="qty">1</div>
+      <div class="name">MeanWell IRM-10-5</div>
+      <div class="note">AC-DC converter module</div>
+    </div>
+    <div class="inv-item">
+      <div class="qty">1</div>
+      <div class="name">Fuse + Holder (BLX-4)</div>
+      <div class="note">1.6A glass fuse, 5x20mm</div>
+    </div>
+    <div class="inv-item">
+      <div class="qty">1</div>
+      <div class="name">USB Cable</div>
+      <div class="note">USB-A to micro USB, 1-2m</div>
+    </div>
+    <div class="inv-item">
+      <div class="qty">1</div>
+      <div class="name">Cable Gland M12</div>
+      <div class="note">for junction box exit</div>
+    </div>
+    <div class="inv-item">
+      <div class="qty">2</div>
+      <div class="name">Wire 0.5mm&#178;</div>
+      <div class="note">~20cm each, red (L) + black (N)</div>
+    </div>
+    <div class="inv-item">
+      <div class="qty">1</div>
+      <div class="name">Heat Shrink Tubing</div>
+      <div class="note">assorted sizes</div>
+    </div>
+    <div class="inv-item">
+      <div class="qty">1</div>
+      <div class="name">SCK 2.3 + Battery</div>
+      <div class="note">sensor unit (for testing)</div>
+    </div>
+  </div>
+
+  <div class="tip tip-info" style="margin-top:15px;">
+    <strong>Tools needed:</strong> Soldering station, solder wire, third hand tool, heat gun (for heat shrink), wire stripper, side cutter, multimeter with NCV mode.
+  </div>
+</div>
+
+<!-- WIRE IDENTIFICATION -->
+<div class="cable-id">
+  <h2>Step 0: Know Your Wires</h2>
+  <p style="font-size:13px; color:#aaa; margin-bottom:15px;">
+    Two separate circuits: 230V AC (dangerous) and 5V DC (safe). The converter bridges them.
+  </p>
+
+  <div class="cable-group">
+    <div class="cable-group-title" style="color:#e74c3c;">230V AC Side (inside junction box)</div>
+    <div class="wire-id">
+      <div class="color-swatch brown"></div>
+      <div class="wire-role" style="color:#cd853f;">L (fasi)</div>
+      <div class="wire-desc">= <strong>Live</strong> &mdash; 230V, the dangerous one. Goes through the fuse, then to IRM-10-5 AC/L pin.</div>
+    </div>
+    <div class="wire-id">
+      <div class="color-swatch blue"></div>
+      <div class="wire-role" style="color:#5dade2;">N (oudeteros)</div>
+      <div class="wire-desc">= <strong>Neutral</strong> &mdash; return path. Goes straight to IRM-10-5 AC/N pin. No fuse.</div>
+    </div>
+  </div>
+
+  <div class="cable-group">
+    <div class="cable-group-title" style="color:#2ecc71;">5V DC Side (USB cable to sensor)</div>
+    <div class="wire-id">
+      <div class="color-swatch red"></div>
+      <div class="wire-role" style="color:#e74c3c;">Red (+5V)</div>
+      <div class="wire-desc">= <strong>+5V DC</strong> &mdash; from IRM-10-5 +V pin. Soldered to USB cable red wire.</div>
+    </div>
+    <div class="wire-id">
+      <div class="color-swatch black"></div>
+      <div class="wire-role" style="color:#999;">Black (GND)</div>
+      <div class="wire-desc">= <strong>Ground</strong> &mdash; from IRM-10-5 -V pin. Soldered to USB cable black wire.</div>
+    </div>
+  </div>
+
+  <div class="tip tip-warn">
+    <strong>USB cable has 4 wires inside:</strong> Red (+5V), Black (GND), White (D+), Green (D-). We only use red and black for power. The white and green data wires are <strong>not needed</strong> &mdash; cut them short and wrap with electrical tape.
+  </div>
+</div>
+
+<!-- WIRING STEPS -->
+<div class="steps-section">
+  <h2>Wiring Steps</h2>
+  <p class="section-desc">We prep the USB cable first, then solder DC side, then AC side, then assemble.</p>
+
+  <!-- STEP 1: USB CABLE PREP -->
+  <div class="step step-prep">
+    <div class="step-header">
+      <div class="step-num">1</div>
+      Prepare the USB Cable
+    </div>
+    <div class="step-body">
+      <div class="instruction">
+        <ol>
+          <li>Cut the <strong>USB-A end</strong> off the cable (keep the micro USB end intact)</li>
+          <li>Strip back ~3cm of the outer cable jacket to expose the 4 inner wires</li>
+          <li>Identify the wires: <strong style="color:#e74c3c;">Red</strong> (+5V), <strong>Black</strong> (GND), <span style="color:#888;">White (D+), Green (D-)</span></li>
+          <li>Cut the white and green data wires short (~5mm) and wrap with electrical tape</li>
+          <li>Strip ~5mm of insulation from the red and black wires</li>
+          <li><strong>Slide heat shrink tubing onto both wires NOW</strong> (before soldering &mdash; you can't add it later!)</li>
+        </ol>
+      </div>
+
+      <div class="tip tip-danger">
+        <strong>Don't forget the heat shrink!</strong> Slide a ~15mm piece of heat shrink onto each wire BEFORE soldering. Push it back from the end so it doesn't shrink during soldering.
+      </div>
+    </div>
+  </div>
+
+  <!-- STEP 2: SOLDER DC SIDE -->
+  <div class="step step-dc">
+    <div class="step-header">
+      <div class="step-num">2</div>
+      Solder DC Output &mdash; USB Cable to IRM-10-5
+    </div>
+    <div class="step-body">
+      <div class="instruction">
+        <p>Use the third hand tool to hold the IRM-10-5 module steady. Solder the USB wires to the DC output pins:</p>
+      </div>
+
+      <div class="connector-visual">
+        <div class="connector-label irm-label">IRM-10-5 &mdash; DC Output Pins (right side)</div>
+        <div class="connector-box irm-box">
+          <div class="connector-pin">
+            <div class="pin-label">+V Pin</div>
+            <div class="pin-wire" style="color:#e74c3c;">Red wire</div>
+            <div class="pin-detail">USB +5V</div>
+          </div>
+          <div class="connector-pin">
+            <div class="pin-label">-V Pin</div>
+            <div class="pin-wire" style="color:#999;">Black wire</div>
+            <div class="pin-detail">USB GND</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="instruction">
+        <ol>
+          <li>Tin the IRM-10-5 <strong>+V</strong> pin with a small blob of solder</li>
+          <li>Solder the <strong style="color:#e74c3c;">red</strong> USB wire to the <strong>+V</strong> pin</li>
+          <li>Tin the IRM-10-5 <strong>-V</strong> pin</li>
+          <li>Solder the <strong>black</strong> USB wire to the <strong>-V</strong> pin</li>
+          <li>Gently tug each wire to confirm solid joint</li>
+          <li>Slide heat shrink over each joint, apply heat gun</li>
+        </ol>
+      </div>
+
+      <div class="tip tip-info">
+        <strong>IRM-10-5 pin layout (bottom view):</strong> Left side has AC/L (top) and AC/N (bottom). Right side has -V (top) and +V (bottom). Check the printed labels on your module &mdash; they may vary slightly.
+      </div>
+    </div>
+  </div>
+
+  <!-- STEP 3: WIRE FUSE HOLDER -->
+  <div class="step step-fuse">
+    <div class="step-header">
+      <div class="step-num">3</div>
+      Wire the Fuse Holder
+    </div>
+    <div class="step-body">
+      <div class="instruction">
+        <p>The fuse goes <strong>inline on the Live (L) wire only</strong>. It protects the circuit if something shorts.</p>
+        <ol>
+          <li>Cut two pieces of <strong style="color:#cd853f;">red 0.5mm&#178; wire</strong>, each ~10cm long</li>
+          <li>Strip ~5mm from each end of both wires</li>
+          <li>Slide heat shrink onto both wires before soldering</li>
+          <li>Solder one wire to <strong>one end</strong> of the fuse holder</li>
+          <li>Solder the other wire to the <strong>other end</strong> of the fuse holder</li>
+          <li>Apply heat shrink to both solder joints</li>
+          <li>Insert the <strong>1.6A glass fuse</strong> into the holder</li>
+        </ol>
+      </div>
+
+      <div class="tip tip-info">
+        <strong>The fuse holder now has two free wire ends:</strong> One will connect to the klema L terminal, the other will solder to the IRM-10-5 AC/L pin. It doesn't matter which end goes where &mdash; a fuse works in either direction.
+      </div>
+    </div>
+  </div>
+
+  <!-- STEP 4: SOLDER AC SIDE -->
+  <div class="step step-ac">
+    <div class="step-header">
+      <div class="step-num">4</div>
+      Solder AC Input &mdash; Fuse + Neutral to IRM-10-5
+    </div>
+    <div class="step-body">
+      <div class="instruction">
+        <p>Connect the 230V AC wires to the IRM-10-5 input pins:</p>
+      </div>
+
+      <div class="connector-visual">
+        <div class="connector-label" style="color:#c0392b;">IRM-10-5 &mdash; AC Input Pins (left side)</div>
+        <div class="connector-box" style="border-color:#c0392b;">
+          <div class="connector-pin" style="border-color:#c0392b;">
+            <div class="pin-label">AC/L Pin</div>
+            <div class="pin-wire" style="color:#cd853f;">From fuse holder</div>
+            <div class="pin-detail">One end of fuse assembly</div>
+          </div>
+          <div class="connector-pin" style="border-color:#c0392b;">
+            <div class="pin-label">AC/N Pin</div>
+            <div class="pin-wire" style="color:#5dade2;">Black 0.5mm&#178; wire</div>
+            <div class="pin-detail">Goes to klema N</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="instruction">
+        <ol>
+          <li>Solder <strong>one wire</strong> from the fuse holder assembly to the <strong>AC/L</strong> pin</li>
+          <li>Cut a ~10cm piece of <strong style="color:#5dade2;">black 0.5mm&#178; wire</strong> for Neutral</li>
+          <li>Solder it to the <strong>AC/N</strong> pin</li>
+          <li>Apply heat shrink to both joints</li>
+        </ol>
+      </div>
+
+      <div class="tip tip-danger">
+        <strong>Double-check pin labels!</strong> Connecting L and N to the wrong pins won't damage the converter (it's AC), but make sure you're on the AC side, not the DC side. AC pins are labeled AC/L and AC/N on the PCB.
+      </div>
+
+      <div class="instruction">
+        <p>You now have the complete power assembly:</p>
+        <p><strong style="color:#cd853f;">Klema L &rarr; fuse holder wire &rarr; fuse &rarr; fuse holder wire &rarr; AC/L</strong></p>
+        <p><strong style="color:#5dade2;">Klema N &rarr; black wire &rarr; AC/N</strong></p>
+        <p><strong style="color:#e74c3c;">+V &rarr; red USB wire &rarr; micro USB &rarr; SCK</strong></p>
+        <p><strong style="color:#999;">-V &rarr; black USB wire &rarr; micro USB &rarr; SCK</strong></p>
+      </div>
+    </div>
+  </div>
+
+  <!-- STEP 5: CABLE GLAND -->
+  <div class="step step-gland">
+    <div class="step-header">
+      <div class="step-num">5</div>
+      Install Cable Gland on Junction Box
+    </div>
+    <div class="step-body">
+      <div class="instruction">
+        <ol>
+          <li>Drill an M12 hole in the junction box wall (if no existing knock-out)</li>
+          <li>Pass the USB cable (micro USB end first) through the cable gland</li>
+          <li>Mount the cable gland in the hole</li>
+          <li>Don't tighten fully yet &mdash; you may need to adjust cable length</li>
+        </ol>
+      </div>
+
+      <div class="tip tip-info">
+        <strong>The cable gland separates the two enclosures.</strong> The USB cable passes through it from the power box (junction box) to the sensor box. The gland provides strain relief and keeps the junction box sealed.
+      </div>
+    </div>
+  </div>
+
+  <!-- STEP 6: CHECK -->
+  <div class="step step-check">
+    <div class="step-header">
+      <div class="step-num">6</div>
+      Pre-Power Checklist
+    </div>
+    <div class="step-body">
+      <div class="instruction">
+        <p>Go through this checklist. <strong>Every item must be true</strong> before connecting to 230V mains.</p>
+      </div>
+
+      <ul class="checklist">
+        <li><strong>Mains is disconnected</strong> &mdash; klema has no power</li>
+        <li>Fuse holder: one wire goes to <strong>AC/L</strong>, other wire is free for klema L</li>
+        <li>Neutral wire: soldered to <strong>AC/N</strong>, other end free for klema N</li>
+        <li>1.6A fuse is <strong>inserted</strong> in the fuse holder</li>
+        <li>USB red wire soldered to <strong>+V</strong> pin</li>
+        <li>USB black wire soldered to <strong>-V</strong> pin</li>
+        <li>White and green USB wires are <strong>cut and taped</strong></li>
+        <li><strong>All 4 solder joints</strong> have heat shrink applied &mdash; no exposed copper</li>
+        <li>Gently tug every soldered wire &mdash; <strong>none come loose</strong></li>
+        <li>Cable gland is mounted, USB cable passes through</li>
+        <li>No solder bridges or shorts visible on the IRM-10-5 pins</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- STEP 7: TEST WITH MULTIMETER -->
+  <div class="step step-test">
+    <div class="step-header">
+      <div class="step-num">7</div>
+      Power On &amp; Test with Multimeter (No Sensor Yet)
+    </div>
+    <div class="step-body">
+      <div class="instruction">
+        <p><strong>Do NOT connect the SCK yet.</strong> First verify the output voltage.</p>
+        <ol>
+          <li>Connect the free AC wires to the klema: <strong style="color:#cd853f;">fuse wire &rarr; L</strong>, <strong style="color:#5dade2;">neutral wire &rarr; N</strong></li>
+          <li>Stand clear. Turn on mains power to the junction box</li>
+          <li>Use NCV (non-contact voltage) mode on the multimeter to confirm the junction box is live</li>
+          <li>Set multimeter to <strong>DC Volts</strong></li>
+          <li>Measure across the <strong>micro USB end</strong> &mdash; red probe on red wire (or VBUS pin), black probe on black wire (or GND pin)</li>
+          <li>Reading should be <strong>~5.0V</strong> (acceptable range: 4.9V - 5.1V)</li>
+        </ol>
+      </div>
+
+      <div class="tip tip-warn">
+        <strong>If you read 0V:</strong> Turn off mains. Check: Is the fuse intact? Are all solder joints solid? Are you measuring DC, not AC? Are L and N connected to the klema?
+      </div>
+
+      <div class="tip tip-danger">
+        <strong>If you smell burning, hear buzzing, or the IRM-10-5 gets very hot immediately:</strong> Disconnect mains instantly. Do not touch the module. Let it cool. Inspect for solder bridges or wrong pin connections.
+      </div>
+    </div>
+  </div>
+
+  <!-- STEP 8: CONNECT SENSOR -->
+  <div class="step step-sensor">
+    <div class="step-header">
+      <div class="step-num">8</div>
+      Connect Sensor &amp; Verify
+    </div>
+    <div class="step-body">
+      <div class="instruction">
+        <ol>
+          <li><strong>Disconnect mains</strong></li>
+          <li>Plug the micro USB cable into the Smart Citizen Kit 2.3</li>
+          <li>Make sure the LiPo battery is connected to the SCK (JST connector)</li>
+          <li>Re-connect mains power</li>
+          <li>Watch for the SCK <strong>LED sequence</strong> (indicates boot)</li>
+          <li>Measure voltage at the IRM-10-5 output again under load &mdash; should still read ~5V</li>
+          <li>Leave running for <strong>30-60 minutes</strong></li>
+          <li>Check IRM-10-5 temperature: warm is normal, too hot to touch is a problem</li>
+          <li>Verify SCK doesn't reboot or lose power during the soak test</li>
+        </ol>
+      </div>
+
+      <div class="tip tip-info">
+        <strong>The SCK draws well under 2A.</strong> The IRM-10-5 is rated for 2A/10W continuous, so there's plenty of headroom. The LiPo battery acts as a UPS &mdash; if mains drops briefly, the SCK stays powered.
+      </div>
+
+      <div class="instruction">
+        <p><span class="do">Success!</span> If the SCK boots, stays online, and voltage is stable after the soak test, the power assembly is good. Tighten the cable gland, close the junction box, and proceed to sensor placement and WiFi configuration.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- COMPLETE WIRING MAP -->
+<div class="cable-id">
+  <h2>Complete Wiring Map (Reference)</h2>
+  <p style="font-size:13px; color:#aaa; margin-bottom:15px;">Every connection in the assembly:</p>
+
+  <table class="where-table">
+    <thead>
+      <tr>
+        <th>Connection</th>
+        <th>From</th>
+        <th>To</th>
+        <th>Method</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td style="color:#cd853f; font-weight:600;">Live (L)</td>
+        <td>Klema L terminal</td>
+        <td>Fuse holder (wire 1)</td>
+        <td>Klema screw</td>
+      </tr>
+      <tr>
+        <td style="color:#cd853f; font-weight:600;">Live (fused)</td>
+        <td>Fuse holder (wire 2)</td>
+        <td>IRM-10-5 AC/L pin</td>
+        <td>Solder + heat shrink</td>
+      </tr>
+
+      <tr><td colspan="4" style="border-bottom:2px solid #333;"></td></tr>
+
+      <tr>
+        <td style="color:#5dade2; font-weight:600;">Neutral (N)</td>
+        <td>Klema N terminal</td>
+        <td>IRM-10-5 AC/N pin</td>
+        <td>Wire + solder + heat shrink</td>
+      </tr>
+
+      <tr><td colspan="4" style="border-bottom:2px solid #333;"></td></tr>
+
+      <tr>
+        <td style="color:#e74c3c; font-weight:600;">+5V DC</td>
+        <td>IRM-10-5 +V pin</td>
+        <td>USB cable red wire</td>
+        <td>Solder + heat shrink</td>
+      </tr>
+      <tr>
+        <td style="font-weight:600; color:#999;">GND</td>
+        <td>IRM-10-5 -V pin</td>
+        <td>USB cable black wire</td>
+        <td>Solder + heat shrink</td>
+      </tr>
+
+      <tr><td colspan="4" style="border-bottom:2px solid #333;"></td></tr>
+
+      <tr>
+        <td style="color:#3498db; font-weight:600;">USB power</td>
+        <td>Micro USB connector</td>
+        <td>SCK 2.3 USB port</td>
+        <td>Plug in</td>
+      </tr>
+      <tr>
+        <td style="color:#f39c12; font-weight:600;">Battery</td>
+        <td>LiPo 2000mAh JST</td>
+        <td>SCK 2.3 battery port</td>
+        <td>JST connector</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+</div>
+</body>
+</html>

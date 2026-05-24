@@ -11,9 +11,7 @@ interface SensorData {
   name: string | null;
   latitude: number | null;
   longitude: number | null;
-  latestReading: {
-    noiseDba: number | null;
-  } | null;
+  latestReading: Record<string, unknown> | null;
 }
 
 interface SensorMapProps {
@@ -67,21 +65,30 @@ export default function SensorMap({
     for (const sensor of sensors) {
       if (sensor.latitude == null || sensor.longitude == null) continue;
 
-      const dba = sensor.latestReading?.noiseDba;
+      const dba = sensor.latestReading?.noiseDba as number | null;
       const color = dba != null ? getNoiseLevelColor(dba) : "#a8a29e";
 
       const el = document.createElement("div");
-      el.style.width = "24px";
-      el.style.height = "24px";
-      el.style.borderRadius = "50%";
-      el.style.backgroundColor = color;
-      el.style.border = "3px solid white";
-      el.style.boxShadow = "0 2px 6px rgba(0,0,0,0.25)";
       el.style.cursor = "pointer";
-      el.style.transition = "transform 0.2s";
+
+      const dot = document.createElement("div");
+      dot.style.width = "24px";
+      dot.style.height = "24px";
+      dot.style.borderRadius = "50%";
+      dot.style.backgroundColor = color;
+      dot.style.border = "3px solid white";
+      dot.style.boxShadow = "0 2px 6px rgba(0,0,0,0.25)";
+      dot.style.transition = "transform 0.2s";
+      dot.dataset.sensorId = sensor.id;
+      el.appendChild(dot);
 
       el.addEventListener("click", (e) => {
         e.stopPropagation();
+        map.current?.flyTo({
+          center: [sensor.longitude!, sensor.latitude!],
+          zoom: Math.max(map.current.getZoom(), 14),
+          duration: 500,
+        });
         onSensorClickRef.current(sensor);
       });
 
@@ -96,13 +103,14 @@ export default function SensorMap({
   // Highlight selected marker
   useEffect(() => {
     markersRef.current.forEach((marker, id) => {
-      const el = marker.getElement();
+      const dot = marker.getElement().querySelector("[data-sensor-id]") as HTMLElement | null;
+      if (!dot) return;
       if (id === selectedSensorId) {
-        el.style.transform = "scale(1.4)";
-        el.style.zIndex = "10";
+        dot.style.transform = "scale(1.4)";
+        dot.style.boxShadow = "0 2px 10px rgba(0,0,0,0.4)";
       } else {
-        el.style.transform = "scale(1)";
-        el.style.zIndex = "1";
+        dot.style.transform = "scale(1)";
+        dot.style.boxShadow = "0 2px 6px rgba(0,0,0,0.25)";
       }
     });
   }, [selectedSensorId]);
