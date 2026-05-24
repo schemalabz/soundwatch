@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
+import { useTranslations } from "next-intl";
+import { Link } from "@/i18n/navigation";
 import LeaderboardPanel from "@/components/leaderboard/LeaderboardPanel";
 
 interface SensorData {
@@ -15,6 +16,7 @@ interface SensorData {
 }
 
 export default function LeaderboardPage() {
+  const t = useTranslations("leaderboard");
   const [sensors, setSensors] = useState<SensorData[]>([]);
   const [mode, setMode] = useState<"noisiest" | "quietest">("noisiest");
 
@@ -28,13 +30,11 @@ export default function LeaderboardPage() {
   return (
     <div className="max-w-2xl mx-auto p-6">
       <Link href="/" className="text-primary text-sm hover:underline">
-        ← Back to map
+        {t("backToMap")}
       </Link>
 
-      <h1 className="text-3xl font-bold mt-4 mb-2">Soundwatch Leaderboard</h1>
-      <p className="text-muted mb-6">
-        Ranking of noise levels across Athens
-      </p>
+      <h1 className="text-3xl font-bold mt-4 mb-2">{t("title")}</h1>
+      <p className="text-muted mb-6">{t("subtitle")}</p>
 
       <div className="flex gap-2 mb-6">
         <button
@@ -45,7 +45,7 @@ export default function LeaderboardPage() {
               : "bg-light text-muted border border-border hover:bg-white"
           }`}
         >
-          Noisiest
+          {t("noisiest")}
         </button>
         <button
           onClick={() => setMode("quietest")}
@@ -55,7 +55,7 @@ export default function LeaderboardPage() {
               : "bg-light text-muted border border-border hover:bg-white"
           }`}
         >
-          Quietest
+          {t("quietest")}
         </button>
       </div>
 

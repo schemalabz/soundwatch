@@ -1,7 +1,8 @@
 "use client";
 
-import Link from "next/link";
-import { getNoiseLevelColor, getNoiseLevelLabel } from "@/lib/geo";
+import { useTranslations } from "next-intl";
+import { Link } from "@/i18n/navigation";
+import { getNoiseLevelColor } from "@/lib/geo";
 
 interface SensorData {
   id: string;
@@ -17,11 +18,24 @@ interface LeaderboardPanelProps {
   limit?: number;
 }
 
+function getTranslatedNoiseLabel(
+  dba: number,
+  t: (key: string) => string
+): string {
+  if (dba < 55) return t("quiet");
+  if (dba < 65) return t("moderate");
+  if (dba < 75) return t("loud");
+  return t("veryLoud");
+}
+
 export default function LeaderboardPanel({
   sensors,
   mode = "noisiest",
   limit,
 }: LeaderboardPanelProps) {
+  const t = useTranslations("leaderboard");
+  const tNoise = useTranslations("noise");
+
   const withNoise = sensors
     .filter((s) => (s.latestReading?.noiseDba as number | undefined) != null)
     .sort((a, b) => {
@@ -34,12 +48,12 @@ export default function LeaderboardPanel({
   return (
     <div className="space-y-1">
       {withNoise.length === 0 && (
-        <p className="text-sm text-muted">No sensor data available</p>
+        <p className="text-sm text-muted">{t("noData")}</p>
       )}
       {withNoise.map((sensor, i) => {
         const dba = sensor.latestReading!.noiseDba as number;
         const color = getNoiseLevelColor(dba);
-        const label = getNoiseLevelLabel(dba);
+        const label = getTranslatedNoiseLabel(dba, tNoise);
 
         return (
           <Link
