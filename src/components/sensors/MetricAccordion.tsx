@@ -1,14 +1,15 @@
 "use client";
 
 import { useState } from "react";
+import { useTranslations } from "next-intl";
 import dynamic from "next/dynamic";
 import {
   METRIC_GROUPS,
   formatMetricValue,
   getMetricUnit,
-  getGuidelineBadge,
   type MetricGroupDef,
 } from "@/lib/metrics";
+import { getTranslatedGuidelineBadge } from "@/lib/guidelines";
 
 const ReadingsChart = dynamic(
   () => import("@/components/sensors/ReadingsChart"),
@@ -24,6 +25,9 @@ export default function MetricAccordion({
   latestReading,
   readings,
 }: MetricAccordionProps) {
+  const tMetrics = useTranslations("metrics");
+  const tGuidelines = useTranslations("guidelines");
+  const tSensor = useTranslations("sensor");
   const [expandedGroup, setExpandedGroup] = useState<string | null>(null);
   const [selectedMetrics, setSelectedMetrics] = useState<
     Record<string, string>
@@ -53,11 +57,6 @@ export default function MetricAccordion({
     return `${formatted} ${unit}`.trim();
   }
 
-  function getSummaryLabel(group: MetricGroupDef): string {
-    const metric = group.metrics.find((m) => m.key === group.summaryMetric);
-    return metric?.label ?? "";
-  }
-
   return (
     <div className="border border-border rounded-xl overflow-hidden">
       {METRIC_GROUPS.map((group) => {
@@ -69,11 +68,10 @@ export default function MetricAccordion({
         const currentValue = latestReading
           ? (latestReading[activeMetricKey] as number | null)
           : null;
-        const badge = getGuidelineBadge(currentValue, activeMetricKey);
+        const badge = getTranslatedGuidelineBadge(currentValue, activeMetricKey, tGuidelines);
 
         return (
           <div key={group.id}>
-            {/* Header row */}
             <button
               onClick={() => toggleGroup(group.id)}
               className={`w-full px-4 py-3 flex items-center justify-between text-left border-b border-border transition-colors ${
@@ -85,25 +83,24 @@ export default function MetricAccordion({
                   isExpanded ? "text-primary" : ""
                 }`}
               >
-                {group.icon} {group.label}
+                {group.icon} {tMetrics(`${group.id}.label`)}
               </span>
               <span className="text-xs text-muted">
                 {!isExpanded && (
                   <>
-                    {getSummaryLabel(group)}: {getSummaryValue(group)}{" "}
+                    {tMetrics(`${group.summaryMetric}.label`)}: {getSummaryValue(group)}{" "}
                   </>
                 )}
                 {isExpanded ? "▲" : "▼"}
               </span>
             </button>
 
-            {/* Expanded content */}
             {isExpanded && (
               <div className="p-4 border-b border-border bg-white">
-                {/* Group description */}
-                <p className="text-xs text-muted mb-3">{group.description}</p>
+                <p className="text-xs text-muted mb-3">
+                  {tMetrics(`${group.id}.description`)}
+                </p>
 
-                {/* Metric tabs */}
                 <div className="flex gap-2 mb-4 flex-wrap">
                   {group.metrics.map((metric) => (
                     <button
@@ -115,12 +112,11 @@ export default function MetricAccordion({
                           : "bg-light text-muted hover:text-foreground"
                       }`}
                     >
-                      {metric.label}
+                      {tMetrics(`${metric.key}.label`)}
                     </button>
                   ))}
                 </div>
 
-                {/* Current value + info icon */}
                 <div className="flex items-center gap-3 mb-2">
                   <div className="flex items-baseline gap-2">
                     <span className="text-2xl font-bold">
@@ -131,7 +127,6 @@ export default function MetricAccordion({
                     </span>
                   </div>
 
-                  {/* Guideline badge */}
                   {badge && (
                     <span
                       className="text-xs font-medium px-2 py-0.5 rounded-full"
@@ -144,30 +139,25 @@ export default function MetricAccordion({
                     </span>
                   )}
 
-                  {/* Info icon */}
-                  {activeMetric.description && (
-                    <button
-                      onClick={() =>
-                        setShowInfo(
-                          showInfo === activeMetricKey ? null : activeMetricKey
-                        )
-                      }
-                      className="text-muted hover:text-foreground transition-colors text-sm"
-                      title="What is this metric?"
-                    >
-                      ℹ️
-                    </button>
-                  )}
+                  <button
+                    onClick={() =>
+                      setShowInfo(
+                        showInfo === activeMetricKey ? null : activeMetricKey
+                      )
+                    }
+                    className="text-muted hover:text-foreground transition-colors text-sm"
+                    title={tSensor("whatIsThis")}
+                  >
+                    ℹ️
+                  </button>
                 </div>
 
-                {/* Info tooltip */}
-                {showInfo === activeMetricKey && activeMetric.description && (
+                {showInfo === activeMetricKey && (
                   <div className="bg-light border border-border rounded-lg p-3 mb-3 text-xs text-muted leading-relaxed">
-                    {activeMetric.description}
+                    {tMetrics(`${activeMetricKey}.description`)}
                   </div>
                 )}
 
-                {/* Chart */}
                 <ReadingsChart
                   readings={readings}
                   metricKey={activeMetricKey}
