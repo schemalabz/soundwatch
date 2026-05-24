@@ -10,6 +10,7 @@ import {
   ResponsiveContainer,
 } from "recharts";
 import { format } from "date-fns";
+import { useTranslations } from "next-intl";
 import { getMetricDef, NOISE_METRIC } from "@/lib/metrics";
 
 interface ReadingsChartProps {
@@ -23,6 +24,7 @@ export default function ReadingsChart({
   metricKey,
   height = 300,
 }: ReadingsChartProps) {
+  const tMetrics = useTranslations("metrics");
   const def = getMetricDef(metricKey) ?? NOISE_METRIC;
 
   const data = readings
@@ -41,10 +43,12 @@ export default function ReadingsChart({
         className="flex items-center justify-center text-muted"
         style={{ height }}
       >
-        No data available
+        —
       </div>
     );
   }
+
+  const label = tMetrics(`${metricKey}.label`);
 
   return (
     <ResponsiveContainer width="100%" height={height}>
@@ -67,7 +71,7 @@ export default function ReadingsChart({
           }
           formatter={(v) => [
             `${Number(v).toFixed(def.decimals ?? 1)} ${def.unit}`,
-            def.label,
+            label,
           ]}
           contentStyle={{
             borderRadius: "8px",

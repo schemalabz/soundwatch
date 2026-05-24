@@ -29,16 +29,3 @@ export function getNoiseLevelColor(dba: number): string {
   }
 }
 
-export function getNoiseLevelLabel(dba: number): string {
-  const level = getNoiseLevel(dba);
-  switch (level) {
-    case "quiet":
-      return "Quiet";
-    case "moderate":
-      return "Moderate";
-    case "loud":
-      return "Loud";
-    case "very_loud":
-      return "Very Loud";
-  }
-}
