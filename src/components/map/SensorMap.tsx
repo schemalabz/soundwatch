@@ -28,6 +28,7 @@ export default function SensorMap({
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<mapboxgl.Map | null>(null);
   const markersRef = useRef<Map<string, mapboxgl.Marker>>(new Map());
+  const prevSelectedRef = useRef<string | null | undefined>(undefined);
   const onSensorClickRef = useRef(onSensorClick);
   onSensorClickRef.current = onSensorClick;
 
@@ -100,7 +101,7 @@ export default function SensorMap({
     }
   }, [sensors]);
 
-  // Highlight selected marker
+  // Highlight selected marker + zoom out on deselect
   useEffect(() => {
     markersRef.current.forEach((marker, id) => {
       const dot = marker.getElement().querySelector("[data-sensor-id]") as HTMLElement | null;
@@ -113,6 +114,16 @@ export default function SensorMap({
         dot.style.boxShadow = "0 2px 6px rgba(0,0,0,0.25)";
       }
     });
+
+    // Zoom back out when deselected (but not on initial render)
+    if (!selectedSensorId && prevSelectedRef.current && map.current) {
+      map.current.flyTo({
+        center: [ATHENS_CENTER.lng, ATHENS_CENTER.lat],
+        zoom: ATHENS_ZOOM,
+        duration: 500,
+      });
+    }
+    prevSelectedRef.current = selectedSensorId;
   }, [selectedSensorId]);
 
   return <div ref={mapContainer} className="w-full h-full" />;

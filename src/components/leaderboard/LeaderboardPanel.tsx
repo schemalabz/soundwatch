@@ -14,11 +14,13 @@ interface SensorData {
 interface LeaderboardPanelProps {
   sensors: SensorData[];
   mode?: "noisiest" | "quietest";
+  limit?: number;
 }
 
 export default function LeaderboardPanel({
   sensors,
   mode = "noisiest",
+  limit,
 }: LeaderboardPanelProps) {
   const withNoise = sensors
     .filter((s) => (s.latestReading?.noiseDba as number | undefined) != null)
@@ -26,7 +28,8 @@ export default function LeaderboardPanel({
       const aDb = a.latestReading!.noiseDba as number;
       const bDb = b.latestReading!.noiseDba as number;
       return mode === "noisiest" ? bDb - aDb : aDb - bDb;
-    });
+    })
+    .slice(0, limit);
 
   return (
     <div className="space-y-1">

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import dynamic from "next/dynamic";
+import Link from "next/link";
 import LeaderboardPanel from "@/components/leaderboard/LeaderboardPanel";
 import SensorPreviewPanel from "@/components/map/SensorPreviewPanel";
 
@@ -60,9 +61,33 @@ export function MapSection({ sensors }: { sensors: SensorData[] }) {
           showLeaderboard ? "block" : "hidden"
         } md:block w-full md:w-80 border-t md:border-t-0 md:border-l border-border bg-white overflow-y-auto p-4 max-h-[40vh] md:max-h-none`}
       >
-        <h2 className="text-lg font-bold mb-1">Soundwatch Leaderboard</h2>
-        <p className="text-xs text-muted mb-4">Noisiest areas right now</p>
-        <LeaderboardPanel sensors={sensors} mode="noisiest" />
+        {/* Status bar */}
+        <div className="flex items-center justify-between mb-3">
+          <span className="text-xs text-muted">
+            {sensors.length} sensor{sensors.length !== 1 ? "s" : ""} active
+          </span>
+          {sensors.some((s) => s.latestReading) && (
+            <span className="text-xs text-muted">
+              Updated {new Date(
+                Math.max(
+                  ...sensors
+                    .filter((s) => s.latestReading?.recordedAt)
+                    .map((s) => new Date(s.latestReading!.recordedAt as string).getTime())
+                )
+              ).toLocaleTimeString()}
+            </span>
+          )}
+        </div>
+
+        <h2 className="text-lg font-bold mb-1">Noisiest Right Now</h2>
+        <LeaderboardPanel sensors={sensors} mode="noisiest" limit={5} />
+
+        <Link
+          href="/leaderboard"
+          className="block text-center text-primary text-sm font-semibold mt-3 hover:underline"
+        >
+          View full leaderboard →
+        </Link>
       </aside>
     </div>
   );

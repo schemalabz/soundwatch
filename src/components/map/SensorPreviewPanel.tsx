@@ -28,8 +28,16 @@ export default function SensorPreviewPanel({
   return (
     <div className="absolute bottom-0 left-0 right-0 z-20 animate-slide-up">
       <div className="bg-white border-t border-border rounded-t-2xl shadow-[0_-4px_20px_rgba(0,0,0,0.1)] p-4 mx-auto max-w-lg">
-        {/* Drag handle */}
-        <div className="w-8 h-1 bg-border rounded-full mx-auto mb-3" />
+        {/* Drag handle + close */}
+        <div className="relative mb-3">
+          <div className="w-8 h-1 bg-border rounded-full mx-auto" />
+          <button
+            onClick={onClose}
+            className="absolute -top-1 right-0 text-muted hover:text-foreground text-lg leading-none"
+          >
+            ✕
+          </button>
+        </div>
 
         {/* Header */}
         <div className="flex justify-between items-start mb-3">
