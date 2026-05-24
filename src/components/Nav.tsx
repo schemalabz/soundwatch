@@ -1,15 +1,16 @@
 "use client";
 
-import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { useTranslations } from "next-intl";
+import { Link, usePathname } from "@/i18n/navigation";
 
 export default function Nav() {
+  const t = useTranslations("nav");
   const pathname = usePathname();
 
   const links = [
-    { href: "/", label: "Map" },
-    { href: "/leaderboard", label: "Leaderboard" },
-    { href: "/about", label: "About" },
+    { href: "/", label: t("map") },
+    { href: "/leaderboard", label: t("leaderboard") },
+    { href: "/about", label: t("about") },
   ];
 
   return (
@@ -32,7 +33,7 @@ export default function Nav() {
           </Link>
         ))}
       </div>
-      <span className="text-[#a8a29e] text-xs">Athens, Greece</span>
+      <span className="text-[#a8a29e] text-xs">{t("location")}</span>
     </nav>
   );
 }
