@@ -1,10 +1,12 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import Link from "next/link";
+import { useTranslations } from "next-intl";
+import { Link } from "@/i18n/navigation";
 import dynamic from "next/dynamic";
-import { getNoiseLevelColor, getNoiseLevelLabel } from "@/lib/geo";
-import { type TimeRange, getTimeRangeFrom, getGuidelineBadge, NOISE_METRIC } from "@/lib/metrics";
+import { getNoiseLevelColor } from "@/lib/geo";
+import { type TimeRange, getTimeRangeFrom, NOISE_METRIC } from "@/lib/metrics";
+import { getTranslatedGuidelineBadge } from "@/lib/guidelines";
 import TimeRangeSelector from "@/components/sensors/TimeRangeSelector";
 import MetricAccordion from "@/components/sensors/MetricAccordion";
 
@@ -29,10 +31,24 @@ interface SensorDetailClientProps {
   initialReadings: Record<string, unknown>[];
 }
 
+function getTranslatedNoiseLabel(
+  dba: number,
+  t: (key: string) => string
+): string {
+  if (dba < 55) return t("quiet");
+  if (dba < 65) return t("moderate");
+  if (dba < 75) return t("loud");
+  return t("veryLoud");
+}
+
 export default function SensorDetailClient({
   sensor,
   initialReadings,
 }: SensorDetailClientProps) {
+  const t = useTranslations("sensor");
+  const tNoise = useTranslations("noise");
+  const tMetrics = useTranslations("metrics");
+  const tGuidelines = useTranslations("guidelines");
   const [timeRange, setTimeRange] = useState<TimeRange>("24h");
   const [readings, setReadings] = useState(initialReadings);
 
@@ -46,12 +62,12 @@ export default function SensorDetailClient({
 
   const dba = sensor.latestReading?.noiseDba as number | null;
   const color = dba != null ? getNoiseLevelColor(dba) : "#a8a29e";
-  const label = dba != null ? getNoiseLevelLabel(dba) : "No data";
+  const label = dba != null ? getTranslatedNoiseLabel(dba, tNoise) : t("noData");
 
   return (
     <div className="max-w-4xl mx-auto p-4 md:p-6">
       <Link href="/" className="text-primary text-sm hover:underline">
-        ← Back to map
+        {t("backToMap")}
       </Link>
 
       <div className="mt-4 mb-6">
@@ -77,7 +93,7 @@ export default function SensorDetailClient({
             {label}
           </span>
           {(() => {
-            const badge = getGuidelineBadge(dba, "noiseDba");
+            const badge = getTranslatedGuidelineBadge(dba, "noiseDba", tGuidelines);
             return badge ? (
               <span
                 className="text-xs font-medium px-2 py-0.5 rounded-full"
@@ -93,9 +109,7 @@ export default function SensorDetailClient({
         </div>
         <TimeRangeSelector value={timeRange} onChange={setTimeRange} />
       </div>
-      {NOISE_METRIC.description && (
-        <p className="text-xs text-muted mb-4">{NOISE_METRIC.description}</p>
-      )}
+      <p className="text-xs text-muted mb-4">{tMetrics("noiseDba.description")}</p>
 
       {/* Noise chart */}
       <div className="bg-white rounded-xl border border-border p-4 mb-6">
@@ -111,28 +125,41 @@ export default function SensorDetailClient({
       </div>
 
       {/* Sensor info */}
-      <div className="bg-white rounded-xl border border-border p-6">
-        <h2 className="text-lg font-bold mb-4">Sensor Info</h2>
-        <dl className="grid grid-cols-2 gap-x-8 gap-y-3 text-sm">
-          <dt className="text-muted">Device ID</dt>
-          <dd className="font-mono">{sensor.deviceId}</dd>
-          <dt className="text-muted">Firmware</dt>
-          <dd>{sensor.firmwareVersion || "—"}</dd>
-          <dt className="text-muted">Reading Interval</dt>
-          <dd>{sensor.readingIntervalS}s</dd>
-          <dt className="text-muted">Last Seen</dt>
-          <dd>
+      <div className="rounded-xl border border-border p-4">
+        <h3 className="text-xs font-semibold text-muted uppercase tracking-wide mb-3">{t("info")}</h3>
+        <dl className="grid grid-cols-2 gap-x-6 gap-y-2 text-xs">
+          <dt className="text-muted">{t("deviceId")}</dt>
+          <dd className="font-mono text-muted">{sensor.deviceId}</dd>
+          <dt className="text-muted">{t("firmware")}</dt>
+          <dd className="text-muted">{sensor.firmwareVersion || "—"}</dd>
+          <dt className="text-muted">{t("readingInterval")}</dt>
+          <dd className="text-muted">{sensor.readingIntervalS}s</dd>
+          <dt className="text-muted">{t("lastSeen")}</dt>
+          <dd className="text-muted">
             {sensor.lastSeenAt
               ? new Date(sensor.lastSeenAt).toLocaleString()
-              : "Never"}
+              : t("never")}
           </dd>
-          <dt className="text-muted">Coordinates</dt>
-          <dd>
+          <dt className="text-muted">{t("coordinates")}</dt>
+          <dd className="text-muted">
             {sensor.latitude != null && sensor.longitude != null
               ? `${sensor.latitude.toFixed(4)}, ${sensor.longitude.toFixed(4)}`
               : "—"}
           </dd>
         </dl>
+        {sensor.latestReading && (
+          <div className="mt-3 pt-3 border-t border-border/50 flex gap-4 text-[11px] text-muted/60 flex-wrap">
+            {sensor.latestReading.battery != null && (
+              <span>{t("battery")} {Math.round(sensor.latestReading.battery as number)}%</span>
+            )}
+            {sensor.latestReading.rssi != null && (
+              <span>{t("wifi")} {Math.round(sensor.latestReading.rssi as number)} dBm</span>
+            )}
+            {sensor.latestReading.sdCard != null && (
+              <span>{t("sdCard")} {(sensor.latestReading.sdCard as number) === 1 ? "✓" : "✗"}</span>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );

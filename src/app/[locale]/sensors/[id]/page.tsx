@@ -1,4 +1,5 @@
-import Link from "next/link";
+import { getTranslations } from "next-intl/server";
+import { Link } from "@/i18n/navigation";
 import SensorDetailClient from "@/components/sensors/SensorDetailClient";
 
 async function getSensor(id: string) {
@@ -24,9 +25,10 @@ async function getReadings(id: string) {
 export default async function SensorDetailPage({
   params,
 }: {
-  params: Promise<{ id: string }>;
+  params: Promise<{ id: string; locale: string }>;
 }) {
   const { id } = await params;
+  const t = await getTranslations("sensor");
   const [sensor, readingsData] = await Promise.all([
     getSensor(id),
     getReadings(id),
@@ -36,9 +38,9 @@ export default async function SensorDetailPage({
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
         <div className="text-center">
-          <h1 className="text-2xl font-bold mb-2">Sensor not found</h1>
+          <h1 className="text-2xl font-bold mb-2">{t("notFound")}</h1>
           <Link href="/" className="text-primary underline">
-            Back to map
+            {t("backToMap")}
           </Link>
         </div>
       </div>
