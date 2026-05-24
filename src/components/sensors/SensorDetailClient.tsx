@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import dynamic from "next/dynamic";
 import { getNoiseLevelColor, getNoiseLevelLabel } from "@/lib/geo";
-import { type TimeRange, getTimeRangeFrom } from "@/lib/metrics";
+import { type TimeRange, getTimeRangeFrom, getGuidelineBadge, NOISE_METRIC } from "@/lib/metrics";
 import TimeRangeSelector from "@/components/sensors/TimeRangeSelector";
 import MetricAccordion from "@/components/sensors/MetricAccordion";
 
@@ -64,8 +64,8 @@ export default function SensorDetailClient({
       </div>
 
       {/* Noise hero */}
-      <div className="flex items-center justify-between mb-4">
-        <div className="flex items-baseline gap-3">
+      <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center gap-3 flex-wrap">
           <span className="text-4xl font-bold" style={{ color }}>
             {dba != null ? dba.toFixed(1) : "—"}
           </span>
@@ -76,9 +76,26 @@ export default function SensorDetailClient({
           >
             {label}
           </span>
+          {(() => {
+            const badge = getGuidelineBadge(dba, "noiseDba");
+            return badge ? (
+              <span
+                className="text-xs font-medium px-2 py-0.5 rounded-full"
+                style={{
+                  backgroundColor: badge.color + "18",
+                  color: badge.color,
+                }}
+              >
+                {badge.text}
+              </span>
+            ) : null;
+          })()}
         </div>
         <TimeRangeSelector value={timeRange} onChange={setTimeRange} />
       </div>
+      {NOISE_METRIC.description && (
+        <p className="text-xs text-muted mb-4">{NOISE_METRIC.description}</p>
+      )}
 
       {/* Noise chart */}
       <div className="bg-white rounded-xl border border-border p-4 mb-6">
