@@ -1,6 +1,9 @@
 import { getTranslations } from "next-intl/server";
 import { Link } from "@/i18n/navigation";
 import SensorDetailClient from "@/components/sensors/SensorDetailClient";
+import { getTimeRangeFrom, isTimeRange, type TimeRange } from "@/lib/metrics";
+
+const DEFAULT_RANGE: TimeRange = "48h";
 
 async function getSensor(id: string) {
   const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000";
@@ -11,9 +14,9 @@ async function getSensor(id: string) {
   return res.json();
 }
 
-async function getReadings(id: string) {
+async function getReadings(id: string, range: TimeRange) {
   const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000";
-  const from = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString();
+  const from = getTimeRangeFrom(range).toISOString();
   const res = await fetch(
     `${baseUrl}/api/sensors/${id}/readings?from=${from}&limit=5000`,
     { cache: "no-store" }
@@ -24,14 +27,18 @@ async function getReadings(id: string) {
 
 export default async function SensorDetailPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string; locale: string }>;
+  searchParams: Promise<{ range?: string }>;
 }) {
   const { id } = await params;
+  const { range: rangeParam } = await searchParams;
+  const range = isTimeRange(rangeParam) ? rangeParam : DEFAULT_RANGE;
   const t = await getTranslations("sensor");
   const [sensor, readingsData] = await Promise.all([
     getSensor(id),
-    getReadings(id),
+    getReadings(id, range),
   ]);
 
   if (!sensor) {
@@ -51,6 +58,7 @@ export default async function SensorDetailPage({
     <SensorDetailClient
       sensor={sensor}
       initialReadings={readingsData.readings}
+      initialRange={range}
     />
   );
 }

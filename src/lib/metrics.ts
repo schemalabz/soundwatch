@@ -94,6 +94,12 @@ export function getMetricUnit(key: string): string {
 
 export type TimeRange = "24h" | "48h" | "7d" | "30d";
 
+export const TIME_RANGES: readonly TimeRange[] = ["24h", "48h", "7d", "30d"];
+
+export function isTimeRange(value: string | null | undefined): value is TimeRange {
+  return value != null && (TIME_RANGES as readonly string[]).includes(value);
+}
+
 export function getTimeRangeFrom(range: TimeRange): Date {
   const now = new Date();
   switch (range) {
