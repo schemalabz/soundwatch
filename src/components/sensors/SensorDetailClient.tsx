@@ -49,7 +49,7 @@ export default function SensorDetailClient({
   const tNoise = useTranslations("noise");
   const tMetrics = useTranslations("metrics");
   const tGuidelines = useTranslations("guidelines");
-  const [timeRange, setTimeRange] = useState<TimeRange>("24h");
+  const [timeRange, setTimeRange] = useState<TimeRange>("48h");
   const [readings, setReadings] = useState(initialReadings);
 
   useEffect(() => {

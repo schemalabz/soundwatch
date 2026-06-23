@@ -92,13 +92,15 @@ export function getMetricUnit(key: string): string {
   return getMetricDef(key)?.unit ?? "";
 }
 
-export type TimeRange = "24h" | "7d" | "30d";
+export type TimeRange = "24h" | "48h" | "7d" | "30d";
 
 export function getTimeRangeFrom(range: TimeRange): Date {
   const now = new Date();
   switch (range) {
     case "24h":
       return new Date(now.getTime() - 24 * 60 * 60 * 1000);
+    case "48h":
+      return new Date(now.getTime() - 48 * 60 * 60 * 1000);
     case "7d":
       return new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
     case "30d":

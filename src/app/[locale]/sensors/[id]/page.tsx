@@ -13,7 +13,7 @@ async function getSensor(id: string) {
 
 async function getReadings(id: string) {
   const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000";
-  const from = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+  const from = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString();
   const res = await fetch(
     `${baseUrl}/api/sensors/${id}/readings?from=${from}&limit=5000`,
     { cache: "no-store" }
