@@ -6,50 +6,85 @@ on:
   pull_request:
     branches: [main]
 
+# Prisma reads env("DATABASE_URL") from schema.prisma. None of these jobs
+# connect to a database (tests have no DB usage; all pages are request-time
+# `cache: "no-store"`, so `next build` never queries) — this placeholder just
+# satisfies the schema's env reference for `prisma generate`/build.
+env:
+  DATABASE_URL: postgresql://soundwatch:soundwatch@localhost:5432/soundwatch
+
 jobs:
-  ci:
+  lint:
     runs-on: ubuntu-latest
-
-    services:
-      postgres:
-        image: postgres:17
-        env:
-          POSTGRES_USER: soundwatch
-          POSTGRES_PASSWORD: soundwatch
-          POSTGRES_DB: soundwatch
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U soundwatch"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-
-    env:
-      DATABASE_URL: postgresql://soundwatch:soundwatch@localhost:5432/soundwatch
-
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Generate Prisma client
-        run: npx prisma generate
-
+      - run: npm ci
+      - run: npx prisma generate
       - name: Lint
         run: npm run lint
 
+  typecheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx prisma generate
       - name: Type check
         run: npx tsc --noEmit
 
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx prisma generate
       - name: Run tests
         run: npm test
 
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx prisma generate
       - name: Build
         run: npm run build
+
+  docker:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: app, file: Dockerfile }
+          - { name: ingester, file: Dockerfile.ingester }
+          - { name: sc-poller, file: Dockerfile.sc-poller }
+          - { name: mosquitto, file: Dockerfile.mosquitto }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Build ${{ matrix.name }} image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ${{ matrix.file }}
+          push: false
+          tags: soundwatch-${{ matrix.name }}:ci
+          cache-from: type=gha,scope=${{ matrix.name }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.name }}
