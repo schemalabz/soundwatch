@@ -30,7 +30,9 @@ export default function SensorMap({
   const markersRef = useRef<Map<string, mapboxgl.Marker>>(new Map());
   const prevSelectedRef = useRef<string | null | undefined>(undefined);
   const onSensorClickRef = useRef(onSensorClick);
-  onSensorClickRef.current = onSensorClick;
+  useEffect(() => {
+    onSensorClickRef.current = onSensorClick;
+  }, [onSensorClick]);
 
   useEffect(() => {
     if (!mapContainer.current) return;
