@@ -2,10 +2,10 @@
 
 import { useState, useEffect } from "react";
 import { useTranslations } from "next-intl";
-import { Link } from "@/i18n/navigation";
+import { Link, usePathname, useRouter } from "@/i18n/navigation";
 import dynamic from "next/dynamic";
 import { getNoiseLevelColor } from "@/lib/geo";
-import { type TimeRange, getTimeRangeFrom, NOISE_METRIC } from "@/lib/metrics";
+import { type TimeRange, getTimeRangeFrom } from "@/lib/metrics";
 import { getTranslatedGuidelineBadge } from "@/lib/guidelines";
 import TimeRangeSelector from "@/components/sensors/TimeRangeSelector";
 import MetricAccordion from "@/components/sensors/MetricAccordion";
@@ -29,6 +29,7 @@ interface SensorDetailClientProps {
     latestReading: Record<string, unknown> | null;
   };
   initialReadings: Record<string, unknown>[];
+  initialRange: TimeRange;
 }
 
 function getTranslatedNoiseLabel(
@@ -44,13 +45,21 @@ function getTranslatedNoiseLabel(
 export default function SensorDetailClient({
   sensor,
   initialReadings,
+  initialRange,
 }: SensorDetailClientProps) {
   const t = useTranslations("sensor");
   const tNoise = useTranslations("noise");
   const tMetrics = useTranslations("metrics");
   const tGuidelines = useTranslations("guidelines");
-  const [timeRange, setTimeRange] = useState<TimeRange>("24h");
+  const router = useRouter();
+  const pathname = usePathname();
+  const [timeRange, setTimeRange] = useState<TimeRange>(initialRange);
   const [readings, setReadings] = useState(initialReadings);
+
+  function handleRangeChange(range: TimeRange) {
+    setTimeRange(range);
+    router.replace(`${pathname}?range=${range}`, { scroll: false });
+  }
 
   useEffect(() => {
     const from = getTimeRangeFrom(timeRange).toISOString();
@@ -107,7 +116,7 @@ export default function SensorDetailClient({
             ) : null;
           })()}
         </div>
-        <TimeRangeSelector value={timeRange} onChange={setTimeRange} />
+        <TimeRangeSelector value={timeRange} onChange={handleRangeChange} />
       </div>
       <p className="text-xs text-muted mb-4">{tMetrics("noiseDba.description")}</p>
 
