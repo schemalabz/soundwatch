@@ -5,7 +5,7 @@ import { useTranslations } from "next-intl";
 import { Link, usePathname, useRouter } from "@/i18n/navigation";
 import dynamic from "next/dynamic";
 import { getNoiseLevelColor } from "@/lib/geo";
-import { type TimeRange, getTimeRangeFrom, NOISE_METRIC } from "@/lib/metrics";
+import { type TimeRange, getTimeRangeFrom } from "@/lib/metrics";
 import { getTranslatedGuidelineBadge } from "@/lib/guidelines";
 import TimeRangeSelector from "@/components/sensors/TimeRangeSelector";
 import MetricAccordion from "@/components/sensors/MetricAccordion";
