@@ -19,8 +19,8 @@ model Sensor {
   targetFirmwareVersion String? @map("target_firmware_version")
   readingIntervalS  Int       @default(60) @map("reading_interval_s")
   isActive          Boolean   @default(true) @map("is_active")
-  lastSeenAt        DateTime? @map("last_seen_at")
-  createdAt         DateTime  @default(now()) @map("created_at")
+  lastSeenAt        DateTime? @map("last_seen_at") @db.Timestamptz
+  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz
 
   readings Reading[]
 
@@ -30,7 +30,7 @@ model Sensor {
 model Reading {
   id          BigInt   @id @default(autoincrement())
   sensorId    String   @map("sensor_id")
-  recordedAt  DateTime @map("recorded_at")
+  recordedAt  DateTime @map("recorded_at") @db.Timestamptz
   noiseDba    Float?   @map("noise_dba")
   temperature Float?
   humidity    Float?
