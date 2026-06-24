@@ -9,10 +9,11 @@
     "lint": "eslint",
     "test": "vitest run",
     "test:watch": "vitest",
-    "ingester": "tsx mqtt-ingester/index.ts",
-    "simulate": "tsx scripts/simulate-sensor.ts",
-    "seed": "tsx scripts/seed-sensors.ts",
-    "test:connection": "tsx scripts/test-connection.ts"
+    "ingester": "tsx --env-file-if-exists=.env mqtt-ingester/index.ts",
+    "simulate": "tsx --env-file-if-exists=.env scripts/simulate-sensor.ts",
+    "seed": "tsx --env-file-if-exists=.env scripts/seed.ts",
+    "backfill": "tsx --env-file-if-exists=.env scripts/backfill.ts",
+    "test:connection": "tsx --env-file-if-exists=.env scripts/test-connection.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",
