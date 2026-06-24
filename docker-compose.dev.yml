@@ -1,6 +1,7 @@
 services:
   postgres:
-    image: postgres:17
+    # Bundles TimescaleDB + PostGIS (same Postgres 17 base as `postgres:17`).
+    image: timescale/timescaledb-ha:pg17
     environment:
       POSTGRES_USER: soundwatch
       POSTGRES_PASSWORD: soundwatch
@@ -8,7 +9,7 @@ services:
     ports:
       - "5432:5432"
     volumes:
-      - pgdata:/var/lib/postgresql/data
+      - pgdata:/home/postgres/pgdata
 
   mosquitto:
     image: eclipse-mosquitto:2

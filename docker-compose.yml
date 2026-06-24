@@ -59,13 +59,14 @@ services:
     restart: unless-stopped
 
   postgres:
-    image: postgres:17
+    # Bundles TimescaleDB + PostGIS (same Postgres 17 base as `postgres:17`).
+    image: timescale/timescaledb-ha:pg17
     environment:
       POSTGRES_USER: soundwatch
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: soundwatch
     volumes:
-      - pgdata:/var/lib/postgresql/data
+      - pgdata:/home/postgres/pgdata
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U soundwatch"]
       interval: 5s
