@@ -1,6 +1,7 @@
 generator client {
-  provider      = "prisma-client-js"
-  binaryTargets = ["native", "debian-openssl-3.0.x"]
+  provider        = "prisma-client-js"
+  binaryTargets   = ["native", "debian-openssl-3.0.x"]
+  previewFeatures = ["relationJoins"]
 }
 
 datasource db {
@@ -14,6 +15,9 @@ model Sensor {
   name              String?
   latitude          Float?
   longitude         Float?
+  // Kept in sync with latitude/longitude by a DB trigger (see migration 0007).
+  // Prisma can't write PostGIS columns — query via $queryRaw.
+  location          Unsupported("geography(Point, 4326)")?
   address           String?
   firmwareVersion   String?   @map("firmware_version")
   targetFirmwareVersion String? @map("target_firmware_version")
@@ -24,11 +28,11 @@ model Sensor {
 
   readings Reading[]
 
+  @@index([location], type: Gist, map: "idx_sensors_location")
   @@map("sensors")
 }
 
 model Reading {
-  id          BigInt   @id @default(autoincrement())
   sensorId    String   @map("sensor_id")
   recordedAt  DateTime @map("recorded_at") @db.Timestamptz
   noiseDba    Float?   @map("noise_dba")
@@ -55,6 +59,10 @@ model Reading {
 
   sensor Sensor @relation(fields: [sensorId], references: [id])
 
+  @@id([sensorId, recordedAt])
   @@index([sensorId, recordedAt(sort: Desc)], map: "idx_readings_sensor_time")
+  // Created automatically by TimescaleDB's create_hypertable (declared here so
+  // it isn't reported as drift).
+  @@index([recordedAt(sort: Desc)])
   @@map("readings")
 }

@@ -6,6 +6,7 @@ import dynamic from "next/dynamic";
 import { Link } from "@/i18n/navigation";
 import LeaderboardPanel from "@/components/leaderboard/LeaderboardPanel";
 import SensorPreviewPanel from "@/components/map/SensorPreviewPanel";
+import type { MapBounds } from "@/components/map/SensorMap";
 
 const SensorMap = dynamic(() => import("@/components/map/SensorMap"), {
   ssr: false,
@@ -30,6 +31,26 @@ export function MapSection({ sensors }: { sensors: SensorData[] }) {
   const t = useTranslations("map");
   const [showLeaderboard, setShowLeaderboard] = useState(false);
   const [selectedSensor, setSelectedSensor] = useState<SensorData | null>(null);
+  const [inView, setInView] = useState<number | null>(null);
+
+  // On every pan/zoom, ask the PostGIS bbox endpoint how many sensors are in view.
+  const handleBoundsChange = async (b: MapBounds) => {
+    const params = new URLSearchParams({
+      minLng: String(b.minLng),
+      minLat: String(b.minLat),
+      maxLng: String(b.maxLng),
+      maxLat: String(b.maxLat),
+    });
+    try {
+      const res = await fetch(`/api/sensors/bbox?${params.toString()}`);
+      if (res.ok) {
+        const data: { count: number } = await res.json();
+        setInView(data.count);
+      }
+    } catch {
+      // ignore transient fetch errors while panning
+    }
+  };
 
   return (
     <div className="flex flex-1 flex-col md:flex-row relative overflow-hidden">
@@ -38,7 +59,14 @@ export function MapSection({ sensors }: { sensors: SensorData[] }) {
           sensors={sensors}
           selectedSensorId={selectedSensor?.id}
           onSensorClick={(sensor) => setSelectedSensor(sensor as SensorData)}
+          onBoundsChange={handleBoundsChange}
         />
+
+        {inView !== null && (
+          <div className="absolute top-3 left-3 z-10 rounded-lg bg-white/90 px-3 py-1.5 text-sm font-medium shadow backdrop-blur">
+            {inView} {inView === 1 ? "sensor" : "sensors"} in view
+          </div>
+        )}
 
         {selectedSensor && (
           <SensorPreviewPanel

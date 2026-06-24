@@ -3,6 +3,10 @@ import { prisma } from "@/lib/db";
 
 export async function GET() {
   const sensors = await prisma.sensor.findMany({
+    // "join" pushes the readings `take: 1` into a LATERAL JOIN with LIMIT 1
+    // (uses idx_readings_sensor_time). Without it Prisma fetches every reading
+    // for each sensor and slices in memory — unusably slow at scale.
+    relationLoadStrategy: "join",
     where: { isActive: true },
     include: {
       readings: {
