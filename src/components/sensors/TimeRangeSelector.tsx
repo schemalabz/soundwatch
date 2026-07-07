@@ -18,16 +18,13 @@ export default function TimeRangeSelector({
   onChange,
 }: TimeRangeSelectorProps) {
   return (
-    <div className="flex gap-1 bg-light rounded-lg p-1">
+    <div className="sw-chiptrack">
       {RANGES.map((r) => (
         <button
           key={r.value}
           onClick={() => onChange(r.value)}
-          className={`px-3 py-1 rounded-md text-sm font-medium transition-colors ${
-            value === r.value
-              ? "bg-primary text-white"
-              : "text-muted hover:text-foreground"
-          }`}
+          className="sw-chip"
+          data-active={value === r.value}
         >
           {r.label}
         </button>

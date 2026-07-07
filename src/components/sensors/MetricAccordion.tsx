@@ -58,7 +58,7 @@ export default function MetricAccordion({
   }
 
   return (
-    <div className="border border-border rounded-xl overflow-hidden">
+    <div className="border-[0.5px] border-hairline rounded-md overflow-hidden bg-panel">
       {METRIC_GROUPS.map((group) => {
         const isExpanded = expandedGroup === group.id;
         const activeMetricKey = getSelectedMetric(group);
@@ -74,18 +74,14 @@ export default function MetricAccordion({
           <div key={group.id}>
             <button
               onClick={() => toggleGroup(group.id)}
-              className={`w-full px-4 py-3 flex items-center justify-between text-left border-b border-border transition-colors ${
-                isExpanded ? "bg-light" : "hover:bg-light/50"
+              className={`w-full px-4 py-3 flex items-center justify-between text-left border-b-[0.5px] border-hairline last:border-b-0 transition-colors ${
+                isExpanded ? "bg-[var(--sw-chrome-bg)]" : "hover:bg-[var(--sw-chrome-bg)]"
               }`}
             >
-              <span
-                className={`font-semibold text-sm ${
-                  isExpanded ? "text-primary" : ""
-                }`}
-              >
+              <span className="font-light text-sm text-ink">
                 {group.icon} {tMetrics(`${group.id}.label`)}
               </span>
-              <span className="text-xs text-muted">
+              <span className="sw-label text-xs">
                 {!isExpanded && (
                   <>
                     {tMetrics(`${group.summaryMetric}.label`)}: {getSummaryValue(group)}{" "}
@@ -96,8 +92,8 @@ export default function MetricAccordion({
             </button>
 
             {isExpanded && (
-              <div className="p-4 border-b border-border bg-white">
-                <p className="text-xs text-muted mb-3">
+              <div className="p-4 border-b-[0.5px] border-hairline last:border-b-0 bg-bg">
+                <p className="sw-label text-xs mb-3">
                   {tMetrics(`${group.id}.description`)}
                 </p>
 
@@ -106,11 +102,8 @@ export default function MetricAccordion({
                     <button
                       key={metric.key}
                       onClick={() => selectMetric(group.id, metric.key)}
-                      className={`px-3 py-1 rounded-full text-xs font-semibold transition-colors ${
-                        activeMetricKey === metric.key
-                          ? "bg-primary text-white"
-                          : "bg-light text-muted hover:text-foreground"
-                      }`}
+                      className="sw-chip"
+                      data-active={activeMetricKey === metric.key}
                     >
                       {tMetrics(`${metric.key}.label`)}
                     </button>
@@ -119,19 +112,19 @@ export default function MetricAccordion({
 
                 <div className="flex items-center gap-3 mb-2">
                   <div className="flex items-baseline gap-2">
-                    <span className="text-2xl font-bold">
+                    <span className="text-2xl font-light text-ink tabular-nums">
                       {formatMetricValue(currentValue, activeMetricKey)}
                     </span>
-                    <span className="text-sm text-muted">
+                    <span className="sw-label text-sm">
                       {activeMetric.unit}
                     </span>
                   </div>
 
                   {badge && (
                     <span
-                      className="text-xs font-medium px-2 py-0.5 rounded-full"
+                      className="text-xs px-2.5 py-1 rounded"
                       style={{
-                        backgroundColor: badge.color + "18",
+                        backgroundColor: badge.color + "20",
                         color: badge.color,
                       }}
                     >
@@ -145,7 +138,7 @@ export default function MetricAccordion({
                         showInfo === activeMetricKey ? null : activeMetricKey
                       )
                     }
-                    className="text-muted hover:text-foreground transition-colors text-sm"
+                    className="text-muted hover:text-ink transition-colors text-sm"
                     title={tSensor("whatIsThis")}
                   >
                     ℹ️
@@ -153,7 +146,7 @@ export default function MetricAccordion({
                 </div>
 
                 {showInfo === activeMetricKey && (
-                  <div className="bg-light border border-border rounded-lg p-3 mb-3 text-xs text-muted leading-relaxed">
+                  <div className="bg-[var(--sw-chrome-bg)] border-[0.5px] border-hairline rounded p-3 mb-3 text-xs text-muted leading-relaxed">
                     {tMetrics(`${activeMetricKey}.description`)}
                   </div>
                 )}

@@ -12,7 +12,62 @@
     "noisiestRightNow": "Live Rankings",
     "viewFullLeaderboard": "View full leaderboard →",
     "showMap": "Show Map",
-    "leaderboard": "Leaderboard"
+    "leaderboard": "Leaderboard",
+    "inView": "in view",
+    "markers": "Markers",
+    "heatmap": "Heatmap"
+  },
+  "dashboard": {
+    "overviewEyebrow": "Athens, Greece",
+    "overviewTitle": "Live Noise Map",
+    "selectHint": "Select a sensor on the map to see its live readings, gauges and history.",
+    "reporting": "reporting",
+    "noisiestNow": "Noisiest Right Now",
+    "viewFullLeaderboard": "View full leaderboard →",
+    "breakdown": "Breakdown",
+    "byHour": "Today by Hour",
+    "byHourSubtitle": "Noise index across the 24 hours of today",
+    "hourOfDay": "Hour of day",
+    "indexAxis": "Index",
+    "history": "History",
+    "forecast": "7-Day Forecast",
+    "calendar": "Noise Calendar",
+    "seasons": "Noise Seasons",
+    "seasonsSubtitle": "Traffic, nightlife and construction intensity across the full year",
+    "indexHint": "Index 0–12 · hover for exact levels",
+    "close": "Close",
+    "yearGlance": "Year at a Glance",
+    "yearGlanceSubtitle": "Monthly noise index across the full year",
+    "index": "index",
+    "intensity": "Intensity",
+    "month": "Month",
+    "expand": "Expand",
+    "periods": { "day": "Day", "evening": "Evening", "night": "Night" },
+    "days": {
+      "today": "Today",
+      "sun": "Sun",
+      "mon": "Mon",
+      "tue": "Tue",
+      "wed": "Wed",
+      "thu": "Thu",
+      "fri": "Fri"
+    },
+    "sources": {
+      "traffic": "Traffic",
+      "nightlife": "Nightlife",
+      "construction": "Construction",
+      "aircraft": "Aircraft",
+      "sirens": "Sirens"
+    },
+    "timeline": {
+      "day": "Day",
+      "month": "Month",
+      "year": "Year",
+      "today": "Today",
+      "play": "Play",
+      "pause": "Pause"
+    },
+    "footer": "Soundwatch, 2026"
   },
   "leaderboard": {
     "title": "Soundwatch Leaderboard",

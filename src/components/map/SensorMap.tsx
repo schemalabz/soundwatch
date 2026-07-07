@@ -24,13 +24,18 @@ export interface MapBounds {
 interface SensorMapProps {
   sensors: SensorData[];
   selectedSensorId?: string | null;
+  heatmap?: boolean;
   onSensorClick: (sensor: SensorData) => void;
   onBoundsChange?: (bounds: MapBounds) => void;
 }
 
+const HEAT_SOURCE = "sensor-heat";
+const HEAT_LAYER = "sensor-heat-layer";
+
 export default function SensorMap({
   sensors,
   selectedSensorId,
+  heatmap = false,
   onSensorClick,
   onBoundsChange,
 }: SensorMapProps) {
@@ -40,10 +45,79 @@ export default function SensorMap({
   const prevSelectedRef = useRef<string | null | undefined>(undefined);
   const onSensorClickRef = useRef(onSensorClick);
   const onBoundsChangeRef = useRef(onBoundsChange);
+  const sensorsRef = useRef(sensors);
+  const heatmapRef = useRef(heatmap);
   useEffect(() => {
     onSensorClickRef.current = onSensorClick;
     onBoundsChangeRef.current = onBoundsChange;
   }, [onSensorClick, onBoundsChange]);
+  useEffect(() => {
+    sensorsRef.current = sensors;
+  }, [sensors]);
+
+  // Build the heatmap source/layer (idempotent) and apply current visibility.
+  function ensureHeatmap() {
+    const m = map.current;
+    if (!m || !m.isStyleLoaded()) return;
+
+    const data: GeoJSON.FeatureCollection = {
+      type: "FeatureCollection",
+      features: sensorsRef.current
+        .filter((s) => s.latitude != null && s.longitude != null)
+        .map((s) => ({
+          type: "Feature",
+          geometry: { type: "Point", coordinates: [s.longitude!, s.latitude!] },
+          properties: {
+            weight: (s.latestReading?.noiseDba as number | undefined) ?? 45,
+          },
+        })),
+    };
+
+    const src = m.getSource(HEAT_SOURCE) as mapboxgl.GeoJSONSource | undefined;
+    if (src) {
+      src.setData(data);
+    } else {
+      m.addSource(HEAT_SOURCE, { type: "geojson", data });
+    }
+
+    if (!m.getLayer(HEAT_LAYER)) {
+      m.addLayer({
+        id: HEAT_LAYER,
+        type: "heatmap",
+        source: HEAT_SOURCE,
+        paint: {
+          // dBA → weight (quiet ~40 → 0, very loud ~90 → 1)
+          "heatmap-weight": [
+            "interpolate",
+            ["linear"],
+            ["get", "weight"],
+            40, 0,
+            90, 1,
+          ],
+          "heatmap-intensity": ["interpolate", ["linear"], ["zoom"], 9, 1, 15, 3],
+          "heatmap-radius": ["interpolate", ["linear"], ["zoom"], 9, 22, 15, 55],
+          "heatmap-opacity": 0.85,
+          "heatmap-color": [
+            "interpolate",
+            ["linear"],
+            ["heatmap-density"],
+            0, "rgba(0,0,0,0)",
+            0.15, "#5ba834",
+            0.4, "#c7c43c",
+            0.6, "#e8b335",
+            0.8, "#ec832c",
+            1, "#d6342a",
+          ],
+        },
+      });
+    }
+
+    m.setLayoutProperty(
+      HEAT_LAYER,
+      "visibility",
+      heatmapRef.current ? "visible" : "none"
+    );
+  }
 
   useEffect(() => {
     if (!mapContainer.current) return;
@@ -54,15 +128,31 @@ export default function SensorMap({
       return;
     }
 
+    const styleFor = (theme: string | null) =>
+      theme === "light"
+        ? "mapbox://styles/mapbox/light-v11"
+        : "mapbox://styles/mapbox/dark-v11";
+
     mapboxgl.accessToken = token;
     map.current = new mapboxgl.Map({
       container: mapContainer.current,
-      style: "mapbox://styles/mapbox/streets-v12",
+      style: styleFor(document.documentElement.getAttribute("data-theme")),
       center: [ATHENS_CENTER.lng, ATHENS_CENTER.lat],
       zoom: ATHENS_ZOOM,
     });
 
     map.current.addControl(new mapboxgl.NavigationControl(), "top-right");
+
+    // Swap the basemap when the user toggles light/dark. HTML markers persist.
+    const themeObserver = new MutationObserver(() => {
+      map.current?.setStyle(
+        styleFor(document.documentElement.getAttribute("data-theme"))
+      );
+    });
+    themeObserver.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ["data-theme"],
+    });
 
     // Report the visible bounds on load and after each pan/zoom, so the parent
     // can query sensors in the viewport via the PostGIS bbox endpoint.
@@ -80,7 +170,12 @@ export default function SensorMap({
     map.current.on("load", emitBounds);
     map.current.on("moveend", emitBounds);
 
+    // (Re)build the heatmap on first load and after every basemap style swap.
+    map.current.on("load", ensureHeatmap);
+    map.current.on("style.load", ensureHeatmap);
+
     return () => {
+      themeObserver.disconnect();
       map.current?.remove();
     };
   }, []);
@@ -100,14 +195,15 @@ export default function SensorMap({
 
       const el = document.createElement("div");
       el.style.cursor = "pointer";
+      el.style.display = heatmapRef.current ? "none" : "";
 
       const dot = document.createElement("div");
-      dot.style.width = "24px";
-      dot.style.height = "24px";
+      dot.style.width = "18px";
+      dot.style.height = "18px";
       dot.style.borderRadius = "50%";
       dot.style.backgroundColor = color;
-      dot.style.border = "3px solid white";
-      dot.style.boxShadow = "0 2px 6px rgba(0,0,0,0.25)";
+      dot.style.border = "2.5px solid var(--sw-panel)";
+      dot.style.boxShadow = "0 0 0 1px rgba(0,0,0,0.25), 0 2px 6px rgba(0,0,0,0.4)";
       dot.style.transition = "transform 0.2s";
       dot.dataset.sensorId = sensor.id;
       el.appendChild(dot);
@@ -128,7 +224,22 @@ export default function SensorMap({
 
       markersRef.current.set(sensor.id, marker);
     }
+
+    // Keep the heatmap data in sync with the sensor set.
+    ensureHeatmap();
   }, [sensors]);
+
+  // Toggle between markers and heatmap.
+  useEffect(() => {
+    heatmapRef.current = heatmap;
+    const m = map.current;
+    if (m && m.getLayer(HEAT_LAYER)) {
+      m.setLayoutProperty(HEAT_LAYER, "visibility", heatmap ? "visible" : "none");
+    }
+    markersRef.current.forEach((marker) => {
+      marker.getElement().style.display = heatmap ? "none" : "";
+    });
+  }, [heatmap]);
 
   // Highlight selected marker + zoom out on deselect
   useEffect(() => {

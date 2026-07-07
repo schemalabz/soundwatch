@@ -28,38 +28,32 @@ export default function LeaderboardPage() {
   }, []);
 
   return (
-    <div className="max-w-2xl mx-auto p-6">
-      <Link href="/" className="text-primary text-sm hover:underline">
+    <div className="max-w-2xl mx-auto px-6 py-10 w-full overflow-y-auto sw-scroll">
+      <Link href="/" className="sw-label text-xs text-muted hover:text-ink">
         {t("backToMap")}
       </Link>
 
-      <h1 className="text-3xl font-bold mt-4 mb-2">{t("title")}</h1>
-      <p className="text-muted mb-6">{t("subtitle")}</p>
+      <h1 className="sw-h text-[34px] mt-5 mb-2">{t("title")}</h1>
+      <p className="text-muted text-sm mb-7">{t("subtitle")}</p>
 
-      <div className="flex gap-2 mb-6">
+      <div className="sw-chiptrack mb-7">
         <button
           onClick={() => setMode("noisiest")}
-          className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${
-            mode === "noisiest"
-              ? "bg-primary text-white"
-              : "bg-light text-muted border border-border hover:bg-white"
-          }`}
+          className="sw-chip"
+          data-active={mode === "noisiest"}
         >
           {t("noisiest")}
         </button>
         <button
           onClick={() => setMode("quietest")}
-          className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${
-            mode === "quietest"
-              ? "bg-[#22c55e] text-white"
-              : "bg-light text-muted border border-border hover:bg-white"
-          }`}
+          className="sw-chip"
+          data-active={mode === "quietest"}
         >
           {t("quietest")}
         </button>
       </div>
 
-      <div className="bg-white rounded-xl border border-border overflow-hidden">
+      <div className="border-[0.5px] border-hairline rounded-md px-5 bg-panel">
         <LeaderboardPanel sensors={sensors} mode={mode} />
       </div>
     </div>

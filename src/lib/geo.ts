@@ -19,13 +19,13 @@ export function getNoiseLevelColor(dba: number): string {
   const level = getNoiseLevel(dba);
   switch (level) {
     case "quiet":
-      return "#22c55e"; // green
+      return "#5ba834"; // deep green
     case "moderate":
-      return "#eab308"; // yellow
+      return "#c7c43c"; // lime
     case "loud":
-      return "#f97316"; // orange
+      return "#ec832c"; // orange
     case "very_loud":
-      return "#ef4444"; // red
+      return "#d6342a"; // red
   }
 }
 

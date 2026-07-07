@@ -12,7 +12,62 @@
     "noisiestRightNow": "Ζωντανή Κατάταξη",
     "viewFullLeaderboard": "Δείτε ολόκληρη την κατάταξη →",
     "showMap": "Χάρτης",
-    "leaderboard": "Κατάταξη"
+    "leaderboard": "Κατάταξη",
+    "inView": "σε προβολή",
+    "markers": "Σημεία",
+    "heatmap": "Θερμικός χάρτης"
+  },
+  "dashboard": {
+    "overviewEyebrow": "Αθήνα, Ελλάδα",
+    "overviewTitle": "Ζωντανός Χάρτης Θορύβου",
+    "selectHint": "Επιλέξτε έναν αισθητήρα στον χάρτη για να δείτε ζωντανές μετρήσεις, δείκτες και ιστορικό.",
+    "reporting": "ενεργοί",
+    "noisiestNow": "Πιο Θορυβώδεις Τώρα",
+    "viewFullLeaderboard": "Δείτε ολόκληρη την κατάταξη →",
+    "breakdown": "Ανάλυση",
+    "byHour": "Σήμερα ανά Ώρα",
+    "byHourSubtitle": "Δείκτης θορύβου στις 24 ώρες της ημέρας",
+    "hourOfDay": "Ώρα ημέρας",
+    "indexAxis": "Δείκτης",
+    "history": "Ιστορικό",
+    "forecast": "Πρόγνωση 7 Ημερών",
+    "calendar": "Ημερολόγιο Θορύβου",
+    "seasons": "Εποχές Θορύβου",
+    "seasonsSubtitle": "Ένταση κίνησης, νυχτερινής ζωής και κατασκευών όλο τον χρόνο",
+    "indexHint": "Δείκτης 0–12 · περάστε για ακριβή επίπεδα",
+    "close": "Κλείσιμο",
+    "yearGlance": "Η Χρονιά με μια Ματιά",
+    "yearGlanceSubtitle": "Μηνιαίος δείκτης θορύβου όλο τον χρόνο",
+    "index": "δείκτης",
+    "intensity": "Ένταση",
+    "month": "Μήνας",
+    "expand": "Ανάπτυξη",
+    "periods": { "day": "Ημέρα", "evening": "Απόγευμα", "night": "Νύχτα" },
+    "days": {
+      "today": "Σήμ",
+      "sun": "Κυρ",
+      "mon": "Δευ",
+      "tue": "Τρι",
+      "wed": "Τετ",
+      "thu": "Πεμ",
+      "fri": "Παρ"
+    },
+    "sources": {
+      "traffic": "Κίνηση",
+      "nightlife": "Νυχτ. ζωή",
+      "construction": "Κατασκευές",
+      "aircraft": "Αεροσκάφη",
+      "sirens": "Σειρήνες"
+    },
+    "timeline": {
+      "day": "Ημέρα",
+      "month": "Μήνας",
+      "year": "Έτος",
+      "today": "Σήμερα",
+      "play": "Αναπαραγωγή",
+      "pause": "Παύση"
+    },
+    "footer": "Soundwatch, 2026"
   },
   "leaderboard": {
     "title": "Κατάταξη Soundwatch",
