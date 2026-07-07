@@ -56,6 +56,31 @@ describe("parseSensorPayload", () => {
     expect(reading.pm10).toBe(18.7);
   });
 
+  it("maps the un-weighted noise frequency bands", () => {
+    const payload = JSON.stringify({
+      device_id: "sck-store-042",
+      recorded_at: "2026-06-15T14:30:00Z",
+      sensors: [
+        { id: "noise_low", value: 52.09 },
+        { id: "noise_250", value: 50.23 },
+        { id: "noise_500", value: 45.73 },
+        { id: "noise_1k", value: 50.07 },
+        { id: "noise_2k", value: 43.38 },
+        { id: "noise_4k", value: 26.67 },
+        { id: "noise_8k", value: 21.23 },
+      ],
+    });
+
+    const reading = parseSensorPayload(payload) as ParsedReading;
+    expect(reading.noiseLow).toBe(52.09);
+    expect(reading.noise250).toBe(50.23);
+    expect(reading.noise500).toBe(45.73);
+    expect(reading.noise1k).toBe(50.07);
+    expect(reading.noise2k).toBe(43.38);
+    expect(reading.noise4k).toBe(26.67);
+    expect(reading.noise8k).toBe(21.23);
+  });
+
   it("parses a payload with only noise", () => {
     const payload = JSON.stringify({
       device_id: "sck-store-001",

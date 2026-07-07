@@ -11,6 +11,13 @@ export interface SensorPayload {
 
 export const SENSOR_FIELD_MAP: Record<string, string> = {
   noise_dba: "noiseDba",
+  noise_low: "noiseLow",
+  noise_250: "noise250",
+  noise_500: "noise500",
+  noise_1k: "noise1k",
+  noise_2k: "noise2k",
+  noise_4k: "noise4k",
+  noise_8k: "noise8k",
   temperature: "temperature",
   humidity: "humidity",
   light_lux: "lightLux",

@@ -5,6 +5,13 @@ export interface ParsedReading {
   firmwareVersion?: string;
   recordedAt: Date;
   noiseDba: number | null;
+  noiseLow: number | null;
+  noise250: number | null;
+  noise500: number | null;
+  noise1k: number | null;
+  noise2k: number | null;
+  noise4k: number | null;
+  noise8k: number | null;
   temperature: number | null;
   humidity: number | null;
   lightLux: number | null;
@@ -77,6 +84,13 @@ export function parseSensorPayload(raw: string): ParsedReading | null {
     firmwareVersion,
     recordedAt: new Date(obj.recorded_at),
     noiseDba: null,
+    noiseLow: null,
+    noise250: null,
+    noise500: null,
+    noise1k: null,
+    noise2k: null,
+    noise4k: null,
+    noise8k: null,
     temperature: null,
     humidity: null,
     lightLux: null,

@@ -113,6 +113,15 @@ model Reading {
   sensorId    String   @map("sensor_id")
   recordedAt  DateTime @map("recorded_at") @db.Timestamptz
   noiseDba    Float?   @map("noise_dba")
+  // Un-weighted noise frequency bands (dB): LOW <250Hz + 6 octaves.
+  // Firmware SC ids 228-234 (NOISE_LOW, NOISE_250..NOISE_8K).
+  noiseLow    Float?   @map("noise_low")
+  noise250    Float?   @map("noise_250")
+  noise500    Float?   @map("noise_500")
+  noise1k     Float?   @map("noise_1k")
+  noise2k     Float?   @map("noise_2k")
+  noise4k     Float?   @map("noise_4k")
+  noise8k     Float?   @map("noise_8k")
   temperature Float?
   humidity    Float?
   lightLux    Float?   @map("light_lux")
