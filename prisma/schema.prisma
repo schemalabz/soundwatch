@@ -10,26 +10,103 @@ datasource db {
 }
 
 model Sensor {
-  id                String    @id @default(uuid())
-  deviceId          String    @unique @map("device_id")
-  name              String?
-  latitude          Float?
-  longitude         Float?
+  id                    String                                 @id @default(uuid())
+  deviceId              String                                 @unique @map("device_id")
+  name                  String?
+  latitude              Float?
+  longitude             Float?
   // Kept in sync with latitude/longitude by a DB trigger (see migration 0007).
   // Prisma can't write PostGIS columns — query via $queryRaw.
-  location          Unsupported("geography(Point, 4326)")?
-  address           String?
-  firmwareVersion   String?   @map("firmware_version")
-  targetFirmwareVersion String? @map("target_firmware_version")
-  readingIntervalS  Int       @default(60) @map("reading_interval_s")
-  isActive          Boolean   @default(true) @map("is_active")
-  lastSeenAt        DateTime? @map("last_seen_at") @db.Timestamptz
-  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  location              Unsupported("geography(Point, 4326)")?
+  address               String?
+  firmwareVersion       String?                                @map("firmware_version")
+  targetFirmwareVersion String?                                @map("target_firmware_version")
+  readingIntervalS      Int                                    @default(60) @map("reading_interval_s")
+  isActive              Boolean                                @default(true) @map("is_active")
+  lastSeenAt            DateTime?                              @map("last_seen_at") @db.Timestamptz
+  createdAt             DateTime                               @default(now()) @map("created_at") @db.Timestamptz
 
   readings Reading[]
 
   @@index([location], type: Gist, map: "idx_sensors_location")
   @@map("sensors")
+}
+
+// ---------------------------------------------------------------------------
+// Admin authentication (Auth.js + Resend magic link)
+//
+// Access is invitation-only: a SUPERADMIN creates a User row (an invite) and
+// Auth.js emails a magic link. `emailVerified` is null until the invitee logs
+// in for the first time, so it doubles as the "pending invite" flag.
+// The very first SUPERADMIN is seeded from the SUPERADMIN_EMAILS env var
+// (chicken-and-egg: an empty table has nobody to send invites).
+// ---------------------------------------------------------------------------
+
+enum Role {
+  SUPERADMIN
+  ADMIN
+}
+
+model User {
+  id            String    @id @default(uuid())
+  email         String?   @unique
+  name          String?
+  emailVerified DateTime? @map("email_verified") @db.Timestamptz
+  image         String?
+  role          Role      @default(ADMIN)
+
+  // Who invited this user (null for env-seeded superadmins).
+  invitedById String? @map("invited_by_id")
+  invitedBy   User?   @relation("UserInvites", fields: [invitedById], references: [id])
+  invitees    User[]  @relation("UserInvites")
+
+  accounts Account[]
+  sessions Session[]
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@map("users")
+}
+
+// Standard Auth.js adapter table. Unused today (email/magic-link only) but kept
+// so an OAuth provider (e.g. Google) can be added later without a schema change.
+model Account {
+  userId            String  @map("user_id")
+  type              String
+  provider          String
+  providerAccountId String  @map("provider_account_id")
+  refresh_token     String? @map("refresh_token")
+  access_token      String? @map("access_token")
+  expires_at        Int?    @map("expires_at")
+  token_type        String? @map("token_type")
+  scope             String?
+  id_token          String? @map("id_token")
+  session_state     String? @map("session_state")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([provider, providerAccountId])
+  @@map("accounts")
+}
+
+model Session {
+  sessionToken String   @unique @map("session_token")
+  userId       String   @map("user_id")
+  expires      DateTime @db.Timestamptz
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("sessions")
+}
+
+model VerificationToken {
+  identifier String
+  token      String
+  expires    DateTime @db.Timestamptz
+
+  @@id([identifier, token])
+  @@map("verification_tokens")
 }
 
 model Reading {
