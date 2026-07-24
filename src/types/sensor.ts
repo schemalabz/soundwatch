@@ -35,6 +35,40 @@ export const SENSOR_FIELD_MAP: Record<string, string> = {
 
 export type SensorField = keyof typeof SENSOR_FIELD_MAP;
 
+// Stock SmartCitizen firmware publishes readings keyed by NUMERIC metric id
+// (topic `device/sck/<token>/readings/raw`, payload `{t,<id>:value}`).
+// This maps those ids -> our ParsedReading/Prisma field names.
+// NOTE: sc-poller/index.ts has an equivalent map (SENSOR_MAP) that predates
+// this one — candidate for future de-duplication onto this shared definition.
+export const STOCK_SENSOR_ID_MAP: Record<number, string> = {
+  53: "noiseDba", // Noise Level (dBA)
+  55: "temperature", // Temperature (°C)
+  56: "humidity", // Humidity (%)
+  14: "lightLux", // Light (lux)
+  58: "pressurePa", // Barometric Pressure (kPa -> Pa, see conversions)
+  214: "uvA",
+  215: "uvB",
+  216: "uvC",
+  193: "pm1",
+  194: "pm25",
+  195: "pm4",
+  196: "pm10",
+  197: "pn05",
+  198: "pn10",
+  199: "pn25",
+  200: "pn40",
+  201: "pn100",
+  202: "tps", // Typical Particle Size (µm)
+  10: "battery", // Battery (%)
+  220: "rssi", // WiFi RSSI (dBm)
+  221: "sdCard", // SD card presence
+};
+
+// Field-specific unit conversions applied to the raw stock value.
+export const STOCK_UNIT_CONVERSIONS: Record<string, (v: number) => number> = {
+  pressurePa: (kpa) => kpa * 1000, // stock emits kPa; the column is Pa
+};
+
 export const NOISE_THRESHOLDS = {
   quiet: 55,
   moderate: 65,

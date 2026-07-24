@@ -5,14 +5,26 @@ import {
   type ParsedReading,
 } from "./parser";
 
-describe("extractDeviceId", () => {
-  it("extracts device id from MQTT topic", () => {
-    const topic = "soundwatch/sensors/sck-store-042/readings";
-    expect(extractDeviceId(topic)).toBe("sck-store-042");
+// Real payloads captured from a bench SCK 2.3 running stock firmware (Step 1),
+// published to `device/sck/<token>/readings/raw`. Format is NOT JSON:
+// `{t:<iso>,<numeric-id>:<value>,...}` with unquoted keys and an unquoted
+// ISO-8601 timestamp value (which itself contains ':').
+const FULL_PAYLOAD =
+  "{t:2026-07-23T15:55:50Z,10:27,221:1,220:-61,14:0,55:30.28,56:41.21," +
+  "53:50.37,58:100.01,193:5.80,194:6.10,195:6.10,196:6.10,197:3930.00," +
+  "198:4560.00,199:4580.00,200:4580.00,201:4580.00,202:0.43,214:0.00," +
+  "215:0.00,216:0.00}";
+const SPARSE_PAYLOAD =
+  "{t:2026-07-23T15:56:50Z,10:29,221:1,220:-61,14:0,55:30.27,56:41.26," +
+  "53:50.29,58:100.01,214:0.00,215:0.00,216:0.00}";
+
+describe("extractDeviceId (stock topic)", () => {
+  it("extracts the token from a stock readings topic", () => {
+    expect(extractDeviceId("device/sck/abc123/readings/raw")).toBe("abc123");
   });
 
-  it("returns null for invalid topic", () => {
-    expect(extractDeviceId("invalid/topic")).toBeNull();
+  it("returns null for a non-stock topic", () => {
+    expect(extractDeviceId("soundwatch/sensors/sck-store-042/readings")).toBeNull();
   });
 
   it("returns null for empty string", () => {
@@ -20,125 +32,64 @@ describe("extractDeviceId", () => {
   });
 });
 
-describe("parseSensorPayload", () => {
-  it("parses a valid full payload", () => {
-    const payload = JSON.stringify({
-      device_id: "sck-store-042",
-      recorded_at: "2026-06-15T14:30:00Z",
-      sensors: [
-        { id: "noise_dba", value: 68.3 },
-        { id: "temperature", value: 27.1 },
-        { id: "humidity", value: 54.2 },
-        { id: "light_lux", value: 340.0 },
-        { id: "pressure_pa", value: 101325.0 },
-        { id: "uv_a", value: 3.2 },
-        { id: "pm1", value: 8.1 },
-        { id: "pm25", value: 12.4 },
-        { id: "pm4", value: 15.0 },
-        { id: "pm10", value: 18.7 },
-      ],
-    });
-
-    const result = parseSensorPayload(payload);
-    expect(result).not.toBeNull();
-    const reading = result as ParsedReading;
-    expect(reading.deviceId).toBe("sck-store-042");
-    expect(reading.recordedAt).toEqual(new Date("2026-06-15T14:30:00Z"));
-    expect(reading.noiseDba).toBe(68.3);
-    expect(reading.temperature).toBe(27.1);
-    expect(reading.humidity).toBe(54.2);
-    expect(reading.lightLux).toBe(340.0);
-    expect(reading.pressurePa).toBe(101325.0);
-    expect(reading.uvA).toBe(3.2);
-    expect(reading.pm1).toBe(8.1);
-    expect(reading.pm25).toBe(12.4);
-    expect(reading.pm4).toBe(15.0);
-    expect(reading.pm10).toBe(18.7);
+describe("parseSensorPayload (stock {t,<id>:value} format)", () => {
+  it("parses recordedAt from the ISO timestamp (with its embedded colons)", () => {
+    const reading = parseSensorPayload(FULL_PAYLOAD) as ParsedReading;
+    expect(reading).not.toBeNull();
+    expect(reading.recordedAt).toEqual(new Date("2026-07-23T15:55:50Z"));
   });
 
-  it("parses a payload with only noise", () => {
-    const payload = JSON.stringify({
-      device_id: "sck-store-001",
-      recorded_at: "2026-06-15T14:30:00Z",
-      sensors: [{ id: "noise_dba", value: 72.0 }],
-    });
-
-    const result = parseSensorPayload(payload);
-    expect(result).not.toBeNull();
-    const reading = result as ParsedReading;
-    expect(reading.deviceId).toBe("sck-store-001");
-    expect(reading.noiseDba).toBe(72.0);
-    expect(reading.temperature).toBeNull();
-    expect(reading.humidity).toBeNull();
+  it("maps numeric ids to typed columns", () => {
+    const r = parseSensorPayload(FULL_PAYLOAD) as ParsedReading;
+    expect(r.noiseDba).toBe(50.37); // id 53
+    expect(r.temperature).toBe(30.28); // id 55
+    expect(r.humidity).toBe(41.21); // id 56
+    expect(r.lightLux).toBe(0); // id 14
+    expect(r.battery).toBe(27); // id 10
+    expect(r.rssi).toBe(-61); // id 220
+    expect(r.sdCard).toBe(1); // id 221
+    expect(r.pm1).toBe(5.8); // id 193
+    expect(r.pm25).toBe(6.1); // id 194
+    expect(r.pn05).toBe(3930); // id 197
+    expect(r.tps).toBe(0.43); // id 202
+    expect(r.uvA).toBe(0); // id 214
   });
 
-  it("returns null for invalid JSON", () => {
-    expect(parseSensorPayload("not json")).toBeNull();
+  it("converts barometric pressure from kPa (id 58) to Pa", () => {
+    const r = parseSensorPayload(FULL_PAYLOAD) as ParsedReading;
+    expect(r.pressurePa).toBe(100010); // 100.01 kPa -> 100010 Pa
   });
 
-  it("returns null for missing device_id", () => {
-    const payload = JSON.stringify({
-      recorded_at: "2026-06-15T14:30:00Z",
-      sensors: [{ id: "noise_dba", value: 68.3 }],
-    });
-    expect(parseSensorPayload(payload)).toBeNull();
+  it("leaves absent metrics null (sparse payload)", () => {
+    const r = parseSensorPayload(SPARSE_PAYLOAD) as ParsedReading;
+    expect(r.noiseDba).toBe(50.29);
+    expect(r.pm1).toBeNull(); // id 193 absent in sparse payload
+    expect(r.pn05).toBeNull(); // id 197 absent
+    expect(r.tps).toBeNull(); // id 202 absent
   });
 
-  it("returns null for missing recorded_at", () => {
-    const payload = JSON.stringify({
-      device_id: "sck-store-042",
-      sensors: [{ id: "noise_dba", value: 68.3 }],
-    });
-    expect(parseSensorPayload(payload)).toBeNull();
+  it("skips a metric with a blank value (keeps it null, not 0)", () => {
+    const r = parseSensorPayload("{t:2026-07-23T15:55:50Z,53:,55:30.0}") as ParsedReading;
+    expect(r).not.toBeNull();
+    expect(r.noiseDba).toBeNull(); // blank value must NOT become 0
+    expect(r.temperature).toBe(30.0);
   });
 
-  it("returns null for empty sensors array", () => {
-    const payload = JSON.stringify({
-      device_id: "sck-store-042",
-      recorded_at: "2026-06-15T14:30:00Z",
-      sensors: [],
-    });
-    expect(parseSensorPayload(payload)).toBeNull();
+  it("ignores unknown numeric ids", () => {
+    const r = parseSensorPayload("{t:2026-07-23T15:55:50Z,53:50.0,999:123}") as ParsedReading;
+    expect(r).not.toBeNull();
+    expect(r.noiseDba).toBe(50.0);
   });
 
-  it("extracts firmware_version when present", () => {
-    const payload = JSON.stringify({
-      device_id: "sck-test-001",
-      firmware_version: "1.2.3",
-      recorded_at: "2026-06-15T14:30:00Z",
-      sensors: [{ id: "noise_dba", value: 65.0 }],
-    });
-
-    const result = parseSensorPayload(payload);
-    expect(result).not.toBeNull();
-    expect(result!.firmwareVersion).toBe("1.2.3");
+  it("returns null when the timestamp is missing", () => {
+    expect(parseSensorPayload("{53:50.0,55:30.0}")).toBeNull();
   });
 
-  it("firmware_version is undefined when not present", () => {
-    const payload = JSON.stringify({
-      device_id: "sck-test-001",
-      recorded_at: "2026-06-15T14:30:00Z",
-      sensors: [{ id: "noise_dba", value: 65.0 }],
-    });
-
-    const result = parseSensorPayload(payload);
-    expect(result).not.toBeNull();
-    expect(result!.firmwareVersion).toBeUndefined();
+  it("returns null for a malformed payload", () => {
+    expect(parseSensorPayload("not a payload")).toBeNull();
   });
 
-  it("ignores unknown sensor ids", () => {
-    const payload = JSON.stringify({
-      device_id: "sck-store-042",
-      recorded_at: "2026-06-15T14:30:00Z",
-      sensors: [
-        { id: "noise_dba", value: 68.3 },
-        { id: "unknown_sensor", value: 999 },
-      ],
-    });
-
-    const result = parseSensorPayload(payload);
-    expect(result).not.toBeNull();
-    const reading = result as ParsedReading;
-    expect(reading.noiseDba).toBe(68.3);
+  it("returns null for an empty body", () => {
+    expect(parseSensorPayload("{}")).toBeNull();
   });
 });

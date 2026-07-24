@@ -1,8 +1,6 @@
-import { SENSOR_FIELD_MAP } from "@/types/sensor";
+import { STOCK_SENSOR_ID_MAP, STOCK_UNIT_CONVERSIONS } from "@/types/sensor";
 
 export interface ParsedReading {
-  deviceId: string;
-  firmwareVersion?: string;
   recordedAt: Date;
   noiseDba: number | null;
   temperature: number | null;
@@ -27,55 +25,18 @@ export interface ParsedReading {
   sdCard: number | null;
 }
 
-const TOPIC_REGEX = /^soundwatch\/sensors\/([^/]+)\/readings$/;
+type Metrics = Omit<ParsedReading, "recordedAt">;
+
+// Stock firmware topic: device/sck/<token>/readings/raw  (token = device id)
+const TOPIC_REGEX = /^device\/sck\/([^/]+)\/readings\/raw$/;
 
 export function extractDeviceId(topic: string): string | null {
   const match = topic.match(TOPIC_REGEX);
   return match ? match[1] : null;
 }
 
-export function parseSensorPayload(raw: string): ParsedReading | null {
-  let data: unknown;
-  try {
-    data = JSON.parse(raw);
-  } catch {
-    return null;
-  }
-
-  if (
-    typeof data !== "object" ||
-    data === null ||
-    !("device_id" in data) ||
-    !("recorded_at" in data) ||
-    !("sensors" in data)
-  ) {
-    return null;
-  }
-
-  const obj = data as {
-    device_id: unknown;
-    recorded_at: unknown;
-    sensors: unknown;
-  };
-
-  if (typeof obj.device_id !== "string" || typeof obj.recorded_at !== "string") {
-    return null;
-  }
-
-  if (!Array.isArray(obj.sensors) || obj.sensors.length === 0) {
-    return null;
-  }
-
-  const firmwareVersion =
-    "firmware_version" in (data as Record<string, unknown>) &&
-    typeof (data as Record<string, unknown>).firmware_version === "string"
-      ? ((data as Record<string, unknown>).firmware_version as string)
-      : undefined;
-
-  const reading: ParsedReading = {
-    deviceId: obj.device_id,
-    firmwareVersion,
-    recordedAt: new Date(obj.recorded_at),
+function emptyMetrics(): Metrics {
+  return {
     noiseDba: null,
     temperature: null,
     humidity: null,
@@ -98,22 +59,58 @@ export function parseSensorPayload(raw: string): ParsedReading | null {
     rssi: null,
     sdCard: null,
   };
+}
 
-  for (const sensor of obj.sensors) {
-    if (
-      typeof sensor !== "object" ||
-      sensor === null ||
-      typeof sensor.id !== "string" ||
-      typeof sensor.value !== "number"
-    ) {
+/**
+ * Parse the stock SmartCitizen readings payload, which is NOT JSON:
+ *   {t:<iso8601>,<numeric-id>:<value>,...}
+ * Keys and the ISO timestamp value are unquoted; the timestamp itself
+ * contains ':' so we split each token on its FIRST colon only.
+ * Numeric ids are mapped to typed columns via STOCK_SENSOR_ID_MAP.
+ */
+export function parseSensorPayload(raw: string): ParsedReading | null {
+  const trimmed = raw.trim();
+  if (!trimmed.startsWith("{") || !trimmed.endsWith("}")) return null;
+
+  const body = trimmed.slice(1, -1).trim();
+  if (body.length === 0) return null;
+
+  const metrics = emptyMetrics();
+  let recordedAt: Date | null = null;
+
+  for (const token of body.split(",")) {
+    const sep = token.indexOf(":");
+    if (sep < 0) continue;
+
+    const key = token.slice(0, sep).trim();
+    const valueStr = token.slice(sep + 1).trim();
+
+    if (key === "t") {
+      const date = new Date(valueStr);
+      if (isNaN(date.getTime())) return null;
+      recordedAt = date;
       continue;
     }
 
-    const fieldName = SENSOR_FIELD_MAP[sensor.id];
-    if (fieldName && fieldName in reading) {
-      (reading as unknown as Record<string, unknown>)[fieldName] = sensor.value;
-    }
+    const id = Number(key);
+    if (!Number.isInteger(id)) continue;
+
+    const field = STOCK_SENSOR_ID_MAP[id];
+    if (!field) continue;
+
+    // Reject blank values: Number("") is 0, which would masquerade as a real
+    // reading and pollute averages/thresholds. A missing value stays null.
+    if (valueStr.length === 0) continue;
+    const value = Number(valueStr);
+    if (!Number.isFinite(value)) continue;
+
+    const convert = STOCK_UNIT_CONVERSIONS[field];
+    (metrics as Record<string, number | null>)[field] = convert
+      ? convert(value)
+      : value;
   }
 
-  return reading;
+  if (!recordedAt) return null;
+
+  return { recordedAt, ...metrics };
 }

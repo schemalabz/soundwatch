@@ -3,19 +3,18 @@ import { PrismaClient } from "@prisma/client";
 import { extractDeviceId, parseSensorPayload } from "./parser";
 
 const MQTT_BROKER_URL = process.env.MQTT_BROKER_URL || "mqtt://localhost:1883";
-const READINGS_TOPIC = "soundwatch/sensors/+/readings";
+// Stock SmartCitizen firmware readings topic: device/sck/<token>/readings/raw.
+// The parser bridges the stock {t,<id>:value} payload to typed columns.
+const READINGS_TOPIC = "device/sck/+/readings/raw";
 const STATUS_TOPIC = "soundwatch/sensors/+/status";
 const STATUS_TOPIC_REGEX = /^soundwatch\/sensors\/([^/]+)\/status$/;
 
 const prisma = new PrismaClient();
 
-async function upsertSensor(deviceId: string, firmwareVersion?: string): Promise<string> {
+async function upsertSensor(deviceId: string): Promise<string> {
   const sensor = await prisma.sensor.upsert({
     where: { deviceId },
-    update: {
-      lastSeenAt: new Date(),
-      ...(firmwareVersion && { firmwareVersion }),
-    },
+    update: { lastSeenAt: new Date() },
     create: { deviceId },
   });
   return sensor.id;
@@ -35,7 +34,7 @@ async function handleMessage(topic: string, message: Buffer): Promise<void> {
   }
 
   try {
-    const sensorId = await upsertSensor(deviceId, reading.firmwareVersion);
+    const sensorId = await upsertSensor(deviceId);
 
     await prisma.reading.create({
       data: {
