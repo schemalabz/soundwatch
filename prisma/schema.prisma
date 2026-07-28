@@ -30,7 +30,11 @@ model Sensor {
 model Reading {
   id          BigInt   @id @default(autoincrement())
   sensorId    String   @map("sensor_id")
+  // recordedAt: device clock — when the sound actually happened (may be old on a
+  // store-and-forward replay). receivedAt: server insert time — lets us tell a
+  // buffered-backlog replay apart from live data.
   recordedAt  DateTime @map("recorded_at")
+  receivedAt  DateTime @default(now()) @map("received_at")
   noiseDba    Float?   @map("noise_dba")
   temperature Float?
   humidity    Float?

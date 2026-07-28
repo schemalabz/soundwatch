@@ -1,6 +1,9 @@
 services:
   postgres:
-    image: postgres:17
+    # TimescaleDB-capable, drop-in for postgres:17 (same data dir). Used with
+    # PLAIN Postgres usage for now — no hypertables/continuous aggregates yet
+    # (Step 6). timescaledb extension is available but not activated.
+    image: timescale/timescaledb:latest-pg17
     environment:
       POSTGRES_USER: soundwatch
       POSTGRES_PASSWORD: soundwatch

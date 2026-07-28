@@ -59,7 +59,10 @@ services:
     restart: unless-stopped
 
   postgres:
-    image: postgres:17
+    # TimescaleDB-capable, drop-in for postgres:17 (same data dir). PLAIN usage
+    # for now — no hypertables/continuous aggregates yet (Step 6). Forward-compat
+    # so Step 6 needs no DB migration/move. Pin a concrete version for prod.
+    image: timescale/timescaledb:latest-pg17
     environment:
       POSTGRES_USER: soundwatch
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}

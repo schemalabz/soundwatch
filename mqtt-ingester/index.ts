@@ -6,6 +6,9 @@ const MQTT_BROKER_URL = process.env.MQTT_BROKER_URL || "mqtt://localhost:1883";
 // Stock SmartCitizen firmware readings topic: device/sck/<token>/readings/raw.
 // The parser bridges the stock {t,<id>:value} payload to typed columns.
 const READINGS_TOPIC = "device/sck/+/readings/raw";
+// INERT with stock firmware: stock publishes device/sck/<token>/{hello,info},
+// never `/status`. Kept for now; a future liveness feature would use the
+// hello/info topics instead. handleStatusMessage below is currently unreached.
 const STATUS_TOPIC = "soundwatch/sensors/+/status";
 const STATUS_TOPIC_REGEX = /^soundwatch\/sensors\/([^/]+)\/status$/;
 
@@ -39,7 +42,8 @@ async function handleMessage(topic: string, message: Buffer): Promise<void> {
     await prisma.reading.create({
       data: {
         sensorId,
-        recordedAt: reading.recordedAt,
+        recordedAt: reading.recordedAt, // device clock (when the sound happened)
+        receivedAt: new Date(), // server clock (when we persisted it)
         noiseDba: reading.noiseDba,
         temperature: reading.temperature,
         humidity: reading.humidity,
