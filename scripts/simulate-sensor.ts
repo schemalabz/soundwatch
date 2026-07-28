@@ -1,3 +1,11 @@
+// ⚠️ QUARANTINED — legacy dialect, NOT ingested by the current stack.
+// This publishes the OLD `soundwatch/sensors/<id>/readings` topic with the
+// JSON `{device_id, recorded_at, sensors:[{id,value}]}` payload. The ingester
+// now speaks only the STOCK firmware dialect (`device/sck/<token>/readings/raw`,
+// non-JSON `{t,<id>:value}`), so these messages are silently ignored.
+// To make this a useful mock again, publish the stock topic/format instead
+// (see mqtt-ingester/parser.ts + STOCK_SENSOR_ID_MAP). Left runnable for
+// reference; it will NOT populate the DB against the current ingester.
 import mqtt from "mqtt";
 
 const MQTT_BROKER_URL = process.env.MQTT_BROKER_URL || "mqtt://localhost:1883";
@@ -80,6 +88,11 @@ function generateReading(deviceId: string): string {
 const client = mqtt.connect(MQTT_BROKER_URL);
 
 client.on("connect", () => {
+  console.warn(
+    "⚠️  QUARANTINED: publishing the LEGACY soundwatch/sensors JSON dialect. " +
+      "The current stock-firmware ingester subscribes to device/sck/+/readings/raw " +
+      "and will NOT ingest these messages. See the header comment.\n"
+  );
   console.log(`Simulating ${ATHENS_SENSORS.length} Athens sensors every ${INTERVAL_S}s`);
   console.log(`Publishing to ${MQTT_BROKER_URL}\n`);
 

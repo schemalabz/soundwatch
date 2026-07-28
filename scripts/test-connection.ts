@@ -1,3 +1,8 @@
+// ⚠️ QUARANTINED — legacy dialect, NOT ingested by the current stack.
+// Publishes the OLD `soundwatch/sensors/<id>/readings` JSON payload; the ingester
+// now only handles the STOCK dialect (`device/sck/<token>/readings/raw`,
+// `{t,<id>:value}`). Its "did a reading land?" check will false-negative against
+// the current ingester. Migrate to the stock topic/format to use it again.
 import mqtt from "mqtt";
 
 const args = process.argv.slice(2);
