@@ -57,6 +57,18 @@ model Reading {
   rssi        Float?
   sdCard      Float?   @map("sd_card")
 
+  // Flavor 1 (Step 4): raw device accumulators + server-computed levels.
+  payloadVersion Int?    @map("payload_version")
+  energySum      Float?  @map("energy_sum")
+  frameCount     Int?    @map("frame_count")
+  intervalS      Int?    @map("interval_s")
+  maxEnergy      Float?  @map("max_energy")
+  minEnergy      Float?  @map("min_energy")
+  laeq           Float?
+  realizedDuty   Float?  @map("realized_duty")
+  lmaxEst        Float?  @map("lmax_est")
+  lminEst        Float?  @map("lmin_est")
+
   sensor Sensor @relation(fields: [sensorId], references: [id])
 
   @@index([sensorId, recordedAt(sort: Desc)], map: "idx_readings_sensor_time")

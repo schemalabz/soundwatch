@@ -1,6 +1,7 @@
 import mqtt from "mqtt";
 import { PrismaClient } from "@prisma/client";
 import { extractDeviceId, parseSensorPayload } from "./parser";
+import { computeFlavor1 } from "./flavor1";
 
 const MQTT_BROKER_URL = process.env.MQTT_BROKER_URL || "mqtt://localhost:1883";
 // Stock SmartCitizen firmware readings topic: device/sck/<token>/readings/raw.
@@ -36,6 +37,9 @@ async function handleMessage(topic: string, message: Buffer): Promise<void> {
     return;
   }
 
+  // Flavor 1 (Step 4): turn raw accumulators into LAeq / realized_duty / Lmax-Lmin.
+  const f1 = computeFlavor1(reading);
+
   try {
     const sensorId = await upsertSensor(deviceId);
 
@@ -65,11 +69,26 @@ async function handleMessage(topic: string, message: Buffer): Promise<void> {
         battery: reading.battery,
         rssi: reading.rssi,
         sdCard: reading.sdCard,
+        // Flavor 1: raw accumulators + computed levels (null on stock firmware).
+        payloadVersion: reading.payloadVersion,
+        energySum: reading.energySum,
+        frameCount: reading.frameCount,
+        intervalS: reading.intervalS,
+        maxEnergy: reading.maxEnergy,
+        minEnergy: reading.minEnergy,
+        laeq: f1?.laeq ?? null,
+        realizedDuty: f1?.realizedDuty ?? null,
+        lmaxEst: f1?.lmaxEst ?? null,
+        lminEst: f1?.lminEst ?? null,
       },
     });
 
     console.log(
-      `Stored reading from ${deviceId}: noise=${reading.noiseDba} dBA`
+      f1 && f1.laeq != null
+        ? `Stored reading from ${deviceId}: LAeq=${f1.laeq.toFixed(1)} dB, ` +
+          `duty=${((f1.realizedDuty ?? 0) * 100).toFixed(1)}% ` +
+          `(frames=${reading.frameCount}, ${reading.intervalS}s)`
+        : `Stored reading from ${deviceId}: noise=${reading.noiseDba} dBA`
     );
   } catch (err) {
     console.error(`Failed to store reading from ${deviceId}:`, err);

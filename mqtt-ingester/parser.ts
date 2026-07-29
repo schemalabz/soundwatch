@@ -23,12 +23,31 @@ export interface ParsedReading {
   battery: number | null;
   rssi: number | null;
   sdCard: number | null;
+  // Flavor 1 (Step 4) continuous-LAeq accumulators (ids 235-240). Present only
+  // on Flavor 1 firmware; null otherwise. The server computes LAeq/duty/Lmax/Lmin
+  // from these (see flavor1.ts).
+  payloadVersion: number | null;
+  energySum: number | null;
+  frameCount: number | null;
+  intervalS: number | null;
+  maxEnergy: number | null;
+  minEnergy: number | null;
 }
 
 type Metrics = Omit<ParsedReading, "recordedAt">;
 
 // Stock firmware topic: device/sck/<token>/readings/raw  (token = device id)
 const TOPIC_REGEX = /^device\/sck\/([^/]+)\/readings\/raw$/;
+
+// Flavor 1 accumulator ids -> ParsedReading fields (stored raw; math in flavor1.ts).
+const FLAVOR1_ID_MAP: Record<number, keyof Metrics> = {
+  235: "payloadVersion",
+  236: "energySum",
+  237: "frameCount",
+  238: "intervalS",
+  239: "maxEnergy",
+  240: "minEnergy",
+};
 
 export function extractDeviceId(topic: string): string | null {
   const match = topic.match(TOPIC_REGEX);
@@ -58,6 +77,12 @@ function emptyMetrics(): Metrics {
     battery: null,
     rssi: null,
     sdCard: null,
+    payloadVersion: null,
+    energySum: null,
+    frameCount: null,
+    intervalS: null,
+    maxEnergy: null,
+    minEnergy: null,
   };
 }
 
@@ -95,19 +120,27 @@ export function parseSensorPayload(raw: string): ParsedReading | null {
     const id = Number(key);
     if (!Number.isInteger(id)) continue;
 
-    const field = STOCK_SENSOR_ID_MAP[id];
-    if (!field) continue;
-
     // Reject blank values: Number("") is 0, which would masquerade as a real
     // reading and pollute averages/thresholds. A missing value stays null.
     if (valueStr.length === 0) continue;
     const value = Number(valueStr);
     if (!Number.isFinite(value)) continue;
 
-    const convert = STOCK_UNIT_CONVERSIONS[field];
-    (metrics as Record<string, number | null>)[field] = convert
-      ? convert(value)
-      : value;
+    const stockField = STOCK_SENSOR_ID_MAP[id];
+    if (stockField) {
+      const convert = STOCK_UNIT_CONVERSIONS[stockField];
+      (metrics as Record<string, number | null>)[stockField] = convert
+        ? convert(value)
+        : value;
+      continue;
+    }
+
+    const f1Field = FLAVOR1_ID_MAP[id];
+    if (f1Field) {
+      (metrics as Record<string, number | null>)[f1Field] = value;
+      continue;
+    }
+    // unknown id: ignore
   }
 
   if (!recordedAt) return null;
