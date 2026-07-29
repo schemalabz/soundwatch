@@ -69,6 +69,14 @@ model Reading {
   lmaxEst        Float?  @map("lmax_est")
   lminEst        Float?  @map("lmin_est")
 
+  // Flavor 2: packed spectrum (raw) + computed percentiles/band dB.
+  histRaw        String? @map("hist_raw")
+  bandsRaw       String? @map("bands_raw")
+  l10            Float?
+  l50            Float?
+  l90            Float?
+  bandsDb        Json?   @map("bands_db")
+
   sensor Sensor @relation(fields: [sensorId], references: [id])
 
   @@index([sensorId, recordedAt(sort: Desc)], map: "idx_readings_sensor_time")

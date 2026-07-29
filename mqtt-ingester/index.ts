@@ -2,6 +2,7 @@ import mqtt from "mqtt";
 import { PrismaClient } from "@prisma/client";
 import { extractDeviceId, parseSensorPayload } from "./parser";
 import { computeFlavor1 } from "./flavor1";
+import { computePercentiles, decodeBandsDb } from "./flavor2";
 
 const MQTT_BROKER_URL = process.env.MQTT_BROKER_URL || "mqtt://localhost:1883";
 // Stock SmartCitizen firmware readings topic: device/sck/<token>/readings/raw.
@@ -39,6 +40,9 @@ async function handleMessage(topic: string, message: Buffer): Promise<void> {
 
   // Flavor 1 (Step 4): turn raw accumulators into LAeq / realized_duty / Lmax-Lmin.
   const f1 = computeFlavor1(reading);
+  // Flavor 2: percentiles from the level histogram + band dB from the packed spectrum.
+  const pct = reading.histRaw ? computePercentiles(reading.histRaw) : null;
+  const bandsDb = reading.bandsRaw ? decodeBandsDb(reading.bandsRaw) : null;
 
   try {
     const sensorId = await upsertSensor(deviceId);
@@ -80,6 +84,12 @@ async function handleMessage(topic: string, message: Buffer): Promise<void> {
         realizedDuty: f1?.realizedDuty ?? null,
         lmaxEst: f1?.lmaxEst ?? null,
         lminEst: f1?.lminEst ?? null,
+        histRaw: reading.histRaw,
+        bandsRaw: reading.bandsRaw,
+        l10: pct?.l10 ?? null,
+        l50: pct?.l50 ?? null,
+        l90: pct?.l90 ?? null,
+        bandsDb: bandsDb ?? undefined,
       },
     });
 

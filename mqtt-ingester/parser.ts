@@ -28,6 +28,9 @@ export interface ParsedReading {
   // from these (see flavor1.ts).
   payloadVersion: number | null;
   energySum: number | null;
+  // Flavor 2 packed spectrum strings (ids 241/242) — decoded in flavor2.ts.
+  histRaw: string | null;
+  bandsRaw: string | null;
   frameCount: number | null;
   intervalS: number | null;
   maxEnergy: number | null;
@@ -79,6 +82,8 @@ function emptyMetrics(): Metrics {
     sdCard: null,
     payloadVersion: null,
     energySum: null,
+    histRaw: null,
+    bandsRaw: null,
     frameCount: null,
     intervalS: null,
     maxEnergy: null,
@@ -119,6 +124,10 @@ export function parseSensorPayload(raw: string): ParsedReading | null {
 
     const id = Number(key);
     if (!Number.isInteger(id)) continue;
+
+    // Flavor 2 packed values (dash-separated arrays) stay raw strings.
+    if (id === 241) { metrics.histRaw = valueStr; continue; }
+    if (id === 242) { metrics.bandsRaw = valueStr; continue; }
 
     // Reject blank values: Number("") is 0, which would masquerade as a real
     // reading and pollute averages/thresholds. A missing value stays null.
