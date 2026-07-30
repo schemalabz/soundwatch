@@ -70,6 +70,23 @@ export async function GET(request: NextRequest) {
     );
   }
 
+  // ESP8266 devices cannot follow the redirect to GitHub (HTTPS/TLS memory),
+  // so ?raw=1 streams the binary through us over the device's plain-HTTP
+  // connection instead of redirecting.
+  if (request.nextUrl.searchParams.get("raw") === "1") {
+    const bin = await fetch(firmwareAsset.browser_download_url);
+    if (!bin.ok || !bin.body) {
+      return NextResponse.json({ error: "Failed to fetch firmware binary" }, { status: 502 });
+    }
+    return new NextResponse(bin.body, {
+      headers: {
+        "Content-Type": "application/octet-stream",
+        "Content-Length": String(firmwareAsset.size),
+        "X-Firmware-Version": latestVersion,
+      },
+    });
+  }
+
   // Redirect to the GitHub release binary
   return NextResponse.redirect(firmwareAsset.browser_download_url, {
     headers: {
