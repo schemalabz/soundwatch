@@ -1,8 +1,7 @@
 # Acoustic sensor classifier — 4-label results
 
-Handover notes for the **acoustic classifier** research tool (vendored at
-`scripts/acoustic-classifier/`) and the classification results that feed the
-SoundWatch redesign.
+The **acoustic classifier** research tool (vendored at `scripts/acoustic-classifier/`)
+and the classification results that feed the SoundWatch redesign.
 
 - **Location:** `scripts/acoustic-classifier/` — vendored into this repo, code only (~84 KB).
 - **Dataset:** UrbanSound8K is **not** committed (6.6 GB, CC BY-NC). Download it into

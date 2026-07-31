@@ -1,7 +1,7 @@
-# SoundWatch — handover: sound classification & dashboard mock data
+# SoundWatch — sound classification & dashboard mock data
 
-Context for the acoustic classification work and the dataset-grounded dashboard mock,
-prepared for handover. Last updated **2026-07-31**.
+Documentation for the acoustic classification work and the dataset-grounded dashboard
+mock data.
 
 ## The 4-label taxonomy
 
@@ -43,7 +43,7 @@ and downloaded separately (see [urbansound8k-dataset.md](urbansound8k-dataset.md
 - `src/lib/soundwatchMock.json` — the generated dashboard mock the UI consumes.
 - UrbanSound8K itself is **not** in the repo (6.6 GB, CC BY-NC) — download into `scripts/acoustic-classifier/data/`.
 
-## Key caveats for whoever picks this up
+## Key caveats
 
 - The mock data and classifier are built on a **non-commercial** dataset (CC BY-NC 3.0) —
   illustrative/dev only, to be replaced by **real SCK sensor history** (mosquitto →

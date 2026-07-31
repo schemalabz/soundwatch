@@ -14,7 +14,7 @@ The labeled audio behind both the classifier results and the dashboard mock data
 UrbanSound8K is offered **free of charge for non-commercial use only**, under
 **Creative Commons Attribution-NonCommercial 3.0 (CC BY-NC 3.0)**.
 
-**Handover implication:** anything derived from it — `bands.csv`, `soundwatchMock.json`,
+**Licensing implication:** anything derived from it — `bands.csv`, `soundwatchMock.json`,
 the trained classifier — inherits the non-commercial restriction and **must not ship in
 a commercial product as-is**. It is a development/illustrative stand-in only. The plan is
 to replace it with **real SCK sensor history** (via mosquitto → ingester → Postgres) once

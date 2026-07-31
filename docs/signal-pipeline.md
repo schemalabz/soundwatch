@@ -4,7 +4,7 @@ The end-to-end path a sound takes, from the Smart Citizen Kit (SCK) microphone t
 classified source in the backend. The on-device DSP block (record → DC removal → window →
 FFT → bands/dBA) is exactly what `minimal_bands.py` emulates and what the
 [acoustic classifier](acoustic-classifier.md) reprocesses; the tail (publish → broker →
-ingester → Postgres → classify) is the live [mosquitto → ingester → Postgres pipeline](../research/smart-citizen-kit.md)
+ingester → Postgres → classify) is the live [mosquitto → ingester → Postgres pipeline](research/smart-citizen-kit.md)
 that will eventually replace the synthetic timing in the [dashboard mock](reproduce-mock-data.md).
 
 Two branches split after equalization: an **A-weighted** branch producing the single
