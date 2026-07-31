@@ -14,25 +14,36 @@ interface SensorData {
   latestReading: Record<string, unknown> | null;
 }
 
+export interface MapBounds {
+  minLng: number;
+  minLat: number;
+  maxLng: number;
+  maxLat: number;
+}
+
 interface SensorMapProps {
   sensors: SensorData[];
   selectedSensorId?: string | null;
   onSensorClick: (sensor: SensorData) => void;
+  onBoundsChange?: (bounds: MapBounds) => void;
 }
 
 export default function SensorMap({
   sensors,
   selectedSensorId,
   onSensorClick,
+  onBoundsChange,
 }: SensorMapProps) {
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<mapboxgl.Map | null>(null);
   const markersRef = useRef<Map<string, mapboxgl.Marker>>(new Map());
   const prevSelectedRef = useRef<string | null | undefined>(undefined);
   const onSensorClickRef = useRef(onSensorClick);
+  const onBoundsChangeRef = useRef(onBoundsChange);
   useEffect(() => {
     onSensorClickRef.current = onSensorClick;
-  }, [onSensorClick]);
+    onBoundsChangeRef.current = onBoundsChange;
+  }, [onSensorClick, onBoundsChange]);
 
   useEffect(() => {
     if (!mapContainer.current) return;
@@ -52,6 +63,22 @@ export default function SensorMap({
     });
 
     map.current.addControl(new mapboxgl.NavigationControl(), "top-right");
+
+    // Report the visible bounds on load and after each pan/zoom, so the parent
+    // can query sensors in the viewport via the PostGIS bbox endpoint.
+    const emitBounds = () => {
+      const b = map.current?.getBounds();
+      if (b) {
+        onBoundsChangeRef.current?.({
+          minLng: b.getWest(),
+          minLat: b.getSouth(),
+          maxLng: b.getEast(),
+          maxLat: b.getNorth(),
+        });
+      }
+    };
+    map.current.on("load", emitBounds);
+    map.current.on("moveend", emitBounds);
 
     return () => {
       map.current?.remove();

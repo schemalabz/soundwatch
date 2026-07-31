@@ -8,6 +8,9 @@ export async function GET(
   const { id } = await params;
 
   const sensor = await prisma.sensor.findUnique({
+    // push the readings `take: 1` into a LATERAL JOIN with LIMIT 1 (uses the
+    // descending index) instead of loading every reading and slicing in memory.
+    relationLoadStrategy: "join",
     where: { id },
     include: {
       readings: {
@@ -23,7 +26,7 @@ export async function GET(
 
   const raw = sensor.readings[0] ?? null;
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const latestReading = raw ? (({ id: _id, sensorId: _sid, ...rest }) => rest)(raw) : null;
+  const latestReading = raw ? (({ sensorId: _sid, ...rest }) => rest)(raw) : null;
   return NextResponse.json({
     id: sensor.id,
     deviceId: sensor.deviceId,
