@@ -63,3 +63,9 @@ prisma/*.db
 .superpowers/
 
 /src/generated/prisma
+
+# soundbands pipeline (scripts/soundbands)
+scripts/soundbands/data
+scripts/soundbands/.venv/
+scripts/soundbands/__pycache__/
+scripts/soundbands/bands.csv

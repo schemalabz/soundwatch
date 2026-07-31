@@ -14,17 +14,17 @@ type SeriesStyle =
   | { kind: "fill"; color: string; line: string }
   | { kind: "dots"; color: string; legend: string };
 
-type SeasonKey = "construction" | "traffic" | "nightlife";
+type SeasonKey = "constructions" | "engine_idling" | "dog_bark";
 
 const STYLE: Record<SeasonKey, SeriesStyle> = {
-  construction: { kind: "outline", color: "#7cc043" },
-  traffic: { kind: "fill", color: "#4a9e2a", line: "#86cc4d" },
-  nightlife: { kind: "dots", color: "#d6342a", legend: "#a82f27" },
+  constructions: { kind: "outline", color: "#7cc043" },
+  engine_idling: { kind: "fill", color: "#4a9e2a", line: "#86cc4d" },
+  dog_bark: { kind: "dots", color: "#d6342a", legend: "#a82f27" },
 };
 
 // Draw back-to-front; legend left-to-right.
-const DRAW_ORDER: SeasonKey[] = ["nightlife", "traffic", "construction"];
-const LEGEND: SeasonKey[] = ["construction", "traffic", "nightlife"];
+const DRAW_ORDER: SeasonKey[] = ["dog_bark", "engine_idling", "constructions"];
+const LEGEND: SeasonKey[] = ["constructions", "engine_idling", "dog_bark"];
 
 type Visible = Record<string, boolean>;
 
@@ -40,9 +40,9 @@ export default function SeasonsChart({ nowMonth }: { nowMonth: number }) {
   const t = useTranslations("dashboard");
   const [expanded, setExpanded] = useState(false);
   const [visible, setVisible] = useState<Visible>({
-    construction: true,
-    traffic: true,
-    nightlife: true,
+    constructions: true,
+    engine_idling: true,
+    dog_bark: true,
   });
   const toggle = (k: string) => setVisible((v) => ({ ...v, [k]: !v[k] }));
 
@@ -214,7 +214,7 @@ function SeasonsBody({
               <svg width={w} height={height} viewBox={`0 0 ${w} ${height}`} style={{ display: "block" }}>
                 <defs>
                   <pattern id={dotsId} patternUnits="userSpaceOnUse" width="6" height="7">
-                    <circle cx="3" cy="3.5" r="0.75" fill={STYLE.nightlife.color} />
+                    <circle cx="3" cy="3.5" r="0.75" fill={STYLE.dog_bark.color} />
                   </pattern>
                 </defs>
 
