@@ -7,19 +7,23 @@
  */
 
 :root {
-  /* --- surfaces & ink (dark default) --- */
-  --sw-bg: #0c0c0d;
-  --sw-panel: #141416;
-  --sw-ink: #f1f0ec;
-  --sw-hairline: rgba(255, 255, 255, 0.12);
-  --sw-muted: #8c8a85;
-  --sw-badge-bg: rgba(255, 255, 255, 0.06);
-  --sw-chrome-bg: rgba(255, 255, 255, 0.05);
-  --sw-chip-active-bg: #f1f0ec;
-  --sw-chip-active-ink: #141416;
-  --sw-dot-grid: rgba(255, 255, 255, 0.07);
+  /* === "Minimalist Elegance" palette ===
+     2D3142 navy · BFC0C0 gray · FFFFFF white · EF8354 orange · 4F5D75 slate */
 
-  /* --- index color scale (high → low) --- */
+  /* --- surfaces & ink (dark default: navy) --- */
+  --sw-bg: #2d3142;
+  --sw-panel: #363b4e;
+  --sw-ink: #ffffff;
+  --sw-hairline: rgba(255, 255, 255, 0.14);
+  --sw-muted: #bfc0c0;
+  --sw-badge-bg: rgba(255, 255, 255, 0.07);
+  --sw-chrome-bg: rgba(255, 255, 255, 0.06);
+  --sw-chip-active-bg: #ef8354;
+  --sw-chip-active-ink: #ffffff;
+  --sw-dot-grid: rgba(255, 255, 255, 0.08);
+  --sw-tab-bg: #202432; /* selected layer tab + its panel (dark, continuous) */
+
+  /* --- index color scale (high → low) — noise data viz + map, unchanged --- */
   --sw-scale-1: #d6342a; /* red    — very loud */
   --sw-scale-2: #ec832c; /* orange — loud */
   --sw-scale-3: #e8b335; /* amber */
@@ -27,31 +31,32 @@
   --sw-scale-5: #94c13d; /* green */
   --sw-scale-6: #5ba834; /* deep green — quiet */
 
-  /* --- legacy semantic tokens, remapped onto the dark system --- */
+  /* --- legacy semantic tokens --- */
   --background: var(--sw-bg);
   --foreground: var(--sw-ink);
-  --primary: #ec832c;
-  --primary-dark: #c76a1c;
-  --accent: #94c13d;
+  --primary: #ef8354; /* bold orange accent */
+  --primary-dark: #d96f3f;
+  --accent: #4f5d75; /* cool slate accent */
   --light: var(--sw-panel);
   --muted: var(--sw-muted);
   --border: var(--sw-hairline);
 }
 
 :root[data-theme="light"] {
-  --sw-bg: #faf8f3;
+  --sw-bg: #f5f6f7;
   --sw-panel: #ffffff;
-  --sw-ink: #16140f;
-  --sw-hairline: rgba(0, 0, 0, 0.12);
-  --sw-muted: #6b6862;
-  --sw-badge-bg: rgba(0, 0, 0, 0.05);
-  --sw-chrome-bg: rgba(0, 0, 0, 0.05);
-  --sw-chip-active-bg: #16140f;
+  --sw-ink: #2d3142; /* navy text */
+  --sw-hairline: rgba(45, 49, 66, 0.14);
+  --sw-muted: #4f5d75; /* slate secondary text */
+  --sw-badge-bg: rgba(45, 49, 66, 0.05);
+  --sw-chrome-bg: rgba(45, 49, 66, 0.05);
+  --sw-chip-active-bg: #ef8354;
   --sw-chip-active-ink: #ffffff;
-  --sw-dot-grid: rgba(0, 0, 0, 0.08);
+  --sw-dot-grid: rgba(45, 49, 66, 0.1);
+  --sw-tab-bg: #2d3142; /* dark navy tab on the light sidebar */
 
-  --primary: #c76a1c;
-  --primary-dark: #a4540f;
+  --primary: #ef8354;
+  --primary-dark: #d96f3f;
 }
 
 @theme inline {
@@ -69,7 +74,7 @@
   --color-light: var(--light);
   --color-border: var(--border);
 
-  --font-sans: var(--font-geist-sans);
+  --font-sans: var(--font-open-sans);
   --font-mono: var(--font-geist-mono);
   --font-label: var(--font-jura);
 }
@@ -77,7 +82,7 @@
 body {
   background: var(--sw-bg);
   color: var(--sw-ink);
-  font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
+  font-family: var(--font-open-sans), Arial, Helvetica, sans-serif;
   transition:
     background 300ms ease,
     color 300ms ease;
@@ -256,6 +261,50 @@ body {
 .sw-scroll::-webkit-scrollbar-thumb {
   background: var(--sw-hairline);
   border-radius: 3px;
+}
+
+/* =========================================================
+   MAP POPUP (sensor preview card)
+   ========================================================= */
+.sw-popup {
+  z-index: 40; /* sit above the map timeline (z-30) */
+}
+.sw-popup .mapboxgl-popup-content {
+  padding: 0;
+  background: transparent;
+  box-shadow: none;
+  border-radius: 14px;
+}
+/* colour the little pointer tip to match the card body (panel) */
+.sw-popup.mapboxgl-popup-anchor-bottom .mapboxgl-popup-tip,
+.sw-popup.mapboxgl-popup-anchor-bottom-left .mapboxgl-popup-tip,
+.sw-popup.mapboxgl-popup-anchor-bottom-right .mapboxgl-popup-tip {
+  border-top-color: var(--sw-panel);
+}
+.sw-popup.mapboxgl-popup-anchor-top .mapboxgl-popup-tip,
+.sw-popup.mapboxgl-popup-anchor-top-left .mapboxgl-popup-tip,
+.sw-popup.mapboxgl-popup-anchor-top-right .mapboxgl-popup-tip {
+  border-bottom-color: var(--sw-panel);
+}
+.sw-popup.mapboxgl-popup-anchor-left .mapboxgl-popup-tip {
+  border-right-color: var(--sw-panel);
+}
+.sw-popup.mapboxgl-popup-anchor-right .mapboxgl-popup-tip {
+  border-left-color: var(--sw-panel);
+}
+.sw-popup .mapboxgl-popup-close-button {
+  color: #fff;
+  font-size: 17px;
+  line-height: 1;
+  padding: 2px 7px;
+  top: 3px;
+  right: 3px;
+  z-index: 2;
+  opacity: 0.85;
+}
+.sw-popup .mapboxgl-popup-close-button:hover {
+  background: transparent;
+  opacity: 1;
 }
 
 @keyframes slide-up {

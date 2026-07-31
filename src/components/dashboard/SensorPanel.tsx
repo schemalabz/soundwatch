@@ -13,7 +13,7 @@ import ForecastGrid from "@/components/dashboard/ForecastGrid";
 import NoiseCalendar from "@/components/dashboard/NoiseCalendar";
 import SeasonsChart from "@/components/dashboard/SeasonsChart";
 import YearWheel from "@/components/dashboard/YearWheel";
-import { getNoiseLevel, getNoiseLevelColor } from "@/lib/geo";
+import { getNoiseLevel, getNoiseLevelColor, type MapLayer } from "@/lib/geo";
 import { getTranslatedGuidelineBadge } from "@/lib/guidelines";
 import {
   formatMetricValue,
@@ -33,12 +33,16 @@ export interface SensorData {
   address: string | null;
   latitude: number | null;
   longitude: number | null;
+  isActive?: boolean | null;
+  lastSeenAt?: string | null;
   latestReading: Record<string, unknown> | null;
 }
 
 interface SensorPanelProps {
   sensors: SensorData[];
   selected: SensorData | null;
+  activeLayer?: MapLayer;
+  radiusSensors?: SensorData[];
 }
 
 function noiseLabel(dba: number, t: (k: string) => string): string {
@@ -48,7 +52,12 @@ function noiseLabel(dba: number, t: (k: string) => string): string {
   );
 }
 
-export default function SensorPanel({ sensors, selected }: SensorPanelProps) {
+export default function SensorPanel({
+  sensors,
+  selected,
+  activeLayer = "noise",
+  radiusSensors = [],
+}: SensorPanelProps) {
   const t = useTranslations("dashboard");
   const tNoise = useTranslations("noise");
   const tMetrics = useTranslations("metrics");
@@ -81,36 +90,33 @@ export default function SensorPanel({ sensors, selected }: SensorPanelProps) {
   if (!selected) {
     return (
       <PanelShell>
-        <div className="px-6 pt-8 pb-10 sw-section">
-          <div className="sw-eyebrow">{t("overviewEyebrow")}</div>
-          <h2 className="sw-h text-[26px] mt-2">{t("overviewTitle")}</h2>
-          <p className="text-muted text-sm mt-2 leading-relaxed">
-            {t("selectHint")}
-          </p>
-          <p className="sw-label text-xs mt-4">
-            {sensors.length} {sensors.length === 1 ? "sensor" : "sensors"} ·{" "}
-            {sensors.filter((s) => s.latestReading).length} {t("reporting")}
-          </p>
-        </div>
+        {/* Header/title now lives in the sidebar controls above (MapSection). */}
+        <HourlyChart metric={activeLayer} sensors={radiusSensors} />
 
-        <HourlyChart />
+        {/* Noise-specific sections — only shown when the noise tab is active. */}
+        {activeLayer === "noise" && (
+          <>
+            <section className="sw-section pb-10">
+              <SectionHeader title={t("noisiestNow")} />
+              <div className="px-6 mt-4">
+                <LeaderboardPanel sensors={sensors} mode="noisiest" limit={8} />
+              </div>
+              <div className="px-6 mt-5">
+                <Link href="/leaderboard" className="sw-label text-xs text-ink hover:opacity-70">
+                  {t("viewFullLeaderboard")}
+                </Link>
+              </div>
+            </section>
 
-        <section className="sw-section pb-10">
-          <SectionHeader title={t("noisiestNow")} />
-          <div className="px-6 mt-4">
-            <LeaderboardPanel sensors={sensors} mode="noisiest" limit={8} />
-          </div>
-          <div className="px-6 mt-5">
-            <Link href="/leaderboard" className="sw-label text-xs text-ink hover:opacity-70">
-              {t("viewFullLeaderboard")}
-            </Link>
-          </div>
-        </section>
+            <ForecastGrid />
+            <NoiseCalendar />
+            <SeasonsChart nowMonth={nowMonth} />
+            <YearWheel nowMonth={nowMonth} />
 
-        <ForecastGrid />
-        <NoiseCalendar />
-        <SeasonsChart nowMonth={nowMonth} />
-        <YearWheel nowMonth={nowMonth} />
+            {/* Experimental — kept at the bottom. */}
+            <SoundClassBreakdown sensors={radiusSensors} />
+          </>
+        )}
 
         <Footer />
       </PanelShell>
@@ -166,7 +172,7 @@ export default function SensorPanel({ sensors, selected }: SensorPanelProps) {
         )}
       </div>
 
-      <HourlyChart />
+      <HourlyChart metric={activeLayer} sensors={selected ? [selected] : []} />
 
       {/* Breakdown gauges */}
       <section className="sw-section pb-12">
@@ -263,6 +269,55 @@ function Footer() {
     <div className="px-6 py-6">
       <span className="sw-label text-xs">{t("footer")}</span>
     </div>
+  );
+}
+
+// Distribution of the dominant detected sound class across the in-radius sensors.
+const SOUND_CLASSES: { key: string; color: string }[] = [
+  { key: "siren", color: "#d6342a" },
+  { key: "dog_bark", color: "#ec832c" },
+  { key: "engine_idling", color: "#e8b335" },
+  { key: "constructions", color: "#4f5d75" },
+];
+
+function SoundClassBreakdown({ sensors }: { sensors: SensorData[] }) {
+  const t = useTranslations("dashboard");
+  const counts = SOUND_CLASSES.map((c) => ({
+    ...c,
+    n: sensors.filter((s) => s.latestReading?.noiseClass === c.key).length,
+  }));
+  const max = Math.max(1, ...counts.map((c) => c.n));
+
+  return (
+    <section className="sw-section pb-10">
+      <div className="px-6 pt-5 flex items-center gap-2.5">
+        <h3 className="sw-h text-[16px]">{t("soundClasses.title")}</h3>
+        <span
+          className="text-[10px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded"
+          style={{ background: "rgba(239,131,84,0.18)", color: "#ef8354" }}
+        >
+          beta
+        </span>
+      </div>
+      <p className="px-6 sw-label text-xs mt-1.5">{t("soundClasses.subtitle")}</p>
+      <div className="px-6 mt-5 flex flex-col gap-3.5">
+        {counts.map((c) => (
+          <div key={c.key} className="flex items-center gap-3">
+            <span className="text-xs w-32 shrink-0 text-muted">{t(`soundClasses.${c.key}`)}</span>
+            <div
+              className="flex-1 h-2.5 rounded-full overflow-hidden"
+              style={{ background: "var(--sw-chrome-bg)" }}
+            >
+              <div
+                className="h-full rounded-full transition-[width] duration-300"
+                style={{ width: `${(c.n / max) * 100}%`, background: c.color }}
+              />
+            </div>
+            <span className="text-xs tabular-nums text-ink w-5 text-right">{c.n}</span>
+          </div>
+        ))}
+      </div>
+    </section>
   );
 }
 

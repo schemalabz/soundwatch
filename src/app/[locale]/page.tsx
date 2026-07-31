@@ -1,16 +1,8 @@
 import { MapSection } from "@/components/map/MapSection";
+import { getMockSensors } from "@/lib/mockSensors";
 
-async function getSensors() {
-  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000";
-  const res = await fetch(`${baseUrl}/api/sensors`, {
-    cache: "no-store",
-  });
-  if (!res.ok) return [];
-  return res.json();
-}
-
-export default async function Home() {
-  const sensors = await getSensors();
-
+export default function Home() {
+  // Redesign uses generated mock sensors (Athens coords + per-layer values).
+  const sensors = getMockSensors();
   return <MapSection sensors={sensors} />;
 }

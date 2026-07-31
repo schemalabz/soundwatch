@@ -3,7 +3,8 @@
     "map": "Map",
     "leaderboard": "Leaderboard",
     "about": "About",
-    "location": "Athens, Greece"
+    "location": "Athens, Greece",
+    "menu": "Menu"
   },
   "map": {
     "loading": "Loading map...",
@@ -15,7 +16,45 @@
     "leaderboard": "Leaderboard",
     "inView": "in view",
     "markers": "Markers",
-    "heatmap": "Heatmap"
+    "heatmap": "Heatmap",
+    "layerNoise": "Noise",
+    "layerAir": "Air quality",
+    "layerUv": "UV",
+    "layerNoiseDesc": "Noise level (dBA) — how loud the street sound is around each sensor. Warmer areas on the map mean heavy traffic, nightlife or construction, while cooler areas are quieter neighbourhoods. For reference: ~30 dBA a quiet room, 60 conversation, 70–80 a busy street, 90+ heavy traffic — every +10 dB sounds about twice as loud. Sensors only compute numbers; no audio is ever recorded or stored.",
+    "layerAirDesc": "Air quality (PM2.5) — concentration of fine particulate matter in the air. Higher values mean more polluted air, usually near busy roads and from winter heating. It's one of the most important health indicators in the city.",
+    "layerUvDesc": "Ultraviolet index (UV) — intensity of solar UV radiation reaching the ground. Useful for knowing when sun protection is needed, especially around summer midday when values peak.",
+    "sensorsTitle": "Sensors in Athens",
+    "sensorsSeeing": "seeing {inView}/{total}",
+    "sensorsDesc": "There are {total} sensors installed across Athens! They help us record the city's noise along with other measurements such as air quality, etc.",
+    "findLocation": "Find a location",
+    "addressLabel": "Address/Area",
+    "addressPlaceholder": "Athens center",
+    "radiusLabel": "Radius",
+    "search": "Search",
+    "notFound": "Location not found",
+    "legend": {
+      "noise": {
+        "quiet": "Quiet",
+        "moderate": "Moderate",
+        "loud": "Loud",
+        "veryLoud": "Very loud"
+      },
+      "air": {
+        "good": "Good",
+        "moderate": "Moderate",
+        "sensitive": "Unhealthy for sensitive groups",
+        "unhealthy": "Unhealthy",
+        "veryUnhealthy": "Very unhealthy",
+        "hazardous": "Hazardous"
+      },
+      "uv": {
+        "low": "Low",
+        "moderate": "Moderate",
+        "high": "High",
+        "veryHigh": "Very high",
+        "extreme": "Extreme"
+      }
+    }
   },
   "dashboard": {
     "overviewEyebrow": "Athens, Greece",
@@ -26,6 +65,17 @@
     "viewFullLeaderboard": "View full leaderboard →",
     "breakdown": "Breakdown",
     "byHour": "Today by Hour",
+    "inRadius": "{count, plural, one {# sensor in radius} other {# sensors in radius}}",
+    "avg": "Avg",
+    "noSensorsInRadius": "No sensors within the radius",
+    "soundClasses": {
+      "title": "Sound categories",
+      "subtitle": "Dominant sound per sensor within the radius",
+      "siren": "Siren",
+      "dog_bark": "Dog bark",
+      "engine_idling": "Engine idling",
+      "constructions": "Construction"
+    },
     "byHourSubtitle": "Noise index across the 24 hours of today",
     "hourOfDay": "Hour of day",
     "indexAxis": "Index",
@@ -33,7 +83,7 @@
     "forecast": "7-Day Forecast",
     "calendar": "Noise Calendar",
     "seasons": "Noise Seasons",
-    "seasonsSubtitle": "Traffic, nightlife and construction intensity across the full year",
+    "seasonsSubtitle": "Engine-idle, dog-bark and construction intensity across the full year",
     "indexHint": "Index 0–12 · hover for exact levels",
     "close": "Close",
     "yearGlance": "Year at a Glance",
@@ -53,11 +103,10 @@
       "fri": "Fri"
     },
     "sources": {
-      "traffic": "Traffic",
-      "nightlife": "Nightlife",
-      "construction": "Construction",
-      "aircraft": "Aircraft",
-      "sirens": "Sirens"
+      "engine_idling": "Engine idling",
+      "dog_bark": "Dog bark",
+      "constructions": "Construction",
+      "siren": "Siren"
     },
     "timeline": {
       "day": "Day",

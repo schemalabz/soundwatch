@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Script from "next/script";
-import { Geist, Geist_Mono, Jura } from "next/font/google";
+import { Open_Sans, Geist_Mono, Jura } from "next/font/google";
 import { NextIntlClientProvider } from "next-intl";
 import { getMessages } from "next-intl/server";
 import { notFound } from "next/navigation";
@@ -8,10 +8,10 @@ import { routing } from "@/i18n/routing";
 import Nav from "@/components/Nav";
 import "./globals.css";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-  weight: ["100", "200", "300", "400", "500", "600", "700"],
+const openSans = Open_Sans({
+  variable: "--font-open-sans",
+  subsets: ["latin", "greek"],
+  weight: ["300", "400", "500", "600", "700", "800"],
 });
 
 const geistMono = Geist_Mono({
@@ -53,7 +53,7 @@ export default async function RootLayout({
       lang={locale}
       data-theme="dark"
       suppressHydrationWarning
-      className={`${geistSans.variable} ${geistMono.variable} ${jura.variable} h-full antialiased`}
+      className={`${openSans.variable} ${geistMono.variable} ${jura.variable} h-full antialiased`}
     >
       <body className="h-full flex flex-col bg-background text-foreground">
         <Script id="sw-theme-bootstrap" strategy="beforeInteractive">
