@@ -25,7 +25,7 @@ import pandas as pd
 BAND_NAMES = ["noise_low", "noise_250", "noise_500", "noise_1k", "noise_2k", "noise_4k", "noise_8k"]
 
 # UrbanSound8K class -> one of the redesign's 4 UI sources.  These mirror the
-# acoustic-sensor-classifier's 4-label taxonomy exactly: drilling + jackhammer
+# the acoustic-classifier's 4-label taxonomy exactly: drilling + jackhammer
 # merge into `constructions`; every other US8K class is dropped (not one of the 4).
 CLASS_TO_SOURCE = {
     "engine_idling": "engine_idling",

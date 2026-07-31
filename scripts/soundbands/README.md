@@ -15,7 +15,7 @@ UrbanSound8K audio ──reduce──▶ bands.csv ──build──▶ soundwat
 
 | File | What |
 |---|---|
-| `minimal_bands.py` | canonical sensor-faithful processing: a sound file → 7 bands + dBA (shared with `acoustic-sensor-classifier`) |
+| `minimal_bands.py` | canonical sensor-faithful processing: a sound file → 7 bands + dBA (shared with `scripts/acoustic-classifier`) |
 | `reduce_urbansound.py` | run `minimal_bands` over the dataset → `bands.csv` |
 | `build_mock.py` | `bands.csv` → per-source masks + masking classifier + UI `soundwatchMock.json` |
 | `data/` | symlink to the UrbanSound8K root (gitignored) |
@@ -52,8 +52,8 @@ python reduce_urbansound.py --dataset data/UrbanSound8K --out bands.csv
 python build_mock.py --bands bands.csv --out ../../src/lib/soundwatchMock.json
 ```
 
-`data/` is already symlinked to `/Users/vasia/acoustic-sensor-classifier/data`
-(no download needed) and is gitignored.
+Symlink `data/` to your UrbanSound8K root (gitignored), e.g. point it at the copy under
+`../acoustic-classifier/data` so the classifier and this pipeline share one download.
 
 ## Wire into the UI
 
@@ -65,7 +65,7 @@ of the random generators.
 
 ## Category mapping (US8K → the 4 UI sources)
 
-These mirror the `acoustic-sensor-classifier` 4-label taxonomy exactly:
+These mirror the `scripts/acoustic-classifier` 4-label taxonomy exactly:
 
 `engine_idling → engine_idling` · `dog_bark → dog_bark` · `jackhammer, drilling →
 constructions` · `siren → siren`.
