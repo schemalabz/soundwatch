@@ -63,3 +63,11 @@ prisma/*.db
 .superpowers/
 
 /src/generated/prisma
+
+# vendored acoustic-classifier (scripts/acoustic-classifier) — code only;
+# the UrbanSound8K dataset, venv, caches and generated results stay out.
+scripts/acoustic-classifier/data
+scripts/acoustic-classifier/.venv/
+scripts/acoustic-classifier/**/__pycache__/
+scripts/acoustic-classifier/.pytest_cache/
+scripts/acoustic-classifier/results/
