@@ -71,3 +71,9 @@ scripts/acoustic-classifier/.venv/
 scripts/acoustic-classifier/**/__pycache__/
 scripts/acoustic-classifier/.pytest_cache/
 scripts/acoustic-classifier/results/
+
+# soundbands mock pipeline (scripts/soundbands)
+scripts/soundbands/data
+scripts/soundbands/.venv/
+scripts/soundbands/__pycache__/
+scripts/soundbands/bands.csv
