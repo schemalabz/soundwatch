@@ -45,8 +45,8 @@ export default async function SensorDetailPage({
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
         <div className="text-center">
-          <h1 className="text-2xl font-bold mb-2">{t("notFound")}</h1>
-          <Link href="/" className="text-primary underline">
+          <h1 className="sw-h text-[24px] mb-3">{t("notFound")}</h1>
+          <Link href="/" className="sw-label text-xs text-muted hover:text-ink">
             {t("backToMap")}
           </Link>
         </div>

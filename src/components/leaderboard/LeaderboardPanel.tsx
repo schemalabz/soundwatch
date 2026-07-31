@@ -46,9 +46,9 @@ export default function LeaderboardPanel({
     .slice(0, limit);
 
   return (
-    <div className="space-y-1">
+    <div>
       {withNoise.length === 0 && (
-        <p className="text-sm text-muted">{t("noData")}</p>
+        <p className="text-sm text-muted py-2">{t("noData")}</p>
       )}
       {withNoise.map((sensor, i) => {
         const dba = sensor.latestReading!.noiseDba as number;
@@ -59,9 +59,9 @@ export default function LeaderboardPanel({
           <Link
             key={sensor.id}
             href={`/sensors/${sensor.id}`}
-            className="flex items-center gap-3 p-3 rounded-lg hover:bg-light transition-colors"
+            className="group flex items-center gap-3 py-3 border-b-[0.5px] border-hairline last:border-b-0 transition-opacity hover:opacity-80"
           >
-            <span className="text-lg font-bold text-muted/50 w-6 text-right">
+            <span className="sw-label text-sm w-5 text-right tabular-nums">
               {i + 1}
             </span>
             <span
@@ -69,18 +69,18 @@ export default function LeaderboardPanel({
               style={{ backgroundColor: color }}
             />
             <div className="flex-1 min-w-0">
-              <p className="font-semibold text-sm truncate">
+              <p className="font-light text-sm text-ink truncate">
                 {sensor.name || sensor.deviceId}
               </p>
               {sensor.address && (
-                <p className="text-xs text-muted truncate">
-                  {sensor.address}
-                </p>
+                <p className="sw-label text-xs truncate">{sensor.address}</p>
               )}
             </div>
             <div className="text-right flex-shrink-0">
-              <p className="font-bold text-sm">{dba.toFixed(1)} dBA</p>
-              <p className="text-xs font-semibold" style={{ color }}>
+              <p className="font-light text-sm text-ink tabular-nums">
+                {dba.toFixed(1)} dBA
+              </p>
+              <p className="sw-label text-xs" style={{ color }}>
                 {label}
               </p>
             </div>

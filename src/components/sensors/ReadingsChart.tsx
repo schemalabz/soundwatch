@@ -12,6 +12,7 @@ import {
 import { format } from "date-fns";
 import { useTranslations } from "next-intl";
 import { getMetricDef, NOISE_METRIC } from "@/lib/metrics";
+import { useThemeColors } from "@/lib/useThemeColors";
 
 interface ReadingsChartProps {
   readings: Record<string, unknown>[];
@@ -25,6 +26,7 @@ export default function ReadingsChart({
   height = 300,
 }: ReadingsChartProps) {
   const tMetrics = useTranslations("metrics");
+  const c = useThemeColors();
   const def = getMetricDef(metricKey) ?? NOISE_METRIC;
 
   const data = readings
@@ -53,17 +55,19 @@ export default function ReadingsChart({
   return (
     <ResponsiveContainer width="100%" height={height}>
       <LineChart data={data}>
-        <CartesianGrid strokeDasharray="3 3" stroke="#e7e0d5" />
+        <CartesianGrid strokeDasharray="3 3" stroke={c.hairline} />
         <XAxis
           dataKey="time"
           tickFormatter={(t) => format(new Date(t), "HH:mm")}
-          fontSize={12}
-          stroke="#78716c"
+          fontSize={11}
+          stroke={c.muted}
+          tick={{ fill: c.muted }}
         />
         <YAxis
-          fontSize={12}
+          fontSize={11}
           unit={` ${def.unit}`}
-          stroke="#78716c"
+          stroke={c.muted}
+          tick={{ fill: c.muted }}
         />
         <Tooltip
           labelFormatter={(t) =>
@@ -74,10 +78,15 @@ export default function ReadingsChart({
             label,
           ]}
           contentStyle={{
-            borderRadius: "8px",
-            border: "1px solid #e7e0d5",
-            boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
+            borderRadius: "4px",
+            border: `0.5px solid ${c.hairline}`,
+            background: c.panel,
+            color: c.ink,
+            fontSize: "12px",
           }}
+          labelStyle={{ color: c.muted }}
+          itemStyle={{ color: c.ink }}
+          cursor={{ stroke: c.muted, strokeWidth: 1, strokeDasharray: "3 3" }}
         />
         <Line
           type="monotone"

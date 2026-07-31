@@ -74,40 +74,43 @@ export default function SensorDetailClient({
   const label = dba != null ? getTranslatedNoiseLabel(dba, tNoise) : t("noData");
 
   return (
-    <div className="max-w-4xl mx-auto p-4 md:p-6">
-      <Link href="/" className="text-primary text-sm hover:underline">
+    <div className="max-w-4xl mx-auto p-4 md:p-6 w-full">
+      <Link href="/" className="sw-label text-xs text-muted hover:text-ink">
         {t("backToMap")}
       </Link>
 
-      <div className="mt-4 mb-6">
-        <h1 className="text-2xl md:text-3xl font-bold">
+      <div className="mt-5 mb-7">
+        <h1 className="sw-h text-[28px] md:text-[34px]">
           {sensor.name || sensor.deviceId}
         </h1>
         {sensor.address && (
-          <p className="text-muted mt-1">{sensor.address}</p>
+          <p className="sw-label text-xs mt-1.5">{sensor.address}</p>
         )}
       </div>
 
       {/* Noise hero */}
-      <div className="flex items-center justify-between mb-2">
-        <div className="flex items-center gap-3 flex-wrap">
-          <span className="text-4xl font-bold" style={{ color }}>
+      <div className="flex items-end justify-between mb-2 gap-4 flex-wrap">
+        <div className="flex items-center gap-4 flex-wrap">
+          <span className="sw-hero text-[64px]" style={{ color }}>
             {dba != null ? dba.toFixed(1) : "—"}
           </span>
-          <span className="text-muted">dBA</span>
-          <span
-            className="text-xs font-semibold px-2 py-0.5 rounded"
-            style={{ backgroundColor: color, color: "white" }}
-          >
-            {label}
-          </span>
+          <div className="flex flex-col gap-2 pb-1">
+            <span className="sw-badge">
+              <span
+                className="w-2 h-2 rounded-full"
+                style={{ background: color, transition: "background 300ms" }}
+              />
+              <span className="sw-badge-label">{label}</span>
+            </span>
+            <span className="sw-label text-xs">dBA</span>
+          </div>
           {(() => {
             const badge = getTranslatedGuidelineBadge(dba, "noiseDba", tGuidelines);
             return badge ? (
               <span
-                className="text-xs font-medium px-2 py-0.5 rounded-full"
+                className="text-xs self-end mb-1 px-2.5 py-1 rounded"
                 style={{
-                  backgroundColor: badge.color + "18",
+                  backgroundColor: badge.color + "20",
                   color: badge.color,
                 }}
               >
@@ -118,10 +121,10 @@ export default function SensorDetailClient({
         </div>
         <TimeRangeSelector value={timeRange} onChange={handleRangeChange} />
       </div>
-      <p className="text-xs text-muted mb-4">{tMetrics("noiseDba.description")}</p>
+      <p className="sw-label text-xs mb-5">{tMetrics("noiseDba.description")}</p>
 
       {/* Noise chart */}
-      <div className="bg-white rounded-xl border border-border p-4 mb-6">
+      <div className="bg-panel rounded-md border-[0.5px] border-hairline p-4 mb-6">
         <ReadingsChart readings={readings} metricKey="noiseDba" height={280} />
       </div>
 
@@ -134,22 +137,22 @@ export default function SensorDetailClient({
       </div>
 
       {/* Sensor info */}
-      <div className="rounded-xl border border-border p-4">
-        <h3 className="text-xs font-semibold text-muted uppercase tracking-wide mb-3">{t("info")}</h3>
-        <dl className="grid grid-cols-2 gap-x-6 gap-y-2 text-xs">
-          <dt className="text-muted">{t("deviceId")}</dt>
+      <div className="rounded-md border-[0.5px] border-hairline p-4 bg-panel">
+        <h3 className="sw-eyebrow mb-3">{t("info")}</h3>
+        <dl className="grid grid-cols-2 gap-x-6 gap-y-2.5 text-xs">
+          <dt className="sw-label">{t("deviceId")}</dt>
           <dd className="font-mono text-muted">{sensor.deviceId}</dd>
-          <dt className="text-muted">{t("firmware")}</dt>
+          <dt className="sw-label">{t("firmware")}</dt>
           <dd className="text-muted">{sensor.firmwareVersion || "—"}</dd>
-          <dt className="text-muted">{t("readingInterval")}</dt>
+          <dt className="sw-label">{t("readingInterval")}</dt>
           <dd className="text-muted">{sensor.readingIntervalS}s</dd>
-          <dt className="text-muted">{t("lastSeen")}</dt>
+          <dt className="sw-label">{t("lastSeen")}</dt>
           <dd className="text-muted">
             {sensor.lastSeenAt
               ? new Date(sensor.lastSeenAt).toLocaleString()
               : t("never")}
           </dd>
-          <dt className="text-muted">{t("coordinates")}</dt>
+          <dt className="sw-label">{t("coordinates")}</dt>
           <dd className="text-muted">
             {sensor.latitude != null && sensor.longitude != null
               ? `${sensor.latitude.toFixed(4)}, ${sensor.longitude.toFixed(4)}`
@@ -157,7 +160,7 @@ export default function SensorDetailClient({
           </dd>
         </dl>
         {sensor.latestReading && (
-          <div className="mt-3 pt-3 border-t border-border/50 flex gap-4 text-[11px] text-muted/60 flex-wrap">
+          <div className="mt-3 pt-3 border-t-[0.5px] border-hairline flex gap-4 text-[11px] text-muted flex-wrap">
             {sensor.latestReading.battery != null && (
               <span>{t("battery")} {Math.round(sensor.latestReading.battery as number)}%</span>
             )}

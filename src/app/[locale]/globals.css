@@ -1,33 +1,310 @@
 @import "tailwindcss";
 
+/*
+ * SOUNDWATCH — dashboard design system
+ * Dark-first, hairline-divided panels, ultralight Geist display + Jura labels.
+ * Theme is switched via [data-theme="light"] on <html>.
+ */
+
 :root {
-  --background: #faf5ef;
-  --foreground: #1c1917;
-  --primary: #c2410c;
-  --primary-dark: #7c2d12;
-  --accent: #fb923c;
-  --light: #fff7ed;
-  --muted: #78716c;
-  --border: #e7e0d5;
+  /* === "Minimalist Elegance" palette ===
+     2D3142 navy · BFC0C0 gray · FFFFFF white · EF8354 orange · 4F5D75 slate */
+
+  /* --- surfaces & ink (dark default: navy) --- */
+  --sw-bg: #2d3142;
+  --sw-panel: #363b4e;
+  --sw-ink: #ffffff;
+  --sw-hairline: rgba(255, 255, 255, 0.14);
+  --sw-muted: #bfc0c0;
+  --sw-badge-bg: rgba(255, 255, 255, 0.07);
+  --sw-chrome-bg: rgba(255, 255, 255, 0.06);
+  --sw-chip-active-bg: #ef8354;
+  --sw-chip-active-ink: #ffffff;
+  --sw-dot-grid: rgba(255, 255, 255, 0.08);
+  --sw-tab-bg: #202432; /* selected layer tab + its panel (dark, continuous) */
+
+  /* --- index color scale (high → low) — noise data viz + map, unchanged --- */
+  --sw-scale-1: #d6342a; /* red    — very loud */
+  --sw-scale-2: #ec832c; /* orange — loud */
+  --sw-scale-3: #e8b335; /* amber */
+  --sw-scale-4: #c7c43c; /* lime   — moderate */
+  --sw-scale-5: #94c13d; /* green */
+  --sw-scale-6: #5ba834; /* deep green — quiet */
+
+  /* --- legacy semantic tokens --- */
+  --background: var(--sw-bg);
+  --foreground: var(--sw-ink);
+  --primary: #ef8354; /* bold orange accent */
+  --primary-dark: #d96f3f;
+  --accent: #4f5d75; /* cool slate accent */
+  --light: var(--sw-panel);
+  --muted: var(--sw-muted);
+  --border: var(--sw-hairline);
+}
+
+:root[data-theme="light"] {
+  --sw-bg: #f5f6f7;
+  --sw-panel: #ffffff;
+  --sw-ink: #2d3142; /* navy text */
+  --sw-hairline: rgba(45, 49, 66, 0.14);
+  --sw-muted: #4f5d75; /* slate secondary text */
+  --sw-badge-bg: rgba(45, 49, 66, 0.05);
+  --sw-chrome-bg: rgba(45, 49, 66, 0.05);
+  --sw-chip-active-bg: #ef8354;
+  --sw-chip-active-ink: #ffffff;
+  --sw-dot-grid: rgba(45, 49, 66, 0.1);
+  --sw-tab-bg: #2d3142; /* dark navy tab on the light sidebar */
+
+  --primary: #ef8354;
+  --primary-dark: #d96f3f;
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
+  --color-background: var(--sw-bg);
+  --color-foreground: var(--sw-ink);
+  --color-bg: var(--sw-bg);
+  --color-panel: var(--sw-panel);
+  --color-ink: var(--sw-ink);
+  --color-muted: var(--sw-muted);
+  --color-hairline: var(--sw-hairline);
+
   --color-primary: var(--primary);
   --color-primary-dark: var(--primary-dark);
   --color-accent: var(--accent);
   --color-light: var(--light);
-  --color-muted: var(--muted);
   --color-border: var(--border);
-  --font-sans: var(--font-geist-sans);
+
+  --font-sans: var(--font-open-sans);
   --font-mono: var(--font-geist-mono);
+  --font-label: var(--font-jura);
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: var(--font-sans), Arial, Helvetica, sans-serif;
+  background: var(--sw-bg);
+  color: var(--sw-ink);
+  font-family: var(--font-open-sans), Arial, Helvetica, sans-serif;
+  transition:
+    background 300ms ease,
+    color 300ms ease;
+}
+
+/* =========================================================
+   DASHBOARD PRIMITIVES
+   ========================================================= */
+
+/* Jura uppercase micro-label */
+.sw-eyebrow {
+  font-family: var(--font-jura), sans-serif;
+  font-weight: 400;
+  font-size: 12px;
+  line-height: 18px;
+  letter-spacing: 1.6px;
+  text-transform: uppercase;
+  color: var(--sw-muted);
+}
+
+/* Jura label (chips, ticks, table headers) — not uppercased */
+.sw-label {
+  font-family: var(--font-jura), sans-serif;
+  font-weight: 400;
+  letter-spacing: 0.4px;
+  color: var(--sw-muted);
+}
+
+/* Geist ultralight section heading */
+.sw-h {
+  font-weight: 200;
+  letter-spacing: 0.2px;
+  color: var(--sw-ink);
+  margin: 0;
+}
+
+/* Giant ultralight hero number */
+.sw-hero {
+  font-weight: 100;
+  line-height: 1;
+  letter-spacing: 0;
+  transition: color 300ms ease;
+}
+
+.sw-hairline {
+  border-color: var(--sw-hairline);
+}
+
+/* Panel section with a hairline bottom rule */
+.sw-section {
+  border-bottom: 0.5px solid var(--sw-hairline);
+}
+
+/* Soft status badge: dot + label */
+.sw-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  background: var(--sw-badge-bg);
+  border-radius: 3px;
+  padding: 6px;
+}
+.sw-badge .sw-badge-label {
+  font-family: var(--font-jura), sans-serif;
+  font-weight: 400;
+  font-size: 12px;
+  line-height: 12px;
+  letter-spacing: 0.4px;
+  color: var(--sw-ink);
+}
+
+/* Segmented chip toggle */
+.sw-chiptrack {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px;
+  background: var(--sw-chrome-bg);
+  border-radius: 4px;
+}
+.sw-chip {
+  font-family: var(--font-jura), sans-serif;
+  font-weight: 500;
+  font-size: 12px;
+  line-height: 15px;
+  letter-spacing: 0.4px;
+  color: var(--sw-muted);
+  background: transparent;
+  border-radius: 2px;
+  padding: 4px 8px;
+  cursor: pointer;
+  transition:
+    color 150ms ease,
+    background 150ms ease;
+}
+.sw-chip:hover {
+  color: var(--sw-ink);
+}
+.sw-chip[data-active="true"] {
+  color: var(--sw-chip-active-ink);
+  background: var(--sw-chip-active-bg);
+  box-shadow: 0 1px 0.75px rgba(0, 0, 0, 0.25);
+}
+
+/* Solid + ghost buttons */
+.sw-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  background: var(--sw-ink);
+  color: var(--sw-bg);
+  border: 0.5px solid var(--sw-ink);
+  border-radius: 4px;
+  font-weight: 500;
+  font-size: 0.875rem;
+  padding: 0.5rem 1rem;
+  cursor: pointer;
+  transition: opacity 150ms ease;
+}
+.sw-btn:hover {
+  opacity: 0.85;
+}
+.sw-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.sw-btn-ghost {
+  background: transparent;
+  color: var(--sw-ink);
+  border: 0.5px solid var(--sw-hairline);
+}
+
+/* Flat themed input */
+.sw-input {
+  width: 100%;
+  background: var(--sw-chrome-bg);
+  border: 0.5px solid var(--sw-hairline);
+  border-radius: 4px;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.875rem;
+  color: var(--sw-ink);
+}
+.sw-input::placeholder {
+  color: var(--sw-muted);
+}
+.sw-input:focus {
+  outline: none;
+  border-color: var(--sw-muted);
+}
+
+/* Info "i" affordance */
+.sw-info {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 16px;
+  border: 0.55px solid var(--sw-muted);
+  font-size: 11px;
+  line-height: 1;
+  color: var(--sw-muted);
+  cursor: help;
+}
+
+/* Hidden scrollbar for the side panel */
+.sw-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: var(--sw-hairline) transparent;
+}
+.sw-scroll::-webkit-scrollbar {
+  width: 6px;
+}
+.sw-scroll::-webkit-scrollbar-thumb {
+  background: var(--sw-hairline);
+  border-radius: 3px;
+}
+
+/* =========================================================
+   MAP POPUP (sensor preview card)
+   ========================================================= */
+.sw-popup {
+  z-index: 40; /* sit above the map timeline (z-30) */
+}
+.sw-popup .mapboxgl-popup-content {
+  padding: 0;
+  background: transparent;
+  box-shadow: none;
+  border-radius: 14px;
+}
+/* colour the little pointer tip to match the card body (panel) */
+.sw-popup.mapboxgl-popup-anchor-bottom .mapboxgl-popup-tip,
+.sw-popup.mapboxgl-popup-anchor-bottom-left .mapboxgl-popup-tip,
+.sw-popup.mapboxgl-popup-anchor-bottom-right .mapboxgl-popup-tip {
+  border-top-color: var(--sw-panel);
+}
+.sw-popup.mapboxgl-popup-anchor-top .mapboxgl-popup-tip,
+.sw-popup.mapboxgl-popup-anchor-top-left .mapboxgl-popup-tip,
+.sw-popup.mapboxgl-popup-anchor-top-right .mapboxgl-popup-tip {
+  border-bottom-color: var(--sw-panel);
+}
+.sw-popup.mapboxgl-popup-anchor-left .mapboxgl-popup-tip {
+  border-right-color: var(--sw-panel);
+}
+.sw-popup.mapboxgl-popup-anchor-right .mapboxgl-popup-tip {
+  border-left-color: var(--sw-panel);
+}
+.sw-popup .mapboxgl-popup-close-button {
+  color: #fff;
+  font-size: 17px;
+  line-height: 1;
+  padding: 2px 7px;
+  top: 3px;
+  right: 3px;
+  z-index: 2;
+  opacity: 0.85;
+}
+.sw-popup .mapboxgl-popup-close-button:hover {
+  background: transparent;
+  opacity: 1;
 }
 
 @keyframes slide-up {
