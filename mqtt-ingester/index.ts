@@ -19,6 +19,12 @@ const STATUS_TOPIC_REGEX = /^soundwatch\/sensors\/([^/]+)\/status$/;
 // identifier that survives reflash / token change / relocation, so we store it
 // to answer "which physical box is this?" and to catch units swapped at install.
 const INVENTORY_TOPIC = "device/inventory";
+// Per-device info: SAME createInfo() payload as device/inventory, but published
+// to device/sck/<token>/info so the TOPIC carries the token. createInfo() itself
+// has no token field, so this is the only topic that can link a hardware id to a
+// device — device/inventory alone is unattributable.
+const INFO_TOPIC = "device/sck/+/info";
+const INFO_TOPIC_REGEX = /^device\/sck\/([^/]+)\/info$/;
 
 const prisma = new PrismaClient();
 
@@ -152,19 +158,20 @@ async function handleStatusMessage(topic: string, message: Buffer): Promise<void
  * under a known token means two boxes were swapped, which otherwise mislabels
  * every reading from both units for the life of the deployment.
  */
-async function handleInventoryMessage(message: Buffer): Promise<void> {
+async function handleInventoryMessage(topic: string, message: Buffer): Promise<void> {
   try {
     const info = JSON.parse(message.toString());
     const hardwareId: string | undefined = info?.id;
-    const deviceId: string | undefined = info?.token ?? info?.t;
     if (!hardwareId) return;
 
-    // Stock createInfo() does not carry the token, so we can only attach the
-    // hardware id when the payload identifies the device. Log otherwise.
-    if (!deviceId) {
-      console.log(`Inventory from unidentified device: hardware ${hardwareId}`);
+    // createInfo() carries no token, so the shared device/inventory topic cannot
+    // be attributed to a device. Only device/sck/<token>/info can, via the topic.
+    const match = topic.match(INFO_TOPIC_REGEX);
+    if (!match) {
+      console.log(`Inventory (unattributable, no token in topic): hardware ${hardwareId}`);
       return;
     }
+    const deviceId = match[1];
 
     const sensor = await prisma.sensor.findUnique({ where: { deviceId } });
     if (sensor?.hardwareId && sensor.hardwareId !== hardwareId) {
@@ -174,10 +181,14 @@ async function handleInventoryMessage(message: Buffer): Promise<void> {
       );
       return;
     }
-    await prisma.sensor.updateMany({ where: { deviceId }, data: { hardwareId } });
-    console.log(`Inventory: ${deviceId} -> hardware ${hardwareId}`);
+    await prisma.sensor.upsert({
+      where: { deviceId },
+      update: { hardwareId, lastSeenAt: new Date() },
+      create: { deviceId, hardwareId },
+    });
+    console.log(`Identity: ${deviceId} -> hardware ${hardwareId}`);
   } catch {
-    console.warn("Failed to parse inventory message");
+    console.warn("Failed to parse inventory/info message");
   }
 }
 
@@ -187,7 +198,7 @@ function main(): void {
 
   client.on("connect", () => {
     console.log("Connected to MQTT broker");
-    client.subscribe([READINGS_TOPIC, STATUS_TOPIC, INVENTORY_TOPIC], (err) => {
+    client.subscribe([READINGS_TOPIC, STATUS_TOPIC, INVENTORY_TOPIC, INFO_TOPIC], (err) => {
       if (err) {
         console.error("Failed to subscribe:", err);
         process.exit(1);
@@ -197,8 +208,8 @@ function main(): void {
   });
 
   client.on("message", (topic, message) => {
-    if (topic === INVENTORY_TOPIC) {
-      handleInventoryMessage(message).catch((err) => {
+    if (topic === INVENTORY_TOPIC || INFO_TOPIC_REGEX.test(topic)) {
+      handleInventoryMessage(topic, message).catch((err) => {
         console.error("Unhandled error in inventory handler:", err);
       });
     } else if (topic.endsWith("/status")) {

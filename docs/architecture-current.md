@@ -30,7 +30,7 @@ Design principle that got us here: **thinnest vertical slice, validated end-to-e
 | Sensor hardware | SmartCitizen Kit 2.3 (SAMD21 Cortex-M0+ 48MHz 32KB RAM + ESP8266) | bench units | hardware is fixed — no Path-B/other-chip plans |
 | Firmware | C++ / Arduino, PlatformIO (atmelsam@8.1.0, framework vendored in-repo) | `soundwatch-firmware` fork | base pinned at `baseline/stock-2026-07` (= upstream master + PR#107 WiFi fixes); feature work in `flavor-*` branches |
 | Firmware dev env | Nix flake devshell (platformio-core, python3, pyserial) | firmware repo | flash = UF2 drag-copy (SAM) / serial (ESP); headless workflow documented in `docs/soundwatch/tools/` |
-| Broker | Mosquitto 2.x | Docker (prod compose) / nix (bench) | plaintext 1883; security model = client-id ACL (`device/sck/%c/#`), token-as-secret, mirrors SmartCitizen; TLS deferred (needs firmware work) |
+| Broker | Mosquitto 2.x | Docker (prod compose) / nix (bench) | plaintext **1883 (public, ACL `device/sck/%c/#`)** + **1884 (internal, unpublished)** for backend services; token-as-secret, mirrors SmartCitizen; TLS removed — the firmware cannot speak it. See `infrastructure.md` |
 | Ingester | TypeScript, `mqtt` v5, tsx runtime | umbrella repo `mqtt-ingester/` | one subscriber, parse → compute → insert; unit-tested (vitest, 28 tests) |
 | ORM / migrations | Prisma 5.22 | `prisma/` | migrations `0001`–`0006` |
 | Database | `timescale/timescaledb:latest-pg17` (PG 17) | Docker | **plain Postgres usage today** — hypertables/continuous aggregates/retention are the planned Step 6; the image choice makes that a no-migration switch |
@@ -141,4 +141,5 @@ Stock firmware measured one 11.6ms FFT snapshot per interval (~0.02% of the soun
 
 - **Bench hardware (2026-07-30):** unit 1 has a failed micro-USB (electrical); unit 2 is wedged by a Flavor-3 boot bug (DMA buffer allocated at static-init starved the 32KB heap — fix is built, needs a bootloader-mode reflash via the RST double-tap). Neither affects the validated Flavor 1/2 stack.
 - **WiFi association reliability** (ESP8266): error reporting is coarse (any association failure reports as "wrong password"); an ESP→SAM debug channel was added on `flavor-3-duty` to diagnose properly. Operationally: 2.4GHz WPA2 on channels 1–11 required; `pubint < 60s` keeps the ESP always-on; `power -sleep 0` mandatory for continuous monitoring.
-- **Not yet built:** calibration (device-dB → real dB SPL; needs a reference meter), Timescale hypertables/rollups/retention (Step 6), broker per-device ACL config in prod, OTA, the prod cutover itself.
+- **Not yet built:** calibration (device-dB → real dB SPL; needs a reference meter), Timescale hypertables/rollups/retention (Step 6), automated DB backups, device-silence alerting.
+- **Done since this was written (2026-08-02):** prod cutover, broker per-device ACL, ESP-side OTA, device health telemetry (id 243) and hardware identity stored, `sc-poller` removed. Deployment detail lives in `infrastructure.md`.
