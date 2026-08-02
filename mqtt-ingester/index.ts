@@ -50,8 +50,16 @@ async function handleMessage(topic: string, message: Buffer): Promise<void> {
     return;
   }
 
+  // Payload v3 (id 235 >= 3): id 238 carries MILLISECONDS; v2 carried whole
+  // seconds. Normalize once here so everything downstream is exact.
+  const intervalMs =
+    reading.intervalS == null
+      ? null
+      : (reading.payloadVersion ?? 2) >= 3
+        ? reading.intervalS
+        : reading.intervalS * 1000;
   // Flavor 1 (Step 4): turn raw accumulators into LAeq / realized_duty / Lmax-Lmin.
-  const f1 = computeFlavor1(reading);
+  const f1 = computeFlavor1({ ...reading, intervalMs });
   // Flavor 2: percentiles from the level histogram + band dB from the packed spectrum.
   const pct = reading.histRaw ? computePercentiles(reading.histRaw) : null;
   const bandsDb = reading.bandsRaw ? decodeBandsDb(reading.bandsRaw) : null;
@@ -91,7 +99,8 @@ async function handleMessage(topic: string, message: Buffer): Promise<void> {
         payloadVersion: reading.payloadVersion,
         energySum: reading.energySum,
         frameCount: reading.frameCount,
-        intervalS: reading.intervalS,
+        intervalS: intervalMs != null ? Math.round(intervalMs / 1000) : reading.intervalS,
+        intervalMs,
         maxEnergy: reading.maxEnergy,
         minEnergy: reading.minEnergy,
         laeq: f1?.laeq ?? null,
@@ -118,7 +127,7 @@ async function handleMessage(topic: string, message: Buffer): Promise<void> {
       f1 && f1.laeq != null
         ? `Stored reading from ${deviceId}: LAeq=${f1.laeq.toFixed(1)} dB, ` +
           `duty=${((f1.realizedDuty ?? 0) * 100).toFixed(1)}% ` +
-          `(frames=${reading.frameCount}, ${reading.intervalS}s)`
+          `(frames=${reading.frameCount}, ${intervalMs != null ? (intervalMs / 1000).toFixed(1) : reading.intervalS}s)`
         : `Stored reading from ${deviceId}: noise=${reading.noiseDba} dBA`
     );
   } catch (err) {

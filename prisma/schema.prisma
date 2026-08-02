@@ -68,6 +68,7 @@ model Reading {
   energySum      Float?  @map("energy_sum")
   frameCount     Int?    @map("frame_count")
   intervalS      Int?    @map("interval_s")
+  intervalMs     Int?    @map("interval_ms")
   maxEnergy      Float?  @map("max_energy")
   minEnergy      Float?  @map("min_energy")
   laeq           Float?

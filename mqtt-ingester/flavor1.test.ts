@@ -64,3 +64,19 @@ describe("parseSensorPayload — Flavor 1 accumulator ids", () => {
     expect(r.frameCount).toBeNull();
   });
 });
+
+describe("payload v3: millisecond intervals", () => {
+  it("computes duty from exact ms and differs from the truncated-seconds result", () => {
+    // bench4 real row: 1240 frames over a true 55.9s reported (v2) as 55s.
+    const v3 = computeFlavor1({ energySum: 1e9, frameCount: 1240, intervalMs: 55900 });
+    const v2 = computeFlavor1({ energySum: 1e9, frameCount: 1240, intervalS: 55 });
+    expect(v3?.realizedDuty).toBeCloseTo(1240 / ((44100 / 512) * 55.9), 8);
+    expect(v2?.realizedDuty).toBeCloseTo(1240 / ((44100 / 512) * 55), 8);
+    expect(v3!.realizedDuty!).toBeLessThan(v2!.realizedDuty!);
+  });
+
+  it("prefers ms over seconds when both are present", () => {
+    const c = computeFlavor1({ energySum: 1e9, frameCount: 100, intervalS: 27, intervalMs: 27400 });
+    expect(c?.realizedDuty).toBeCloseTo(100 / ((44100 / 512) * 27.4), 8);
+  });
+});

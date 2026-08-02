@@ -12,6 +12,9 @@ export interface Flavor1Accumulators {
   energySum?: number | null;
   frameCount?: number | null;
   intervalS?: number | null;
+  // Payload v3: exact elapsed ms. v2 only had whole seconds, whose truncation
+  // put up to ~3% of pure rounding error into every duty number.
+  intervalMs?: number | null;
   maxEnergy?: number | null;
   minEnergy?: number | null;
 }
@@ -37,9 +40,15 @@ export function computeFlavor1(a: Flavor1Accumulators): Flavor1Computed | null {
       ? 10 * Math.log10(a.energySum / a.frameCount) + CALIB_OFFSET_DB
       : null;
 
+  const seconds =
+    a.intervalMs != null && a.intervalMs > 0
+      ? a.intervalMs / 1000
+      : a.intervalS != null && a.intervalS > 0
+        ? a.intervalS
+        : null;
   const realizedDuty =
-    a.frameCount != null && a.intervalS != null && a.intervalS > 0
-      ? a.frameCount / (FRAMES_PER_SEC_REALTIME * a.intervalS)
+    a.frameCount != null && seconds != null
+      ? a.frameCount / (FRAMES_PER_SEC_REALTIME * seconds)
       : null;
 
   const lmaxEst =
