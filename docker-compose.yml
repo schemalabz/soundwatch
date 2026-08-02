@@ -7,7 +7,7 @@ services:
       - "${APP_PORT:-3000}:3000"
     environment:
       - DATABASE_URL=postgresql://soundwatch:${POSTGRES_PASSWORD}@postgres:5432/soundwatch
-      - MQTT_BROKER_URL=mqtt://mosquitto:1883
+      - MQTT_BROKER_URL=mqtt://mosquitto:1884
       - NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN=${NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN}
       - NEXT_PUBLIC_BASE_URL=${NEXT_PUBLIC_BASE_URL:-http://localhost:3000}
       - ADMIN_TOKEN=${ADMIN_TOKEN}
@@ -24,7 +24,7 @@ services:
       dockerfile: Dockerfile.ingester
     environment:
       - DATABASE_URL=postgresql://soundwatch:${POSTGRES_PASSWORD}@postgres:5432/soundwatch
-      - MQTT_BROKER_URL=mqtt://mosquitto:1883
+      - MQTT_BROKER_URL=mqtt://mosquitto:1884
     depends_on:
       postgres:
         condition: service_healthy
@@ -50,12 +50,11 @@ services:
       context: .
       dockerfile: Dockerfile.mosquitto
     ports:
+      # Only the device listener is published. 1884 (backend) stays internal to
+      # the compose network on purpose — see mosquitto/mosquitto.conf.
       - "${MQTT_PORT:-1883}:1883"
-      - "${MQTTS_PORT:-8883}:8883"
     volumes:
       - mosquitto_data:/mosquitto/data
-      - ./mosquitto/certs:/mosquitto/certs:ro
-      - ./mosquitto/passwd:/mosquitto/config/passwd:ro
     restart: unless-stopped
 
   postgres:

@@ -1,0 +1,18 @@
+# Access control for the public device listener (1883).
+#
+# Devices connect anonymously with client-id = their token. `%c` expands to the
+# client-id, so each device is confined to its own subtree.
+
+# A device may publish its readings/hello and receive its own commands, and
+# nothing else. A leaked token therefore exposes exactly one device: it cannot
+# be used to read another unit's data or to forge readings in its name.
+pattern readwrite device/sck/%c/#
+
+# Shared registration topic. On boot a device announces its unique hardware id
+# here (createInfo(): id / hw_ver / mac / firmware versions) so the backend can
+# link a token to a physical unit.
+#
+# Write-only, and spoofable by anyone who can reach the broker — that is
+# accepted. Treat inventory as a HINT to cross-check against what was
+# provisioned, never as proof of identity.
+pattern write device/inventory
