@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { checkAdminAuth } from "../auth";
+import { generateToken } from "@/lib/token";
 
 export async function GET(request: Request) {
   const authError = checkAdminAuth(request);
@@ -28,13 +29,31 @@ export async function POST(request: Request) {
   if (authError) return authError;
 
   const body = await request.json();
-  const { deviceId, name, latitude, longitude, address } = body;
+  const { name, latitude, longitude, address, isExperimental } = body;
+  let { deviceId } = body;
 
-  if (!deviceId || typeof deviceId !== "string") {
-    return NextResponse.json(
-      { error: "deviceId is required" },
-      { status: 400 }
-    );
+  // Minting: provisioning calls POST with no deviceId and gets a registered
+  // token back. Server-side generation is what makes every token that exists
+  // unique AND already registered — inventing them at a keyboard guarantees
+  // neither, and the token is the device's only credential.
+  if (deviceId === undefined || deviceId === null || deviceId === "") {
+    for (let attempt = 0; attempt < 10; attempt++) {
+      const candidate = generateToken();
+      if (!(await prisma.sensor.findUnique({ where: { deviceId: candidate } }))) {
+        deviceId = candidate;
+        break;
+      }
+    }
+    if (!deviceId) {
+      return NextResponse.json(
+        { error: "Could not mint a unique token; the token space may be exhausted" },
+        { status: 503 }
+      );
+    }
+  }
+
+  if (typeof deviceId !== "string") {
+    return NextResponse.json({ error: "deviceId must be a string" }, { status: 400 });
   }
 
   const existing = await prisma.sensor.findUnique({ where: { deviceId } });
@@ -46,7 +65,8 @@ export async function POST(request: Request) {
   }
 
   const sensor = await prisma.sensor.create({
-    data: { deviceId, name, latitude, longitude, address },
+    data: { deviceId, name, latitude, longitude, address,
+            isExperimental: isExperimental === true },
   });
 
   return NextResponse.json(sensor, { status: 201 });
