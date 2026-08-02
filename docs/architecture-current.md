@@ -70,12 +70,52 @@ The device is **integer-only per frame** (fixed-point FFT power path); the only 
 | group | columns | populated by |
 |---|---|---|
 | identity/time | `id`, `sensor_id`, `recorded_at` (device clock — when the sound happened), `received_at` (server insert time — distinguishes store-and-forward replays from live data) | ingester |
-| stock environment | `noise_dba`, `temperature`, `humidity`, `light_lux`, `pressure_pa`, `uv_a/b/c`, `pm1/25/4/10`, `pn_05/10/25/40/100`, `tps`, `battery`, `rssi`, `sd_card` | parsed 1:1 from stock ids |
+| stock environment | `noise_dba`, `temperature`, `humidity`, `light_lux`, `pressure_pa`, `uv_a/b/c`, `pm1/25/4/10`, `pn_05/10/25/40/100`, `tps`, `battery`, `rssi`, `sd_card` | parsed 1:1 from stock ids — units, cadence and validated ranges in §4.1 |
 | Flavor 1 raw accumulators | `payload_version`, `energy_sum`, `frame_count`, `interval_s`, `max_energy`, `min_energy` | device (verbatim) |
 | Flavor 1 computed | `laeq` = 10·log₁₀(energy_sum/frame_count) + calib offset (placeholder 0), `realized_duty` = frame_count/(86.13·interval_s), `lmax_est`, `lmin_est` | ingester (`flavor1.ts`) |
 | Flavor 2 spectrum | `hist_raw`, `bands_raw` (packed strings kept verbatim for reprocessing), `l10/l50/l90` (exceedance levels from the histogram, interpolated), `bands_db` (JSONB, 21 dB values) | ingester (`flavor2.ts`) |
 
 Index: `(sensor_id, recorded_at DESC)`. Levels are **device-dB (uncalibrated)** until Flavor 3 (calibration vs a reference meter) sets the real offset.
+
+### 4.1 Environmental measurements — units, cadence, validated ranges
+
+The device is not noise-only: it carries the full SmartCitizen sensor suite, and every
+one of those values lands in the same row as the acoustic data. Ranges below are from a
+**19h44m continuous run** (`bench2`, 2082 rows, 2026-08-01 13:55 → 08-02 09:39) and are
+what "correct" looks like for an indoor unit.
+
+| id | column | unit | cadence | observed range | notes |
+|---|---|---|---|---|---|
+| 55 | `temperature` | °C | every interval | 29.1 – 33.2 | reads slightly high: board self-heating |
+| 56 | `humidity` | % RH | every interval | 37.1 – 41.9 | |
+| 58 | `pressure_pa` | **Pa** | every interval | 100150 – 100350 | device sends **kPa**; ingester ×1000 |
+| 14 | `light_lux` | lux | every **3rd** interval (~90 s) | 0 – 844 | full diurnal swing — a stuck value is the failure to watch for |
+| 10 | `battery` | % | every interval | 96 – 99 | voltage→lookup table, **not** coulomb counting; see the battery caveat below |
+| 220 | `rssi` | dBm | every interval | −63 – −51 | |
+| 221 | `sd_card` | 0/1 | every interval | 1 | card present |
+| 214–216 | `uv_a/b/c` | µW/cm² | every interval | ~0.15 indoors | near zero without direct sun |
+| 193–202 | `pm1/25/4/10`, `pn_05/10/25/40/100`, `tps` | µg/m³, #/0.1 L, µm | configured every **5th** interval (~150 s) | PM2.5 3.2 – 9.1 | ⚠️ **observed in only ~10 % of rows, half the configured rate** |
+| 53 | `noise_dba` | dB | — | always null | stock one-shot snapshot, **deliberately disabled** on Flavor ≥1 |
+
+**Two structural caveats worth knowing before trusting these:**
+
+1. **They are single instantaneous samples, not aggregates.** Only the noise path
+   accumulates across the interval. Every environmental value is one ~1 ms reading
+   presented as the value for the whole interval — architecturally the same thing the
+   stock noise measurement did before Flavor 1 replaced it. That is fine for slow-moving
+   quantities (temperature, humidity, pressure) but understates episodic ones
+   (light, particulates, UV), where peaks are missed entirely.
+2. **There is no per-sensor failure reporting.** The acoustic path reports
+   `realized_duty` and `capFails`, so you know how much of the sound it actually heard.
+   Nothing equivalent exists for the other sensors: a read that silently fails is
+   indistinguishable from one that never was scheduled. The particulate shortfall above
+   was only detectable by counting nulls in the database — which is exactly the blind
+   spot that argues for a per-sensor read-failure counter.
+
+`battery` deserves its own warning: `battery.present` is inferred from the charger IC's
+"VBAT below system minimum" bit and `percent()` is a voltage→table lookup, so an absent,
+flat or disconnected cell can all report a high percentage while on USB power. Treat it
+as an indicator, not a measurement.
 
 ## 5. Measurement architecture — why the accumulator design
 
