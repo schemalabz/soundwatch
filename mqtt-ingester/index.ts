@@ -4,11 +4,14 @@ import { extractDeviceId, parseSensorPayload } from "./parser";
 import { computeFlavor1 } from "./flavor1";
 import { computePercentiles, decodeBandsDb } from "./flavor2";
 import { decodeDiagnostics } from "./diagnostics";
+import { parseFrameLogChunk } from "./framelog";
 
 const MQTT_BROKER_URL = process.env.MQTT_BROKER_URL || "mqtt://localhost:1883";
 // Stock SmartCitizen firmware readings topic: device/sck/<token>/readings/raw.
 // The parser bridges the stock {t,<id>:value} payload to typed columns.
 const READINGS_TOPIC = "device/sck/+/readings/raw";
+// SD-path v1: devices answer framelog pull requests on this topic.
+const FRAMELOG_TOPIC = "device/sck/+/framelog";
 // INERT with stock firmware: stock publishes device/sck/<token>/{hello,info},
 // never `/status`. Kept for now; a future liveness feature would use the
 // hello/info topics instead. handleStatusMessage below is currently unreached.
@@ -201,13 +204,34 @@ async function handleInventoryMessage(topic: string, message: Buffer): Promise<v
   }
 }
 
+async function handleFrameLogMessage(topic: string, message: Buffer): Promise<void> {
+  const deviceId = topic.split("/")[2];
+  if (!deviceId) return;
+  const chunk = parseFrameLogChunk(message.toString());
+  if (!chunk) {
+    console.warn(`framelog: unparseable chunk from ${deviceId}`);
+    return;
+  }
+  if (chunk.kind === "eof") {
+    console.log(`framelog: ${deviceId} EOF, file size ${chunk.size} bytes`);
+    return;
+  }
+  // Chunks are immutable raw file bytes: first write wins, replays are no-ops.
+  await prisma.frameLogChunk.upsert({
+    where: { deviceId_offset: { deviceId, offset: chunk.offset } },
+    update: {},
+    create: { deviceId, offset: chunk.offset, data: chunk.data },
+  });
+  console.log(`framelog: ${deviceId} +${chunk.data.length}B @ ${chunk.offset}`);
+}
+
 function main(): void {
   console.log(`Connecting to MQTT broker at ${MQTT_BROKER_URL}...`);
   const client = mqtt.connect(MQTT_BROKER_URL);
 
   client.on("connect", () => {
     console.log("Connected to MQTT broker");
-    client.subscribe([READINGS_TOPIC, STATUS_TOPIC, INVENTORY_TOPIC, INFO_TOPIC], (err) => {
+    client.subscribe([READINGS_TOPIC, STATUS_TOPIC, INVENTORY_TOPIC, INFO_TOPIC, FRAMELOG_TOPIC], (err) => {
       if (err) {
         console.error("Failed to subscribe:", err);
         process.exit(1);
@@ -220,6 +244,10 @@ function main(): void {
     if (topic === INVENTORY_TOPIC || INFO_TOPIC_REGEX.test(topic)) {
       handleInventoryMessage(topic, message).catch((err) => {
         console.error("Unhandled error in inventory handler:", err);
+      });
+    } else if (topic.endsWith("/framelog")) {
+      handleFrameLogMessage(topic, message).catch((err) => {
+        console.error("Unhandled error in framelog handler:", err);
       });
     } else if (topic.endsWith("/status")) {
       handleStatusMessage(topic, message).catch((err) => {

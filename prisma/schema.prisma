@@ -24,6 +24,12 @@ model Sensor {
   // token change and relocation — the only identifier that answers "which
   // physical box is this?". Used to catch units swapped during installation.
   hardwareId        String?   @map("hardware_id")
+  // Setup-AP name (Smartcitizen<last4 of softAP MAC>) — recorded at provisioning
+  // because it cannot be derived from anything else, and the installer needs it
+  // to join the right box when several are on a table.
+  apName            String?   @map("ap_name")
+  provisionedAt     DateTime? @map("provisioned_at")
+  installedAt       DateTime? @map("installed_at")
   // Bench/experimental units: keep them out of public maps and aggregates.
   isExperimental    Boolean   @default(false) @map("is_experimental")
   createdAt         DateTime  @default(now()) @map("created_at")
@@ -100,4 +106,17 @@ model Reading {
 
   @@index([sensorId, recordedAt(sort: Desc)], map: "idx_readings_sensor_time")
   @@map("readings")
+}
+
+// SD-path v1: raw FRAMELOG.CSV chunks uplinked from devices, keyed by byte
+// offset — resumable, idempotent; reassembly = string_agg(data order by offset).
+model FrameLogChunk {
+  id         BigInt   @id @default(autoincrement())
+  deviceId   String   @map("device_id")
+  offset     Int
+  data       String
+  receivedAt DateTime @default(now()) @map("received_at") @db.Timestamp(3)
+
+  @@unique([deviceId, offset])
+  @@map("frame_log_chunks")
 }
