@@ -20,6 +20,12 @@ model Sensor {
   readingIntervalS  Int       @default(60) @map("reading_interval_s")
   isActive          Boolean   @default(true) @map("is_active")
   lastSeenAt        DateTime? @map("last_seen_at")
+  // Unique SAMD21 chip id, self-reported on device/inventory. Survives reflash,
+  // token change and relocation — the only identifier that answers "which
+  // physical box is this?". Used to catch units swapped during installation.
+  hardwareId        String?   @map("hardware_id")
+  // Bench/experimental units: keep them out of public maps and aggregates.
+  isExperimental    Boolean   @default(false) @map("is_experimental")
   createdAt         DateTime  @default(now()) @map("created_at")
 
   readings Reading[]
@@ -76,6 +82,17 @@ model Reading {
   l50            Float?
   l90            Float?
   bandsDb        Json?   @map("bands_db")
+  // Device health telemetry, unpacked from id 243. The only window into a
+  // deployed unit — no site access, no SAM-side OTA.
+  deviceUptimeS  Int?    @map("device_uptime_s")
+  freeHeapBytes  Int?    @map("free_heap_bytes")
+  // SAMD21 RCAUSE. 32 = watchdog. 64 = "SYST", which covers BOTH a software
+  // reset and a power cycle (the UF2 bootloader resets before the app runs),
+  // so 64 cannot distinguish "lost power" from "reset itself".
+  resetCause     Int?    @map("reset_cause")
+  wifiConnects   Int?    @map("wifi_connects")
+  publishFails   Int?    @map("publish_fails")
+  captureFails   Int?    @map("capture_fails")
 
   sensor Sensor @relation(fields: [sensorId], references: [id])
 
