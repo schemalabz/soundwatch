@@ -11,6 +11,7 @@ export async function GET() {
         select: {
           recordedAt: true,
           noiseDba: true,
+          laeq: true,
           temperature: true,
           humidity: true,
           lightLux: true,
@@ -46,7 +47,17 @@ export async function GET() {
     address: sensor.address,
     isActive: sensor.isActive,
     lastSeenAt: sensor.lastSeenAt,
-    latestReading: sensor.readings[0] ?? null,
+    // Soundwatch firmware ships the stock single-snapshot Noise dBA (id 53)
+    // DISABLED and emits continuous accumulators instead, which the ingester
+    // turns into laeq. Surface laeq under the existing noiseDba key so every
+    // noise-facing view keeps working; laeq is the better number anyway (an
+    // energy average over ~650 frames, not one 11.6ms snapshot).
+    latestReading: sensor.readings[0]
+      ? {
+          ...sensor.readings[0],
+          noiseDba: sensor.readings[0].noiseDba ?? sensor.readings[0].laeq,
+        }
+      : null,
   }));
 
   return NextResponse.json(result);

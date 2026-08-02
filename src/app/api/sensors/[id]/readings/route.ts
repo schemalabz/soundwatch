@@ -36,6 +36,7 @@ export async function GET(
     select: {
       recordedAt: true,
       noiseDba: true,
+      laeq: true,
       temperature: true,
       humidity: true,
       lightLux: true,
@@ -63,6 +64,8 @@ export async function GET(
     sensorId: id,
     deviceId: sensor.deviceId,
     count: readings.length,
-    readings,
+    // See /api/sensors: the Soundwatch firmware disables the stock Noise dBA
+    // sensor, so fall back to laeq to keep existing charts working.
+    readings: readings.map((r) => ({ ...r, noiseDba: r.noiseDba ?? r.laeq })),
   });
 }
