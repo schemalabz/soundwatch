@@ -15,4 +15,9 @@ COPY src/types ./src/types
 COPY tsconfig.json ./
 COPY vitest.config.ts ./
 
-CMD ["npx", "tsx", "mqtt-ingester/index.ts"]
+# Apply pending migrations before starting. Without this a deploy brings up code
+# that writes columns the database does not have yet — every insert fails and the
+# ingester silently stores nothing. The ingester is the only writer, so it is the
+# natural place to own schema convergence; prisma takes an advisory lock, so a
+# restart loop cannot corrupt state.
+CMD ["sh", "-c", "npx prisma migrate deploy && exec npx tsx mqtt-ingester/index.ts"]
