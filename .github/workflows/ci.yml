@@ -74,7 +74,6 @@ jobs:
         include:
           - { name: app, file: Dockerfile }
           - { name: ingester, file: Dockerfile.ingester }
-          - { name: sc-poller, file: Dockerfile.sc-poller }
           - { name: mosquitto, file: Dockerfile.mosquitto }
     steps:
       - uses: actions/checkout@v4

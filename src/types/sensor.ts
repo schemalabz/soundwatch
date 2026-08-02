@@ -38,7 +38,7 @@ export type SensorField = keyof typeof SENSOR_FIELD_MAP;
 // Stock SmartCitizen firmware publishes readings keyed by NUMERIC metric id
 // (topic `device/sck/<token>/readings/raw`, payload `{t,<id>:value}`).
 // This maps those ids -> our ParsedReading/Prisma field names.
-// NOTE: sc-poller/index.ts has an equivalent map (SENSOR_MAP) that predates
+// NOTE: this map predates
 // this one — candidate for future de-duplication onto this shared definition.
 export const STOCK_SENSOR_ID_MAP: Record<number, string> = {
   53: "noiseDba", // Noise Level (dBA)

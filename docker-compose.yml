@@ -32,19 +32,6 @@ services:
         condition: service_started
     restart: unless-stopped
 
-  sc-poller:
-    build:
-      context: .
-      dockerfile: Dockerfile.sc-poller
-    environment:
-      - DATABASE_URL=postgresql://soundwatch:${POSTGRES_PASSWORD}@postgres:5432/soundwatch
-      - SC_DEVICES=${SC_DEVICES}
-      - POLL_INTERVAL_S=${POLL_INTERVAL_S:-60}
-    depends_on:
-      postgres:
-        condition: service_healthy
-    restart: unless-stopped
-
   mosquitto:
     build:
       context: .
