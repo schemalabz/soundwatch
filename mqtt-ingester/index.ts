@@ -104,6 +104,7 @@ async function handleMessage(topic: string, message: Buffer): Promise<void> {
         wifiConnects: diag?.wifiConnects ?? null,
         publishFails: diag?.publishFails ?? null,
         captureFails: diag?.captureFails ?? null,
+        i2sReinits: diag?.i2sReinits ?? null,
       },
     });
 

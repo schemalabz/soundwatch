@@ -1,5 +1,8 @@
 // Device health telemetry — packed id 243, emitted by the fleet-survivability
-// firmware as "uptime_s-freeheap-rcause-wificonnects-pubfails-capfails".
+// firmware as "uptime_s-freeheap-rcause-wificonnects-pubfails-capfails" and,
+// from the Approach-A build on, with a 7th field: "-i2sreinits" (cumulative
+// mid-interval I2S recoveries). Decoding is index-based, so older payloads
+// simply leave newer fields null.
 //
 // This is the ONLY window into a deployed unit: there is no site access and no
 // SAM-side OTA. If the backend drops this, the fleet is unobservable — you
@@ -13,6 +16,7 @@ export interface Diagnostics {
   wifiConnects: number | null; // cumulative WiFi associations — a climbing count means churn
   publishFails: number | null; // cumulative failed publishes
   captureFails: number | null; // cumulative dropped audio frames (I2S could not deliver in time)
+  i2sReinits: number | null; // cumulative mid-interval I2S recoveries (Approach A; null pre-A firmware)
 }
 
 const EMPTY: Diagnostics = {
@@ -22,6 +26,7 @@ const EMPTY: Diagnostics = {
   wifiConnects: null,
   publishFails: null,
   captureFails: null,
+  i2sReinits: null,
 };
 
 /**
@@ -56,6 +61,7 @@ export function decodeDiagnostics(raw: string | null | undefined): Diagnostics |
     wifiConnects: num(3),
     publishFails: num(4),
     captureFails: num(5),
+    i2sReinits: num(6),
   };
 
   // All-null means the field carried nothing usable; treat as absent.

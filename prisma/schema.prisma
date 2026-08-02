@@ -93,6 +93,7 @@ model Reading {
   wifiConnects   Int?    @map("wifi_connects")
   publishFails   Int?    @map("publish_fails")
   captureFails   Int?    @map("capture_fails")
+  i2sReinits     Int?    @map("i2s_reinits")
 
   sensor Sensor @relation(fields: [sensorId], references: [id])
 

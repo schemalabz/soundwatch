@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { decodeDiagnostics, wasWatchdogReset } from "./diagnostics";
 
 describe("decodeDiagnostics", () => {
-  it("decodes a real payload from the bench fleet", () => {
+  it("decodes a real payload from the bench fleet (pre-A: 6 fields, reinits null)", () => {
     // Captured from bench2: uptime-heap-rcause-wifi-pubfail-capfail
     const d = decodeDiagnostics("255-3132-64-1-0-2778");
     expect(d).toEqual({
@@ -12,7 +12,14 @@ describe("decodeDiagnostics", () => {
       wifiConnects: 1,
       publishFails: 0,
       captureFails: 2778,
+      i2sReinits: null,
     });
+  });
+
+  it("decodes the Approach-A payload (7th field: cumulative I2S reinits)", () => {
+    const d = decodeDiagnostics("810-7944-64-1-0-41-13");
+    expect(d?.captureFails).toBe(41);
+    expect(d?.i2sReinits).toBe(13);
   });
 
   it("returns null when the field is absent (older firmware omits id 243)", () => {
