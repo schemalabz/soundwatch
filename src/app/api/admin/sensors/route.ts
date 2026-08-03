@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { checkAdminAuth } from "../auth";
 import { generateToken } from "@/lib/token";
+import { computeStage } from "@/lib/locations";
 
 export async function GET(request: Request) {
   const authError = checkAdminAuth(request);
@@ -9,6 +10,7 @@ export async function GET(request: Request) {
 
   const sensors = await prisma.sensor.findMany({
     orderBy: { createdAt: "desc" },
+    include: { plannedLocation: { select: { name: true } } },
   });
 
   const now = new Date();
@@ -19,6 +21,10 @@ export async function GET(request: Request) {
         ? "online"
         : "offline"
       : "never_seen",
+    // Lifecycle stage: unlike `status`, this distinguishes a provisioned unit
+    // sitting in a box (which HAS a lastSeenAt from its office prove phase)
+    // from a deployed unit that died.
+    stage: computeStage(sensor, now),
   }));
 
   return NextResponse.json(result);

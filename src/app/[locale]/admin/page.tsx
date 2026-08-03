@@ -17,7 +17,21 @@ interface SensorWithStatus {
   lastSeenAt: string | null;
   createdAt: string;
   status: "online" | "offline" | "never_seen";
+  stage: "minted" | "in_box" | "installed_live" | "installed_silent";
+  hardwareId: string | null;
+  apName: string | null;
+  provisionedAt: string | null;
+  installedAt: string | null;
+  isExperimental: boolean;
+  plannedLocation: { name: string } | null;
 }
+
+const STAGE_BADGE: Record<SensorWithStatus["stage"], { label: string; cls: string }> = {
+  minted: { label: "minted", cls: "bg-[#e7e5e4] text-[#57534e]" },
+  in_box: { label: "in box", cls: "bg-[#fef3c7] text-[#b45309]" },
+  installed_live: { label: "live", cls: "bg-[#dcfce7] text-[#15803d]" },
+  installed_silent: { label: "silent", cls: "bg-[#fee2e2] text-[#b91c1c]" },
+};
 
 interface EditForm {
   name: string;
@@ -37,6 +51,7 @@ export default function AdminPage() {
   const [editingSensor, setEditingSensor] = useState<SensorWithStatus | null>(null);
   const [editForm, setEditForm] = useState<EditForm | null>(null);
   const [saving, setSaving] = useState(false);
+  const [showExperimental, setShowExperimental] = useState(false);
 
   async function fetchSensors(adminToken: string) {
     const res = await fetch("/api/admin/sensors", {
@@ -147,9 +162,9 @@ export default function AdminPage() {
     );
   }
 
-  const online = sensors.filter((s) => s.status === "online").length;
-  const offline = sensors.filter((s) => s.status === "offline").length;
-  const neverSeen = sensors.filter((s) => s.status === "never_seen").length;
+  const visibleSensors = sensors.filter((s) => showExperimental || !s.isExperimental);
+  const count = (stage: SensorWithStatus["stage"]) =>
+    visibleSensors.filter((s) => s.stage === stage).length;
 
   return (
     <div className="max-w-6xl mx-auto p-6">
@@ -160,10 +175,20 @@ export default function AdminPage() {
           </Link>
           <h1 className="text-2xl font-bold mt-2">Sensor Admin</h1>
         </div>
-        <div className="flex gap-4 text-sm font-medium">
-          <span className="text-[#22c55e]">{online} online</span>
-          <span className="text-[#ef4444]">{offline} offline</span>
-          <span className="text-muted">{neverSeen} never seen</span>
+        <div className="flex items-center gap-4 text-sm font-medium">
+          <span className="text-muted">{count("minted")} minted</span>
+          <span className="text-[#b45309]">{count("in_box")} in box</span>
+          <span className="text-[#22c55e]">{count("installed_live")} live</span>
+          <span className="text-[#ef4444]">{count("installed_silent")} silent</span>
+          <label className="flex items-center gap-1.5 text-muted font-normal cursor-pointer">
+            <input
+              type="checkbox"
+              checked={showExperimental}
+              onChange={(e) => setShowExperimental(e.target.checked)}
+              className="rounded border-border"
+            />
+            show experimental
+          </label>
         </div>
       </div>
 
@@ -172,16 +197,18 @@ export default function AdminPage() {
           <table className="w-full text-sm">
             <thead className="bg-light border-b border-border">
               <tr>
-                <th className="text-left p-3 text-muted font-medium">Status</th>
+                <th className="text-left p-3 text-muted font-medium">Stage</th>
                 <th className="text-left p-3 text-muted font-medium">Device ID</th>
+                <th className="text-left p-3 text-muted font-medium">HW</th>
+                <th className="text-left p-3 text-muted font-medium">AP</th>
+                <th className="text-left p-3 text-muted font-medium">Site</th>
                 <th className="text-left p-3 text-muted font-medium">Name</th>
-                <th className="text-left p-3 text-muted font-medium">Address</th>
                 <th className="text-left p-3 text-muted font-medium">Interval</th>
                 <th className="text-left p-3 text-muted font-medium">Last Seen</th>
               </tr>
             </thead>
             <tbody>
-              {sensors.map((sensor) => (
+              {visibleSensors.map((sensor) => (
                 <tr
                   key={sensor.id}
                   onClick={() => openEdit(sensor)}
@@ -193,18 +220,21 @@ export default function AdminPage() {
                 >
                   <td className="p-3">
                     <span
-                      className={`inline-block w-2.5 h-2.5 rounded-full ${
-                        sensor.status === "online"
-                          ? "bg-[#22c55e]"
-                          : sensor.status === "offline"
-                            ? "bg-[#ef4444]"
-                            : "bg-[#a8a29e]"
-                      }`}
-                    />
+                      className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${STAGE_BADGE[sensor.stage].cls}`}
+                    >
+                      {STAGE_BADGE[sensor.stage].label}
+                    </span>
                   </td>
                   <td className="p-3 font-mono text-xs">{sensor.deviceId}</td>
+                  <td className="p-3 font-mono text-xs">{sensor.hardwareId ? sensor.hardwareId.slice(-4) : "—"}</td>
+                  <td className="p-3 text-muted text-xs">{sensor.apName || "—"}</td>
+                  <td className="p-3">
+                    {sensor.plannedLocation?.name ??
+                      (sensor.latitude != null
+                        ? <span className="text-[#b45309]">unplanned</span>
+                        : "—")}
+                  </td>
                   <td className="p-3">{sensor.name || "—"}</td>
-                  <td className="p-3 text-muted">{sensor.address || "—"}</td>
                   <td className="p-3">{sensor.readingIntervalS}s</td>
                   <td className="p-3 text-muted">
                     {sensor.lastSeenAt
@@ -230,6 +260,19 @@ export default function AdminPage() {
             </div>
 
             <p className="font-mono text-xs text-muted">{editingSensor.deviceId}</p>
+
+            <div className="text-xs text-muted space-y-1">
+              {editingSensor.hardwareId && (
+                <p>hardware <span className="font-mono">{editingSensor.hardwareId}</span></p>
+              )}
+              {editingSensor.apName && <p>setup AP {editingSensor.apName}</p>}
+              {editingSensor.provisionedAt && (
+                <p>provisioned {new Date(editingSensor.provisionedAt).toLocaleString()}</p>
+              )}
+              {editingSensor.installedAt && (
+                <p>installed {new Date(editingSensor.installedAt).toLocaleString()}</p>
+              )}
+            </div>
 
             <label className="block">
               <span className="text-xs text-muted">Name</span>
