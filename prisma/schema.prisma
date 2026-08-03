@@ -30,6 +30,11 @@ model Sensor {
   apName            String?   @map("ap_name")
   provisionedAt     DateTime? @map("provisioned_at")
   installedAt       DateTime? @map("installed_at")
+  // Which planned site this unit was confirmed at. Null + coordinates set
+  // means an unplanned install (recorded, flagged in admin). Copy-on-bind:
+  // name/address are copied at install time, not read through this relation.
+  plannedLocationId String?          @map("planned_location_id")
+  plannedLocation   PlannedLocation? @relation(fields: [plannedLocationId], references: [id])
   // Bench/experimental units: keep them out of public maps and aggregates.
   isExperimental    Boolean   @default(false) @map("is_experimental")
   createdAt         DateTime  @default(now()) @map("created_at")
@@ -37,6 +42,26 @@ model Sensor {
   readings Reading[]
 
   @@map("sensors")
+}
+
+// Planned deployment sites, imported from the operator's spreadsheet.
+// `key` is the stable import identity: re-imports upsert by key and never
+// duplicate. Sites are retired with isActive=false, never deleted, so
+// historical bindings keep their FK.
+model PlannedLocation {
+  id        String   @id @default(uuid())
+  key       String   @unique
+  name      String
+  latitude  Float
+  longitude Float
+  address   String?
+  notes     String?
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  sensors   Sensor[]
+
+  @@map("planned_locations")
 }
 
 model Reading {
