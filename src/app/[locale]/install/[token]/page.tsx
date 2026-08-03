@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { use } from "react";
+import SitePicker from "@/components/install/SitePicker";
 
 // Installer-facing page, reached by scanning the QR on the box. Three jobs:
 // identify the unit, capture where it ended up, and prove it is actually
@@ -100,19 +101,27 @@ export default function InstallPage({ params }: { params: Promise<{ token: strin
 
       <h2 style={{ fontSize: 17, margin: "0 0 6px" }}>Where is it installed?</h2>
       {s?.hasLocation ? (
-        <p style={{ fontSize: 14, color: "#444" }}>
-          Recorded{ s.sensor?.address ? `: ${s.sensor.address}` : "" }
-          {s.sensor?.latitude != null && <> ({s.sensor.latitude.toFixed(5)}, {s.sensor!.longitude!.toFixed(5)})</>}
-        </p>
+        <>
+          <p style={{ fontSize: 14, color: "#444" }}>
+            Recorded{ s.sensor?.address ? `: ${s.sensor.address}` : "" }
+            {s.sensor?.latitude != null && <> ({s.sensor.latitude.toFixed(5)}, {s.sensor!.longitude!.toFixed(5)})</>}
+            {s.sensor?.name ? <> — <b>{s.sensor.name}</b></> : null}
+          </p>
+          <button onClick={() => saveLocation(true)} disabled={busy}
+            style={{ font: "inherit", fontSize: 16, padding: "12px 18px", borderRadius: 10,
+                     border: "1px solid #ccc", background: "#fff", width: "100%" }}>
+            {busy ? "Saving…" : "Update location to here"}
+          </button>
+          {msg && <p style={{ fontSize: 14, marginTop: 10 }}>{msg}</p>}
+        </>
       ) : (
-        <p style={{ fontSize: 14, color: "#444" }}>Stand next to the unit and tap below.</p>
+        <>
+          <p style={{ fontSize: 14, color: "#444" }}>
+            Pick the site you are standing at. Allowing location access sorts the nearest first.
+          </p>
+          <SitePicker token={token} onSaved={load} />
+        </>
       )}
-      <button onClick={() => saveLocation(s?.hasLocation === true)} disabled={busy}
-        style={{ font: "inherit", fontSize: 16, padding: "12px 18px", borderRadius: 10,
-                 border: "1px solid #ccc", background: "#fff", width: "100%" }}>
-        {busy ? "Saving…" : s?.hasLocation ? "Update location to here" : "Use my current location"}
-      </button>
-      {msg && <p style={{ fontSize: 14, marginTop: 10 }}>{msg}</p>}
 
       <p style={{ fontSize: 13, color: "#666", marginTop: 24 }}>
         Please do not leave until this page shows <b style={{ color: "#0ca30c" }}>Receiving data</b>.
