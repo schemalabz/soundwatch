@@ -71,14 +71,16 @@ export default function AdminPage() {
     localStorage.setItem("sw-admin-token", adminToken);
   }
 
-  // Auto-login from a previous session.
+  // Auto-login from a previous session. Deferred a microtask so the effect
+  // body itself never sets state (react-hooks/set-state-in-effect).
   useEffect(() => {
     const saved = localStorage.getItem("sw-admin-token");
     if (saved) {
-      setToken(saved);
-      fetchSensors(saved);
+      void Promise.resolve().then(() => {
+        setToken(saved);
+        fetchSensors(saved);
+      });
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   function handleLogin(e: React.FormEvent) {

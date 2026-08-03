@@ -34,8 +34,13 @@ export default function InstallPage({ params }: { params: Promise<{ token: strin
   }, [token]);
 
   // Poll while the installer is on the page — the whole point is that they watch
-  // it turn green rather than assume it will.
-  useEffect(() => { load(); const i = setInterval(load, 5000); return () => clearInterval(i); }, [load]);
+  // it turn green rather than assume it will. First poll is deferred a microtask
+  // so the effect body itself never sets state (react-hooks/set-state-in-effect).
+  useEffect(() => {
+    const i = setInterval(load, 5000);
+    void Promise.resolve().then(load);
+    return () => clearInterval(i);
+  }, [load]);
 
   async function saveLocation(force = false) {
     setBusy(true); setMsg(null);

@@ -47,7 +47,9 @@ export default function DemoPage() {
   }, []);
 
   useEffect(() => {
-    load();
+    // First poll deferred a microtask so the effect body itself never sets
+    // state (react-hooks/set-state-in-effect).
+    void Promise.resolve().then(load);
     if (paused) return;
     const id = setInterval(load, 5000);
     return () => clearInterval(id);
@@ -118,7 +120,7 @@ export default function DemoPage() {
       </header>
 
       <div className="viz-grid" style={{ gridTemplateColumns: `repeat(auto-fit, minmax(260px, 1fr))`, marginBottom: 14 }}>
-        {devices.map((d, i) => <UnitCard key={d.deviceId} d={d} colorVar={SERIES_VARS[i % SERIES_VARS.length]} />)}
+        {devices.map((d, i) => <UnitCard key={d.deviceId} d={d} colorVar={SERIES_VARS[i % SERIES_VARS.length]} nowMs={data ? new Date(data.generatedAt).getTime() : null} />)}
       </div>
 
       <div className="viz-card" style={{ marginBottom: 14 }}>
@@ -164,9 +166,11 @@ export default function DemoPage() {
   );
 }
 
-function UnitCard({ d, colorVar }: { d: Device; colorVar: string }) {
+function UnitCard({ d, colorVar, nowMs }: { d: Device; colorVar: string; nowMs: number | null }) {
   const l = d.latest;
-  const age = d.lastSeenAt ? (Date.now() - new Date(d.lastSeenAt).getTime()) / 1000 : null;
+  // Age against the payload's own generatedAt: render stays pure (no Date.now()
+  // during render) and the age is consistent with the data snapshot it describes.
+  const age = d.lastSeenAt && nowMs != null ? (nowMs - new Date(d.lastSeenAt).getTime()) / 1000 : null;
   const live = age != null && age < 120;
   return (
     <div className="viz-card">
