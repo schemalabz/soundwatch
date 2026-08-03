@@ -123,6 +123,7 @@ async function handleMessage(topic: string, message: Buffer): Promise<void> {
         publishFails: diag?.publishFails ?? null,
         captureFails: diag?.captureFails ?? null,
         i2sReinits: diag?.i2sReinits ?? null,
+        ghostRefusals: diag?.ghostRefusals ?? null,
       },
     });
 

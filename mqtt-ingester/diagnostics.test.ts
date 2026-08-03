@@ -13,6 +13,7 @@ describe("decodeDiagnostics", () => {
       publishFails: 0,
       captureFails: 2778,
       i2sReinits: null,
+      ghostRefusals: null,
     });
   });
 
@@ -20,6 +21,12 @@ describe("decodeDiagnostics", () => {
     const d = decodeDiagnostics("810-7944-64-1-0-41-13");
     expect(d?.captureFails).toBe(41);
     expect(d?.i2sReinits).toBe(13);
+    expect(d?.ghostRefusals).toBeNull();
+  });
+
+  it("decodes the ghost-tripwire payload (8th field: refused blanking syncs)", () => {
+    const d = decodeDiagnostics("810-7944-64-1-0-41-13-1");
+    expect(d?.ghostRefusals).toBe(1);
   });
 
   it("returns null when the field is absent (older firmware omits id 243)", () => {

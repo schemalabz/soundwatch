@@ -17,6 +17,7 @@ export interface Diagnostics {
   publishFails: number | null; // cumulative failed publishes
   captureFails: number | null; // cumulative dropped audio frames (I2S could not deliver in time)
   i2sReinits: number | null; // cumulative mid-interval I2S recoveries (Approach A; null pre-A firmware)
+  ghostRefusals: number | null; // blanking ESP config syncs refused (config-ghost tripwire; null pre-guard)
 }
 
 const EMPTY: Diagnostics = {
@@ -27,6 +28,7 @@ const EMPTY: Diagnostics = {
   publishFails: null,
   captureFails: null,
   i2sReinits: null,
+  ghostRefusals: null,
 };
 
 /**
@@ -62,6 +64,7 @@ export function decodeDiagnostics(raw: string | null | undefined): Diagnostics |
     publishFails: num(4),
     captureFails: num(5),
     i2sReinits: num(6),
+    ghostRefusals: num(7),
   };
 
   // All-null means the field carried nothing usable; treat as absent.
