@@ -5,10 +5,12 @@ import { randomInt } from "crypto";
 // confines a client to device/sck/%c/#, so a leaked token exposes exactly one
 // device — but it also means a guessable token is a real problem.
 //
-// Length is capped by firmware: Config.h declares `char token[7]`, so 6 usable
-// characters. Widening it is a firmware change and must happen before the freeze;
-// this constant is the single place to update on this side when it does.
-export const TOKEN_LENGTH = 6;
+// Width decided 2026-08-02: 16 chars. Firmware >= 9267e65 declares
+// `char token[17]` on both SAM and ESP and the portal accepts 6-16, so 16-char
+// minting is safe for every newly provisioned unit. Validation stays 6..16
+// because the bench fleet keeps its legacy 6-char identities.
+export const TOKEN_LENGTH = 16;
+export const TOKEN_MIN_LENGTH = 6;
 
 // Ambiguity is a field problem, not a theoretical one: tokens get printed on
 // labels and read aloud over the phone. Excludes 0/O, 1/I/l.
@@ -21,5 +23,10 @@ export function generateToken(length = TOKEN_LENGTH): string {
 }
 
 export function isValidToken(t: unknown): t is string {
-  return typeof t === "string" && t.length === TOKEN_LENGTH && /^[a-z0-9]+$/.test(t);
+  return (
+    typeof t === "string" &&
+    t.length >= TOKEN_MIN_LENGTH &&
+    t.length <= TOKEN_LENGTH &&
+    /^[a-z0-9]+$/.test(t)
+  );
 }
