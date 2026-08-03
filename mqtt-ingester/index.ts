@@ -72,6 +72,8 @@ async function handleMessage(topic: string, message: Buffer): Promise<void> {
   try {
     const sensorId = await upsertSensor(deviceId);
 
+    // Replays are exact duplicates by (sensor, recorded_at); the unique
+    // constraint rejects them and P2002 is the expected, silent outcome.
     await prisma.reading.create({
       data: {
         sensorId,
@@ -135,6 +137,10 @@ async function handleMessage(topic: string, message: Buffer): Promise<void> {
         : `Stored reading from ${deviceId}: noise=${reading.noiseDba} dBA`
     );
   } catch (err) {
+    // P2002 = the (sensor_id, recorded_at) unique constraint rejecting a
+    // store-and-forward replay — expected and silent, so a burst of replays
+    // after an outage cannot bury real ingest failures in error noise.
+    if ((err as { code?: string })?.code === "P2002") return;
     console.error(`Failed to store reading from ${deviceId}:`, err);
   }
 }

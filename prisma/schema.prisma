@@ -130,6 +130,7 @@ model Reading {
 
   sensor Sensor @relation(fields: [sensorId], references: [id])
 
+  @@unique([sensorId, recordedAt], map: "readings_sensor_id_recorded_at_key")
   @@index([sensorId, recordedAt(sort: Desc)], map: "idx_readings_sensor_time")
   @@map("readings")
 }
