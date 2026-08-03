@@ -220,16 +220,16 @@ async function handleFrameLogMessage(topic: string, message: Buffer): Promise<vo
     return;
   }
   if (chunk.kind === "eof") {
-    console.log(`framelog: ${deviceId} EOF, file size ${chunk.size} bytes`);
+    console.log(`framelog: ${deviceId} EOF${chunk.day ? ` day ${chunk.day}` : ""}, file size ${chunk.size} bytes`);
     return;
   }
   // Chunks are immutable raw file bytes: first write wins, replays are no-ops.
   await prisma.frameLogChunk.upsert({
-    where: { deviceId_offset: { deviceId, offset: chunk.offset } },
+    where: { deviceId_day_offset: { deviceId, day: chunk.day, offset: chunk.offset } },
     update: {},
-    create: { deviceId, offset: chunk.offset, data: chunk.data },
+    create: { deviceId, day: chunk.day, offset: chunk.offset, data: chunk.data },
   });
-  console.log(`framelog: ${deviceId} +${chunk.data.length}B @ ${chunk.offset}`);
+  console.log(`framelog: ${deviceId}${chunk.day ? ` [${chunk.day}]` : ""} +${chunk.data.length}B @ ${chunk.offset}`);
 }
 
 function main(): void {

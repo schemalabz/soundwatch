@@ -140,10 +140,11 @@ model Reading {
 model FrameLogChunk {
   id         BigInt   @id @default(autoincrement())
   deviceId   String   @map("device_id")
+  day        String   @default("") // "yymmdd" for rotated files; "" = legacy FRAMELOG.CSV namespace
   offset     Int
   data       String
   receivedAt DateTime @default(now()) @map("received_at") @db.Timestamp(3)
 
-  @@unique([deviceId, offset])
+  @@unique([deviceId, day, offset])
   @@map("frame_log_chunks")
 }
