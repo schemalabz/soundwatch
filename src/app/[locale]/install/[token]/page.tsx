@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { use } from "react";
+import { useTranslations } from "next-intl";
 import SitePicker from "@/components/install/SitePicker";
 
 // Installer-facing page, reached by scanning the QR on the box. Three jobs:
@@ -20,6 +21,7 @@ type Status = {
 
 export default function InstallPage({ params }: { params: Promise<{ token: string }> }) {
   const { token } = use(params);
+  const t = useTranslations("install");
   const [s, setS] = useState<Status | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -46,31 +48,32 @@ export default function InstallPage({ params }: { params: Promise<{ token: strin
         body: JSON.stringify({ latitude: pos.coords.latitude, longitude: pos.coords.longitude, force }),
       });
       const j = await r.json();
-      if (r.ok) { setMsg("Location saved."); load(); }
-      else if (r.status === 409) setMsg("This device already has a location. Only override if you are sure this is the right box.");
-      else setMsg(j.error ?? "Could not save location.");
+      if (r.ok) { setMsg(t("locationSaved")); load(); }
+      else if (r.status === 409) setMsg(t("alreadyLocated"));
+      else setMsg(j.error ?? t("saveFailed"));
     } catch {
-      setMsg("Could not read GPS. Allow location access, or report the address by hand.");
+      setMsg(t("gpsFailed"));
     } finally { setBusy(false); }
   }
 
   const st = s?.state;
   const tone = st === "live" ? "#0ca30c" : st === "stale" ? "#fab219" : "#d03b3b";
   const headline =
-    st === "live" ? "✓ Receiving data" :
-    st === "stale" ? "⚠ Was working, now silent" :
-    st === "never_seen" ? "… Not reporting yet" :
-    st === "unknown_token" ? "✕ Unknown device" : "Checking…";
+    st === "live" ? t("live") :
+    st === "stale" ? t("stale") :
+    st === "never_seen" ? t("neverSeen") :
+    st === "unknown_token" ? t("unknownToken") : t("checking");
+  const bold = { b: (chunks: React.ReactNode) => <b>{chunks}</b> };
 
   return (
     <main style={{ maxWidth: 560, margin: "0 auto", padding: 20,
                    font: "16px/1.5 system-ui, -apple-system, sans-serif" }}>
-      <p style={{ color: "#666", margin: 0 }}>Soundwatch install</p>
-      <h1 style={{ fontSize: 26, margin: "4px 0 2px" }}>Device {token}</h1>
+      <p style={{ color: "#666", margin: 0 }}>{t("title")}</p>
+      <h1 style={{ fontSize: 26, margin: "4px 0 2px" }}>{t("device", { token })}</h1>
       {s?.sensor?.hardwareId && (
         <p style={{ color: "#666", margin: 0, fontSize: 13 }}>
-          hardware {s.sensor.hardwareId.slice(0, 8)}…
-          {s.sensor.apName ? ` · setup network ${s.sensor.apName}` : ""}
+          {t("hardwareLine", { id: s.sensor.hardwareId.slice(0, 8) + "…" })}
+          {s.sensor.apName ? t("setupNetwork", { ap: s.sensor.apName }) : ""}
         </p>
       )}
 
@@ -78,53 +81,49 @@ export default function InstallPage({ params }: { params: Promise<{ token: strin
         <div style={{ fontSize: 20, fontWeight: 650, color: tone }}>{headline}</div>
         {s?.lastReading && (
           <div style={{ marginTop: 6, fontSize: 14, color: "#444" }}>
-            last reading {s.lastReading.secondsAgo}s ago
+            {t("lastReading", { s: s.lastReading.secondsAgo })}
             {s.lastReading.laeq != null && <> · {s.lastReading.laeq.toFixed(1)} dB</>}
-            {s.lastReading.battery != null && <> · battery {s.lastReading.battery}%</>}
-            {s.lastReading.rssi != null && <> · wifi {s.lastReading.rssi} dBm</>}
+            {s.lastReading.battery != null && t("battery", { n: s.lastReading.battery })}
+            {s.lastReading.rssi != null && t("wifi", { n: s.lastReading.rssi })}
           </div>
         )}
         {st === "never_seen" && (
           <ol style={{ fontSize: 14, color: "#444", marginTop: 10, paddingLeft: 20 }}>
-            <li>Power the unit on — the light should pulse <b>red</b> (setup mode).</li>
-            <li>Join its WiFi network{s?.sensor?.apName ? <> — <b>{s.sensor.apName}</b></> : " (Soundwatch-…)"} and enter this site&apos;s WiFi. If no setup page opens by itself, browse to <b>http://192.168.1.1</b>.</li>
-            <li><b>Do not change the token field</b> if the setup page shows one.</li>
-            <li>Come back here — it can take a couple of minutes.</li>
+            <li>{t.rich("step1", bold)}</li>
+            <li>{t.rich("step2", { ...bold, ap: s?.sensor?.apName ?? "none" })}</li>
+            <li>{t.rich("step3", bold)}</li>
+            <li>{t("step4")}</li>
           </ol>
         )}
         {st === "stale" && (
-          <p style={{ fontSize: 14, color: "#444", marginTop: 10 }}>
-            It reported earlier and has now stopped. Check it still has power, then wait a minute.
-          </p>
+          <p style={{ fontSize: 14, color: "#444", marginTop: 10 }}>{t("staleHint")}</p>
         )}
       </div>
 
-      <h2 style={{ fontSize: 17, margin: "0 0 6px" }}>Where is it installed?</h2>
+      <h2 style={{ fontSize: 17, margin: "0 0 6px" }}>{t("whereInstalled")}</h2>
       {s?.hasLocation ? (
         <>
           <p style={{ fontSize: 14, color: "#444" }}>
-            Recorded{ s.sensor?.address ? `: ${s.sensor.address}` : "" }
+            {t("recorded")}{ s.sensor?.address ? `: ${s.sensor.address}` : "" }
             {s.sensor?.latitude != null && <> ({s.sensor.latitude.toFixed(5)}, {s.sensor!.longitude!.toFixed(5)})</>}
             {s.sensor?.name ? <> — <b>{s.sensor.name}</b></> : null}
           </p>
           <button onClick={() => saveLocation(true)} disabled={busy}
             style={{ font: "inherit", fontSize: 16, padding: "12px 18px", borderRadius: 10,
                      border: "1px solid #ccc", background: "#fff", width: "100%" }}>
-            {busy ? "Saving…" : "Update location to here"}
+            {busy ? t("saving") : t("updateHere")}
           </button>
           {msg && <p style={{ fontSize: 14, marginTop: 10 }}>{msg}</p>}
         </>
       ) : (
         <>
-          <p style={{ fontSize: 14, color: "#444" }}>
-            Pick the site you are standing at. Allowing location access sorts the nearest first.
-          </p>
+          <p style={{ fontSize: 14, color: "#444" }}>{t("pickSite")}</p>
           <SitePicker token={token} onSaved={load} />
         </>
       )}
 
       <p style={{ fontSize: 13, color: "#666", marginTop: 24 }}>
-        Please do not leave until this page shows <b style={{ color: "#0ca30c" }}>Receiving data</b>.
+        {t.rich("doNotLeave", bold)}
       </p>
     </main>
   );

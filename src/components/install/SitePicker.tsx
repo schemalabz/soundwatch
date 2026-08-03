@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useTranslations } from "next-intl";
 import { ATHENS_CENTER, distanceMeters } from "@/lib/geo";
 import MapPinPicker from "./MapPinPicker";
 
@@ -31,6 +32,7 @@ const linkBtn = {
 } as const;
 
 export default function SitePicker({ token, onSaved }: { token: string; onSaved: () => void }) {
+  const t = useTranslations("install");
   const [sites, setSites] = useState<Site[] | null>(null);
   const [gps, setGps] = useState<Gps | null>(null);
   const [search, setSearch] = useState("");
@@ -80,12 +82,12 @@ export default function SitePicker({ token, onSaved }: { token: string; onSaved:
         onSaved();
       } else if (r.status === 409 && j.error === "already located") {
         setNeedsForce(true);
-        setMsg("This device already has a location. Save again only if you are sure this is the right box.");
+        setMsg(t("alreadyLocated"));
       } else {
-        setMsg(j.detail ?? j.error ?? "Could not save location.");
+        setMsg(j.detail ?? j.error ?? t("saveFailed"));
       }
     } catch {
-      setMsg("Network error — try again.");
+      setMsg(t("networkError"));
     } finally {
       setBusy(false);
     }
@@ -101,7 +103,7 @@ export default function SitePicker({ token, onSaved }: { token: string; onSaved:
     });
   }
 
-  if (sites === null) return <p style={{ fontSize: 14, color: "#666" }}>Loading sites…</p>;
+  if (sites === null) return <p style={{ fontSize: 14, color: "#666" }}>{t("loadingSites")}</p>;
 
   if (pinMode) {
     const center = gps ?? (selected
@@ -109,17 +111,15 @@ export default function SitePicker({ token, onSaved }: { token: string; onSaved:
       : { latitude: ATHENS_CENTER.lat, longitude: ATHENS_CENTER.lng });
     return (
       <div>
-        <p style={{ fontSize: 14, color: "#444", margin: "0 0 8px" }}>
-          Move the map until the pin is where the unit is, then confirm.
-        </p>
+        <p style={{ fontSize: 14, color: "#444", margin: "0 0 8px" }}>{t("movePin")}</p>
         <MapPinPicker
           center={center}
-          confirmLabel={busy ? "Saving…" : "This is where the unit is"}
+          confirmLabel={busy ? t("saving") : t("pinConfirm")}
           onConfirm={(c) => save({ ...c, ...(needsForce ? { force: true } : {}) })}
         />
         {msg && <p style={{ fontSize: 14, marginTop: 8, color: "#b45309" }}>{msg}</p>}
         <p style={{ marginTop: 10 }}>
-          <button style={linkBtn} onClick={() => setPinMode(false)}>← Back to the site list</button>
+          <button style={linkBtn} onClick={() => setPinMode(false)}>{t("backToList")}</button>
         </p>
       </div>
     );
@@ -132,7 +132,7 @@ export default function SitePicker({ token, onSaved }: { token: string; onSaved:
           style={{ font: "inherit", fontSize: 15, width: "100%", padding: "10px 12px",
                    borderRadius: 10, border: "1px solid #ccc", boxSizing: "border-box",
                    marginBottom: 10 }}
-          placeholder="Search sites…"
+          placeholder={t("searchSites")}
           value={search}
           onChange={(e) => { setSearch(e.target.value); setSelectedId(null); }}
         />
@@ -154,11 +154,11 @@ export default function SitePicker({ token, onSaved }: { token: string; onSaved:
             >
               <span style={{ fontWeight: 600 }}>{site.name}</span>
               {gps && (
-                <span style={{ color: "#666" }}> — {Math.round(distanceMeters(gps, site))} m</span>
+                <span style={{ color: "#666" }}>{t("metersAway", { m: Math.round(distanceMeters(gps, site)) })}</span>
               )}
               {site.occupied && (
                 <span style={{ display: "block", fontSize: 13, color: "#b45309" }}>
-                  already has a unit ({site.occupied.state})
+                  {site.occupied.state === "live" ? t("occupiedLive") : t("occupiedSilent")}
                 </span>
               )}
               {site.address && (
@@ -168,13 +168,13 @@ export default function SitePicker({ token, onSaved }: { token: string; onSaved:
           );
         })}
         {visible.length === 0 && (
-          <p style={{ fontSize: 14, color: "#666", margin: 0 }}>No sites match.</p>
+          <p style={{ fontSize: 14, color: "#666", margin: 0 }}>{t("noSitesMatch")}</p>
         )}
       </div>
       {!showAll && !search && ordered.length > 5 && (
         <p style={{ marginTop: 8 }}>
           <button style={linkBtn} onClick={() => setShowAll(true)}>
-            Show all {ordered.length} sites
+            {t("showAll", { n: ordered.length })}
           </button>
         </p>
       )}
@@ -182,22 +182,21 @@ export default function SitePicker({ token, onSaved }: { token: string; onSaved:
         <div style={{ marginTop: 12 }}>
           {selected.occupied && (
             <p style={{ fontSize: 14, color: "#b45309", margin: "0 0 8px" }}>
-              This site already has a unit ({selected.occupied.state}). Continue only if you are
-              replacing it.
+              {t("occupiedWarning", { state: selected.occupied.state })}
             </p>
           )}
           {msg && <p style={{ fontSize: 14, color: "#b45309", margin: "0 0 8px" }}>{msg}</p>}
           <button style={btn} disabled={busy} onClick={() => confirmSite(selected)}>
-            {busy ? "Saving…"
-              : needsForce ? "Override location"
-              : selected.occupied ? "Install here anyway"
-              : `Confirm: ${selected.name}`}
+            {busy ? t("saving")
+              : needsForce ? t("overrideLocation")
+              : selected.occupied ? t("installAnyway")
+              : t("confirmSite", { name: selected.name })}
           </button>
         </div>
       )}
       <p style={{ marginTop: 12 }}>
         <button style={linkBtn} onClick={() => { setPinMode(true); setMsg(null); }}>
-          I&apos;m somewhere else
+          {t("somewhereElse")}
         </button>
       </p>
     </div>
