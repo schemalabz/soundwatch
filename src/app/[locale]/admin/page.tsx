@@ -60,13 +60,26 @@ export default function AdminPage() {
     if (!res.ok) {
       setError("Authentication failed");
       setAuthenticated(false);
+      localStorage.removeItem("sw-admin-token");
       return;
     }
     const data = await res.json();
     setSensors(data);
     setAuthenticated(true);
     setError("");
+    // Stay logged in across visits; a 401 above clears it again.
+    localStorage.setItem("sw-admin-token", adminToken);
   }
+
+  // Auto-login from a previous session.
+  useEffect(() => {
+    const saved = localStorage.getItem("sw-admin-token");
+    if (saved) {
+      setToken(saved);
+      fetchSensors(saved);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   function handleLogin(e: React.FormEvent) {
     e.preventDefault();
