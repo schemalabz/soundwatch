@@ -86,7 +86,7 @@ export default function InstallPage({ params }: { params: Promise<{ token: strin
         {st === "never_seen" && (
           <ol style={{ fontSize: 14, color: "#444", marginTop: 10, paddingLeft: 20 }}>
             <li>Power the unit on — the light should pulse <b>red</b> (setup mode).</li>
-            <li>Join its WiFi network{s?.sensor?.apName ? <> — <b>{s.sensor.apName}</b></> : " (Soundwatch-…)"} and enter this site&apos;s WiFi.</li>
+            <li>Join its WiFi network{s?.sensor?.apName ? <> — <b>{s.sensor.apName}</b></> : " (Soundwatch-…)"} and enter this site&apos;s WiFi. If no setup page opens by itself, browse to <b>http://192.168.1.1</b>.</li>
             <li><b>Do not change the token field</b> if the setup page shows one.</li>
             <li>Come back here — it can take a couple of minutes.</li>
           </ol>
