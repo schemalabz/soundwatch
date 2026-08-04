@@ -114,8 +114,10 @@ export default function InstallPage({ params }: { params: Promise<{ token: strin
             {s.sensor?.name ? <> — <b>{s.sensor.name}</b></> : null}
           </p>
           <button onClick={() => saveLocation(true)} disabled={busy}
-            style={{ font: "inherit", fontSize: 16, padding: "12px 18px", borderRadius: 10,
-                     border: "1px solid #ccc", background: "#fff", width: "100%" }}>
+            style={{ font: "inherit", fontSize: 17, fontWeight: 700, padding: "14px 18px",
+                     minHeight: 52, borderRadius: 12, border: "none", width: "100%",
+                     background: "#b45309", color: "#fff", cursor: "pointer",
+                     ...(busy ? { opacity: 0.6, cursor: "wait" } : {}) }}>
             {busy ? t("saving") : t("updateHere")}
           </button>
           {msg && <p style={{ fontSize: 14, marginTop: 10 }}>{msg}</p>}

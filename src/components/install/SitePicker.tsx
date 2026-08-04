@@ -21,15 +21,30 @@ type Site = {
 
 type Gps = { latitude: number; longitude: number };
 
-const btn = {
-  font: "inherit", fontSize: 16, padding: "12px 18px", borderRadius: 10,
-  border: "1px solid #ccc", background: "#fff", width: "100%",
+// Primary action: solid brand orange, thumb-sized. The old confirm was styled
+// like the site cards above it (white + gray border) and did not read as a
+// button at all — outdoors, on a phone, the action must be unmissable.
+const primaryBtn = {
+  font: "inherit", fontSize: 17, fontWeight: 700, padding: "14px 18px",
+  minHeight: 52, borderRadius: 12, border: "none", width: "100%",
+  background: "var(--primary, #c2410c)", color: "#fff", cursor: "pointer",
 } as const;
 
+// Caution variant: amber = "you are overriding something" (occupied site,
+// force relocation) — the color carries the warning, not just the label.
+const cautionBtn = { ...primaryBtn, background: "#b45309" } as const;
+
 const linkBtn = {
-  font: "inherit", fontSize: 14, border: "none", background: "none",
-  color: "#2563eb", textDecoration: "underline", padding: 0, cursor: "pointer",
+  font: "inherit", fontSize: 16, border: "none", background: "none",
+  color: "#2563eb", textDecoration: "underline", padding: "6px 0", cursor: "pointer",
 } as const;
+
+// Keeps the confirm reachable when "show all" makes the list taller than the
+// viewport: the action sticks to the bottom edge with a white fade behind it.
+const stickyBar = {
+  position: "sticky" as const, bottom: 0, paddingTop: 14, paddingBottom: 8,
+  background: "linear-gradient(to top, #fff 75%, rgba(255,255,255,0))",
+};
 
 export default function SitePicker({ token, onSaved }: { token: string; onSaved: () => void }) {
   const t = useTranslations("install");
@@ -115,6 +130,7 @@ export default function SitePicker({ token, onSaved }: { token: string; onSaved:
         <MapPinPicker
           center={center}
           confirmLabel={busy ? t("saving") : t("pinConfirm")}
+          busy={busy}
           onConfirm={(c) => save({ ...c, ...(needsForce ? { force: true } : {}) })}
         />
         {msg && <p style={{ fontSize: 14, marginTop: 8, color: "#b45309" }}>{msg}</p>}
@@ -146,12 +162,14 @@ export default function SitePicker({ token, onSaved }: { token: string; onSaved:
               key={site.id}
               onClick={() => { setSelectedId(site.id); setMsg(null); }}
               style={{
-                font: "inherit", textAlign: "left", padding: "10px 12px", borderRadius: 10,
-                background: "#fff", cursor: "pointer",
-                border: isSelected ? "2px solid #2563eb" : isNearest ? "2px solid #93c5fd" : "1px solid #ccc",
-                opacity: site.occupied ? 0.65 : 1,
+                font: "inherit", fontSize: 16, textAlign: "left", padding: "14px", borderRadius: 12,
+                cursor: "pointer",
+                background: isSelected ? "#fff7ed" : "#fff",
+                border: isSelected ? "2px solid var(--primary, #c2410c)" : isNearest ? "2px solid #fdba74" : "1px solid #ccc",
+                opacity: site.occupied && !isSelected ? 0.65 : 1,
               }}
             >
+              {isSelected && <span style={{ color: "var(--primary, #c2410c)", fontWeight: 700 }}>✓ </span>}
               <span style={{ fontWeight: 600 }}>{site.name}</span>
               {gps && (
                 <span style={{ color: "#666" }}>{t("metersAway", { m: Math.round(distanceMeters(gps, site)) })}</span>
@@ -179,14 +197,21 @@ export default function SitePicker({ token, onSaved }: { token: string; onSaved:
         </p>
       )}
       {selected && (
-        <div style={{ marginTop: 12 }}>
+        <div style={stickyBar}>
           {selected.occupied && (
             <p style={{ fontSize: 14, color: "#b45309", margin: "0 0 8px" }}>
               {t("occupiedWarning", { state: selected.occupied.state })}
             </p>
           )}
           {msg && <p style={{ fontSize: 14, color: "#b45309", margin: "0 0 8px" }}>{msg}</p>}
-          <button style={btn} disabled={busy} onClick={() => confirmSite(selected)}>
+          <button
+            style={{
+              ...(needsForce || selected.occupied ? cautionBtn : primaryBtn),
+              ...(busy ? { opacity: 0.6, cursor: "wait" } : {}),
+            }}
+            disabled={busy}
+            onClick={() => confirmSite(selected)}
+          >
             {busy ? t("saving")
               : needsForce ? t("overrideLocation")
               : selected.occupied ? t("installAnyway")

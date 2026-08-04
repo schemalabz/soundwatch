@@ -11,10 +11,12 @@ export default function MapPinPicker({
   center,
   onConfirm,
   confirmLabel,
+  busy = false,
 }: {
   center: { latitude: number; longitude: number };
   onConfirm: (c: { latitude: number; longitude: number }) => void;
   confirmLabel: string;
+  busy?: boolean;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
@@ -44,8 +46,11 @@ export default function MapPinPicker({
                       transform: "translate(-50%, -100%)", fontSize: 28 }}>📍</div>
       </div>
       <button
-        style={{ font: "inherit", fontSize: 16, padding: "12px 18px", borderRadius: 10,
-                 border: "1px solid #ccc", background: "#fff", width: "100%", marginTop: 10 }}
+        style={{ font: "inherit", fontSize: 17, fontWeight: 700, padding: "14px 18px",
+                 minHeight: 52, borderRadius: 12, border: "none", width: "100%", marginTop: 10,
+                 background: "var(--primary, #c2410c)", color: "#fff", cursor: "pointer",
+                 ...(busy ? { opacity: 0.6, cursor: "wait" } : {}) }}
+        disabled={busy}
         onClick={() => {
           const c = mapRef.current?.getCenter();
           if (c) onConfirm({ latitude: c.lat, longitude: c.lng });
