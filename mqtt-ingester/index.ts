@@ -126,6 +126,9 @@ async function handleMessage(topic: string, message: Buffer): Promise<void> {
         captureFails: diag?.captureFails ?? null,
         i2sReinits: diag?.i2sReinits ?? null,
         ghostRefusals: diag?.ghostRefusals ?? null,
+        soundwatchRelease: diag?.soundwatchRelease ?? null,
+        samGitHash: diag?.samGitHash ?? null,
+        espGitHash: diag?.espGitHash ?? null,
       },
     });
 

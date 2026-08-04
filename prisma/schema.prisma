@@ -127,6 +127,15 @@ model Reading {
   captureFails   Int?    @map("capture_fails")
   i2sReinits     Int?    @map("i2s_reinits")
   ghostRefusals  Int?    @map("ghost_refusals")
+  // Release 1.0 build stamp: which firmware produced this row. Before it, the
+  // only record of what a unit ran was a table in a handoff doc. The SAM learns
+  // the ESP's hash over the config sync and reports both, so
+  // "sam_git_hash <> esp_git_hash" finds a mismatched chip pair fleet-wide, and
+  // a trailing "+" means that image was built from a modified tree and does not
+  // reproduce from the commit it names.
+  soundwatchRelease String? @map("soundwatch_release")
+  samGitHash        String? @map("sam_git_hash")
+  espGitHash        String? @map("esp_git_hash")
 
   sensor Sensor @relation(fields: [sensorId], references: [id])
 
