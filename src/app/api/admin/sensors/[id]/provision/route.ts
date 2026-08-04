@@ -23,7 +23,7 @@ export async function POST(
   // here is the device token (sensors.device_id) — that is what the bench has.
   const { id: token } = await params;
   const body = await request.json().catch(() => ({}));
-  const { hardwareId, apName, samVersion, espVersion } = body;
+  const { hardwareId, apName, samVersion, espVersion, readingIntervalS } = body;
 
   const sensor = await prisma.sensor.findUnique({ where: { deviceId: token } });
   if (!sensor) {
@@ -54,6 +54,16 @@ export async function POST(
       ...(samVersion || espVersion
         ? { firmwareVersion: [samVersion, espVersion].filter(Boolean).join(" / ") }
         : {}),
+      // The interval the bench actually wrote to the device. Until now nothing
+      // ever set this, so every sensor displayed the schema default of 60 while
+      // the fleet ran at 30 — the column was aspirational and, worse, aspirational
+      // about a value nobody had ever typed. Provisioning is the one moment the
+      // configured interval is known for certain, so it is recorded here.
+      // Anything >= 60 is refused: the ESP powers down between publishes at that
+      // point, which is the same limit onboard.sh enforces on the device side.
+      ...(Number.isInteger(readingIntervalS) && readingIntervalS > 0 && readingIntervalS < 60
+        ? { readingIntervalS }
+        : {}),
       provisionedAt: new Date(),
     },
   });
@@ -63,6 +73,7 @@ export async function POST(
     hardwareId: updated.hardwareId,
     apName: updated.apName,
     firmwareVersion: updated.firmwareVersion,
+    readingIntervalS: updated.readingIntervalS,
     provisionedAt: updated.provisionedAt,
     installUrl: `/install/${updated.deviceId}`,
   });
