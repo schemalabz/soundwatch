@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import DeviceLabel from "@/components/admin/DeviceLabel";
 
 interface SensorWithStatus {
   id: string;
@@ -52,6 +53,7 @@ export default function AdminPage() {
   const [editForm, setEditForm] = useState<EditForm | null>(null);
   const [saving, setSaving] = useState(false);
   const [showExperimental, setShowExperimental] = useState(false);
+  const [labelSensor, setLabelSensor] = useState<SensorWithStatus | null>(null);
 
   async function fetchSensors(adminToken: string) {
     const res = await fetch("/api/admin/sensors", {
@@ -220,6 +222,7 @@ export default function AdminPage() {
                 <th className="text-left p-3 text-muted font-medium">Name</th>
                 <th className="text-left p-3 text-muted font-medium">Interval</th>
                 <th className="text-left p-3 text-muted font-medium">Last Seen</th>
+                <th className="p-3"></th>
               </tr>
             </thead>
             <tbody>
@@ -255,6 +258,16 @@ export default function AdminPage() {
                     {sensor.lastSeenAt
                       ? new Date(sensor.lastSeenAt).toLocaleString()
                       : "Never"}
+                  </td>
+                  <td className="p-3">
+                    <button
+                      onClick={(e) => { e.stopPropagation(); setLabelSensor(sensor); }}
+                      disabled={!sensor.apName}
+                      title={sensor.apName ? "Print label" : "Provision first — label needs the setup AP name"}
+                      className="text-xs border border-border rounded px-2 py-1 hover:bg-light disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                      Label
+                    </button>
                   </td>
                 </tr>
               ))}
@@ -377,9 +390,22 @@ export default function AdminPage() {
                 Current firmware: {editingSensor.firmwareVersion}
               </p>
             )}
+
+            <button
+              onClick={() => setLabelSensor(editingSensor)}
+              disabled={!editingSensor.apName}
+              title={editingSensor.apName ? "Print label" : "Provision first — label needs the setup AP name"}
+              className="w-full border border-border rounded-lg py-2 text-sm hover:bg-light disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              Print label
+            </button>
           </div>
         )}
       </div>
+
+      {labelSensor && (
+        <DeviceLabel sensor={labelSensor} onClose={() => setLabelSensor(null)} />
+      )}
     </div>
   );
 }
