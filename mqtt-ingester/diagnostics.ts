@@ -27,6 +27,13 @@ export interface Diagnostics {
   // built from a modified tree and does NOT reproduce from the commit it names.
   samGitHash: string | null;
   espGitHash: string | null; // null while the ESP has not synced (wire sends "na")
+  // Times the energy accumulator hit its ceiling and clamped. Clamping is
+  // deliberate — a wrapped int64 would report SILENCE at the loudest moment the
+  // device ever captured — so non-zero means that interval's LAeq is a lower
+  // bound rather than a measurement. Null on firmware that predates the fix,
+  // which is NOT the same as zero: zero is "measured and fine", null is "this
+  // build could not have told you".
+  energySaturations: number | null;
 }
 
 const EMPTY: Diagnostics = {
@@ -41,6 +48,7 @@ const EMPTY: Diagnostics = {
   soundwatchRelease: null,
   samGitHash: null,
   espGitHash: null,
+  energySaturations: null,
 };
 
 /**
@@ -89,6 +97,7 @@ export function decodeDiagnostics(raw: string | null | undefined): Diagnostics |
     soundwatchRelease: str(8),
     samGitHash: str(9),
     espGitHash: str(10),
+    energySaturations: num(11),
   };
 
   // All-null means the field carried nothing usable; treat as absent.

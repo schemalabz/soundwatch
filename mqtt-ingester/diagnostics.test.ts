@@ -17,6 +17,7 @@ describe("decodeDiagnostics", () => {
       soundwatchRelease: null,
       samGitHash: null,
       espGitHash: null,
+      energySaturations: null,
     });
   });
 
@@ -105,6 +106,22 @@ describe("decodeDiagnostics", () => {
     expect(firmwarePairMismatched(decodeDiagnostics("30-7944-64-0-0-0-0-0-1.0-3e69ded-na"))).toBe(false);
     expect(firmwarePairMismatched(null)).toBe(false);
     expect(builtFromDirtyTree(null)).toBe(false);
+  });
+
+  it("decodes energy saturations (field 12) and leaves it null before the fix", () => {
+    // The energy accumulator clamps rather than wrapping, because a wrapped
+    // int64 would report SILENCE at the loudest moment captured. Non-zero means
+    // that interval's LAeq is a lower bound, not a measurement.
+    const d = decodeDiagnostics("810-7944-64-1-0-41-13-0-1.0-d782b1f-d782b1f-3");
+    expect(d?.energySaturations).toBe(3);
+    expect(d?.samGitHash).toBe("d782b1f");
+
+    // Healthy unit on the fixed firmware: present and zero.
+    expect(decodeDiagnostics("810-7944-64-1-0-41-13-0-1.0-d782b1f-d782b1f-0")?.energySaturations).toBe(0);
+    // Pre-fix firmware never sends it — absent, not zero. The difference matters:
+    // zero is "measured and fine", null is "this build could not tell you".
+    expect(decodeDiagnostics("810-7944-64-1-0-41-13-0-1.0-3e69ded-3e69ded")?.energySaturations).toBeNull();
+    expect(decodeDiagnostics("810-7944-64-1-0-41-13-1")?.energySaturations).toBeNull();
   });
 
   it("identifies a watchdog reset (32) and not a normal boot (64)", () => {

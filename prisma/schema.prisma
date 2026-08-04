@@ -136,6 +136,10 @@ model Reading {
   soundwatchRelease String? @map("soundwatch_release")
   samGitHash        String? @map("sam_git_hash")
   espGitHash        String? @map("esp_git_hash")
+  // Times the device's energy accumulator clamped at its ceiling. Non-zero means
+  // that interval's LAeq is a lower bound. Null on firmware older than the
+  // level-linearity fix, which is not the same as zero.
+  energySaturations Int?    @map("energy_saturations")
 
   sensor Sensor @relation(fields: [sensorId], references: [id])
 

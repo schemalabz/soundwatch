@@ -129,6 +129,7 @@ async function handleMessage(topic: string, message: Buffer): Promise<void> {
         soundwatchRelease: diag?.soundwatchRelease ?? null,
         samGitHash: diag?.samGitHash ?? null,
         espGitHash: diag?.espGitHash ?? null,
+        energySaturations: diag?.energySaturations ?? null,
       },
     });
 
