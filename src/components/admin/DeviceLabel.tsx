@@ -83,13 +83,34 @@ export default function DeviceLabel({
     if (canvasRef.current) void renderLabel(canvasRef.current, sensor);
   }, [sensor]);
 
-  function download() {
+  async function download() {
     const canvas = canvasRef.current;
     if (!canvas) return;
+    const blob = await new Promise<Blob | null>((res) => canvas.toBlob(res, "image/png"));
+    if (!blob) return;
+    const file = new File([blob], `label-${sensor.deviceId}.png`, { type: "image/png" });
+
+    // iOS Safari ignores programmatic downloads (the download attribute on
+    // data:/blob: anchors), so on devices that can share files the share sheet
+    // is the reliable path — and it is also the route into Photos, where
+    // label-printer apps look for images. AbortError = the user closed the
+    // sheet on purpose; do not "helpfully" fall through to a second prompt.
+    if (typeof navigator.canShare === "function" && navigator.canShare({ files: [file] })) {
+      try {
+        await navigator.share({ files: [file], title: file.name });
+        return;
+      } catch (err) {
+        if ((err as Error).name === "AbortError") return;
+        // otherwise fall through to the anchor download
+      }
+    }
+
+    const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
-    a.href = canvas.toDataURL("image/png");
-    a.download = `label-${sensor.deviceId}.png`;
+    a.href = url;
+    a.download = file.name;
     a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 10_000);
   }
 
   return (
