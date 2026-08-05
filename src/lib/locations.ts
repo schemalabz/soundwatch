@@ -12,6 +12,10 @@ export type ImportRow = {
   longitude: number;
   address?: string;
   notes?: string;
+  // Retirement travels through the same import: re-send a row with
+  // isActive:false and the site disappears from pickers while historical
+  // bindings keep their FK. Omitted = leave the stored value untouched.
+  isActive?: boolean;
 };
 
 // Greek site names are the common case — keep unicode letters, collapse
@@ -48,6 +52,7 @@ export function parseImportRows(body: unknown): { rows: ImportRow[] } | { error:
       longitude,
       ...(typeof r.address === "string" && r.address ? { address: r.address } : {}),
       ...(typeof r.notes === "string" && r.notes ? { notes: r.notes } : {}),
+      ...(typeof r.isActive === "boolean" ? { isActive: r.isActive } : {}),
     });
   }
   return { rows };

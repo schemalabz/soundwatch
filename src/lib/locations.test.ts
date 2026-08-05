@@ -37,6 +37,15 @@ describe("parseImportRows", () => {
     expect(r).toHaveProperty("error");
     expect((r as { error: string }).error).toContain("row 0");
   });
+  it("passes isActive through for retirement, omits it when absent", () => {
+    const r = parseImportRows([
+      { name: "Live", latitude: 1, longitude: 1 },
+      { name: "Dead", latitude: 2, longitude: 2, isActive: false },
+    ]);
+    if ("error" in r) throw new Error(r.error);
+    expect("isActive" in r.rows[0]).toBe(false);
+    expect(r.rows[1].isActive).toBe(false);
+  });
   it("rejects duplicate keys within one import", () => {
     const r = parseImportRows([
       { name: "Same", latitude: 1, longitude: 1 },
