@@ -1,9 +1,10 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
+import { PUBLIC_SENSOR_WHERE } from "@/lib/locations";
 
 export async function GET() {
   const sensors = await prisma.sensor.findMany({
-    where: { isActive: true },
+    where: PUBLIC_SENSOR_WHERE,
     include: {
       readings: {
         orderBy: { recordedAt: "desc" },

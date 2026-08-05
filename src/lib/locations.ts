@@ -3,6 +3,17 @@
 
 export const LIVE_WINDOW_MS = 5 * 60 * 1000;
 
+// What "a sensor exists" means to the PUBLIC (map, leaderboard): active, not a
+// bench/experimental unit, and actually somewhere. Without the last two clauses
+// the homepage showed every minted token and the whole bench fleet as nameless
+// ghost sensors. installedAt is deliberately not required: a legacy sensor with
+// real coordinates but no install-flow record (sck-exarchia) stays visible.
+export const PUBLIC_SENSOR_WHERE = {
+  isActive: true,
+  isExperimental: false,
+  latitude: { not: null },
+} as const;
+
 export type SensorStage = "minted" | "in_box" | "installed_live" | "installed_silent";
 
 export type ImportRow = {

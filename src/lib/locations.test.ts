@@ -3,8 +3,21 @@ import {
   computeStage,
   decideLocationWrite,
   parseImportRows,
+  PUBLIC_SENSOR_WHERE,
   slugifyKey,
 } from "./locations";
+
+describe("PUBLIC_SENSOR_WHERE", () => {
+  it("public existence = active + not experimental + has a location", () => {
+    // The homepage and leaderboard consume this filter. Weakening it re-leaks
+    // the bench fleet and every minted-but-uninstalled token as ghost sensors.
+    expect(PUBLIC_SENSOR_WHERE).toEqual({
+      isActive: true,
+      isExperimental: false,
+      latitude: { not: null },
+    });
+  });
+});
 
 describe("slugifyKey", () => {
   it("lowercases and hyphenates", () => {
