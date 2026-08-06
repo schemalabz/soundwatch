@@ -54,6 +54,9 @@ export default function AdminPage() {
   const [saving, setSaving] = useState(false);
   const [showExperimental, setShowExperimental] = useState(false);
   const [labelSensor, setLabelSensor] = useState<SensorWithStatus | null>(null);
+  const [deleteInfo, setDeleteInfo] = useState<{ readings: number; framelogChunks: number } | null>(null);
+  const [deleteTyped, setDeleteTyped] = useState("");
+  const [deleting, setDeleting] = useState(false);
 
   async function fetchSensors(adminToken: string) {
     const res = await fetch("/api/admin/sensors", {
@@ -90,7 +93,39 @@ export default function AdminPage() {
     fetchSensors(token);
   }
 
+  // First call is unacknowledged on purpose: the API answers with what would
+  // be lost, and only an acknowledged call deletes. See the route's contract.
+  async function requestDelete() {
+    if (!editingSensor) return;
+    const res = await fetch(`/api/admin/sensors/${editingSensor.id}`, {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    const j = await res.json();
+    if (res.status === 409) setDeleteInfo(j.wouldDelete);
+  }
+
+  async function confirmDelete() {
+    if (!editingSensor) return;
+    setDeleting(true);
+    const res = await fetch(`/api/admin/sensors/${editingSensor.id}`, {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ acknowledge: editingSensor.deviceId }),
+    });
+    setDeleting(false);
+    if (res.ok) {
+      setEditingSensor(null);
+      setEditForm(null);
+      setDeleteInfo(null);
+      setDeleteTyped("");
+      fetchSensors(token);
+    }
+  }
+
   function openEdit(sensor: SensorWithStatus) {
+    setDeleteInfo(null);
+    setDeleteTyped("");
     setEditingSensor(sensor);
     setEditForm({
       name: sensor.name || "",
@@ -399,6 +434,49 @@ export default function AdminPage() {
             >
               Print label
             </button>
+
+            {deleteInfo === null ? (
+              <button
+                onClick={requestDelete}
+                className="w-full border border-[#fca5a5] text-[#b91c1c] rounded-lg py-2 text-sm hover:bg-[#fef2f2]"
+              >
+                Delete sensor…
+              </button>
+            ) : (
+              <div className="border border-[#fca5a5] bg-[#fef2f2] rounded-lg p-3 space-y-2">
+                <p className="text-sm text-[#b91c1c] font-medium">
+                  Permanently deletes {deleteInfo.readings} readings
+                  {deleteInfo.framelogChunks > 0 ? ` and ${deleteInfo.framelogChunks} framelog chunks` : ""}.
+                  {editingSensor.status === "online" && (
+                    <> This device is publishing NOW — its row will reappear (empty) on its next message.</>
+                  )}
+                </p>
+                <p className="text-xs text-[#7f1d1d]">
+                  Type the last 4 characters of <span className="font-mono">{editingSensor.deviceId}</span> to confirm:
+                </p>
+                <input
+                  value={deleteTyped}
+                  onChange={(e) => setDeleteTyped(e.target.value)}
+                  className="w-full px-3 py-1.5 border border-[#fca5a5] rounded-lg text-sm font-mono bg-white"
+                  placeholder={editingSensor.deviceId.slice(-4).replace(/./g, "•")}
+                />
+                <div className="flex gap-2">
+                  <button
+                    onClick={confirmDelete}
+                    disabled={deleting || deleteTyped !== editingSensor.deviceId.slice(-4)}
+                    className="flex-1 bg-[#b91c1c] text-white py-2 rounded-lg text-sm font-semibold disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    {deleting ? "Deleting…" : "Delete permanently"}
+                  </button>
+                  <button
+                    onClick={() => { setDeleteInfo(null); setDeleteTyped(""); }}
+                    className="px-4 py-2 border border-border rounded-lg text-sm hover:bg-light"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>
