@@ -19,10 +19,12 @@ import QRCode from "qrcode";
 
 const W = 400;
 const H = 576;
+const NAME_EXTRA = 44; // label grows when a friendly name is printed — tape is continuous
 const QR_SIZE = 320;
 
 export type LabelSensor = {
   deviceId: string;
+  name: string | null;
   apName: string | null;
   hardwareId: string | null;
 };
@@ -31,7 +33,7 @@ async function renderLabel(canvas: HTMLCanvasElement, sensor: LabelSensor) {
   const url = `https://soundwatch.gr/install/${sensor.deviceId}`;
 
   canvas.width = W;
-  canvas.height = H;
+  canvas.height = sensor.name ? H + NAME_EXTRA : H;
   const ctx = canvas.getContext("2d");
   if (!ctx) return;
 
@@ -50,24 +52,33 @@ async function renderLabel(canvas: HTMLCanvasElement, sensor: LabelSensor) {
   ctx.fillStyle = "#000";
   ctx.textAlign = "center";
 
+  // Friendly name first when there is one — with random 16-char tokens the
+  // name is the identity a human actually reads ("bench 2", a street name).
+  let y = QR_SIZE;
+  if (sensor.name) {
+    ctx.font = "bold 34px system-ui, sans-serif";
+    ctx.fillText(sensor.name, W / 2, y + 48);
+    y += NAME_EXTRA;
+  }
+
   // Token — ~5 mm, the loudest text on the label.
   ctx.font = "bold 38px ui-monospace, SFMono-Regular, Menlo, monospace";
-  ctx.fillText(sensor.deviceId, W / 2, QR_SIZE + 52);
+  ctx.fillText(sensor.deviceId, W / 2, y + 52);
 
   // Setup AP — what the installer needs before the QR matters.
   ctx.font = "26px system-ui, sans-serif";
-  ctx.fillText("Setup WiFi:", W / 2, QR_SIZE + 96);
+  ctx.fillText("Setup WiFi:", W / 2, y + 96);
   ctx.font = "bold 30px system-ui, sans-serif";
-  ctx.fillText(sensor.apName ?? "—", W / 2, QR_SIZE + 130);
+  ctx.fillText(sensor.apName ?? "—", W / 2, y + 130);
 
   // Hardware id tail — swapped-box tiebreaker.
   ctx.font = "24px ui-monospace, SFMono-Regular, Menlo, monospace";
-  ctx.fillText(`HW …${(sensor.hardwareId ?? "").slice(-6) || "?"}`, W / 2, QR_SIZE + 168);
+  ctx.fillText(`HW …${(sensor.hardwareId ?? "").slice(-6) || "?"}`, W / 2, y + 168);
 
   // Typed fallback, split so it stays legible at ~2.5 mm.
   ctx.font = "20px ui-monospace, SFMono-Regular, Menlo, monospace";
-  ctx.fillText("soundwatch.gr/install/", W / 2, QR_SIZE + 210);
-  ctx.fillText(sensor.deviceId, W / 2, QR_SIZE + 234);
+  ctx.fillText("soundwatch.gr/install/", W / 2, y + 210);
+  ctx.fillText(sensor.deviceId, W / 2, y + 234);
 }
 
 export default function DeviceLabel({
@@ -128,10 +139,11 @@ export default function DeviceLabel({
             ✕
           </button>
         </div>
-        {/* Preview at half size; the download is the full 400×576 print raster. */}
+        {/* Preview at half width; height follows the canvas (it grows when a
+            name is printed). The download is the full-resolution print raster. */}
         <canvas
           ref={canvasRef}
-          style={{ width: W / 2, height: H / 2 }}
+          style={{ width: W / 2, height: "auto" }}
           className="border border-border rounded"
         />
         <p className="text-xs text-muted max-w-[200px]">
