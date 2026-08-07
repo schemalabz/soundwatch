@@ -46,30 +46,43 @@ const stickyBar = {
   background: "linear-gradient(to top, #fff 75%, rgba(255,255,255,0))",
 };
 
-export default function SitePicker({ token, onSaved }: { token: string; onSaved: () => void }) {
+export default function SitePicker({
+  token,
+  onSaved,
+  pinOnly = false,
+}: {
+  token: string;
+  onSaved: () => void;
+  // Bench/experimental units: same flow, but the planned-site list is never
+  // offered — bench hardware must not occupy a real deployment site. The pin
+  // is the whole flow for them.
+  pinOnly?: boolean;
+}) {
   const t = useTranslations("install");
-  const [sites, setSites] = useState<Site[] | null>(null);
+  const [sites, setSites] = useState<Site[] | null>(pinOnly ? [] : null);
   const [gps, setGps] = useState<Gps | null>(null);
   const [search, setSearch] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [showAll, setShowAll] = useState(false);
-  const [pinMode, setPinMode] = useState(false);
+  const [pinMode, setPinMode] = useState(pinOnly);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [needsForce, setNeedsForce] = useState(false);
 
   useEffect(() => {
-    fetch(`/api/install/${token}/locations`, { cache: "no-store" })
-      .then((r) => r.json())
-      .then((j) => setSites(j.locations ?? []))
-      .catch(() => setSites([]));
+    if (!pinOnly) {
+      fetch(`/api/install/${token}/locations`, { cache: "no-store" })
+        .then((r) => r.json())
+        .then((j) => setSites(j.locations ?? []))
+        .catch(() => setSites([]));
+    }
     // GPS denial or timeout is silent — the list is the flow, not a fallback.
     navigator.geolocation?.getCurrentPosition(
       (p) => setGps({ latitude: p.coords.latitude, longitude: p.coords.longitude }),
       () => {},
       { enableHighAccuracy: true, timeout: 10000 }
     );
-  }, [token]);
+  }, [token, pinOnly]);
 
   const ordered = useMemo(() => {
     if (!sites) return [];
@@ -134,9 +147,11 @@ export default function SitePicker({ token, onSaved }: { token: string; onSaved:
           onConfirm={(c) => save({ ...c, ...(needsForce ? { force: true } : {}) })}
         />
         {msg && <p style={{ fontSize: 14, marginTop: 8, color: "#b45309" }}>{msg}</p>}
-        <p style={{ marginTop: 10 }}>
-          <button style={linkBtn} onClick={() => setPinMode(false)}>{t("backToList")}</button>
-        </p>
+        {!pinOnly && (
+          <p style={{ marginTop: 10 }}>
+            <button style={linkBtn} onClick={() => setPinMode(false)}>{t("backToList")}</button>
+          </p>
+        )}
       </div>
     );
   }

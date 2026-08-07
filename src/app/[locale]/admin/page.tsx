@@ -18,7 +18,7 @@ interface SensorWithStatus {
   lastSeenAt: string | null;
   createdAt: string;
   status: "online" | "offline" | "never_seen";
-  stage: "minted" | "in_box" | "installed_live" | "installed_silent";
+  stage: "minted" | "in_box" | "installed_live" | "installed_silent" | "bench";
   hardwareId: string | null;
   apName: string | null;
   provisionedAt: string | null;
@@ -32,6 +32,16 @@ const STAGE_BADGE: Record<SensorWithStatus["stage"], { label: string; cls: strin
   in_box: { label: "in box", cls: "bg-[#fef3c7] text-[#b45309]" },
   installed_live: { label: "live", cls: "bg-[#dcfce7] text-[#15803d]" },
   installed_silent: { label: "silent", cls: "bg-[#fee2e2] text-[#b91c1c]" },
+  bench: { label: "bench", cls: "bg-[#dbeafe] text-[#1d4ed8]" },
+};
+
+// Liveness dot: is the device talking right now? Deliberately separate from the
+// stage badge — an in_box unit publishes during its prove phase, and the dot is
+// where that shows without corrupting lifecycle semantics.
+const STATUS_DOT: Record<SensorWithStatus["status"], string> = {
+  online: "bg-[#22c55e]",
+  offline: "bg-[#ef4444]",
+  never_seen: "bg-[#a8a29e]",
 };
 
 interface EditForm {
@@ -232,6 +242,9 @@ export default function AdminPage() {
           <span className="text-[#b45309]">{count("in_box")} in box</span>
           <span className="text-[#22c55e]">{count("installed_live")} live</span>
           <span className="text-[#ef4444]">{count("installed_silent")} silent</span>
+          {showExperimental && (
+            <span className="text-[#1d4ed8]">{count("bench")} bench</span>
+          )}
           <label className="flex items-center gap-1.5 text-muted font-normal cursor-pointer">
             <input
               type="checkbox"
@@ -271,7 +284,11 @@ export default function AdminPage() {
                       : "hover:bg-light/50"
                   }`}
                 >
-                  <td className="p-3">
+                  <td className="p-3 whitespace-nowrap">
+                    <span
+                      className={`inline-block w-2 h-2 rounded-full mr-2 ${STATUS_DOT[sensor.status]}`}
+                      title={sensor.status === "online" ? "publishing now" : sensor.status === "offline" ? "not publishing" : "never seen"}
+                    />
                     <span
                       className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${STAGE_BADGE[sensor.stage].cls}`}
                     >

@@ -29,6 +29,10 @@ export async function GET(
       deviceId: true, name: true, hardwareId: true, apName: true,
       latitude: true, longitude: true, address: true,
       provisionedAt: true, lastSeenAt: true,
+      // Bench units use the same install flow but skip the planned-site list
+      // (they must never occupy a real deployment site) — the page needs the
+      // flag to branch.
+      isExperimental: true,
     },
   });
 

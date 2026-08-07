@@ -11,6 +11,7 @@ interface SensorData {
   name: string | null;
   latitude: number | null;
   longitude: number | null;
+  isExperimental?: boolean;
   latestReading: Record<string, unknown> | null;
 }
 
@@ -77,11 +78,18 @@ export default function SensorMap({
       const dot = document.createElement("div");
       dot.style.width = "24px";
       dot.style.height = "24px";
-      dot.style.borderRadius = "50%";
       dot.style.backgroundColor = color;
-      dot.style.border = "3px solid white";
       dot.style.boxShadow = "0 2px 6px rgba(0,0,0,0.25)";
       dot.style.transition = "transform 0.2s";
+      // Bench units (admin-only view): square with a dashed blue border, so a
+      // bench pin can never be mistaken for a public deployment.
+      if (sensor.isExperimental) {
+        dot.style.borderRadius = "5px";
+        dot.style.border = "3px dashed #1d4ed8";
+      } else {
+        dot.style.borderRadius = "50%";
+        dot.style.border = "3px solid white";
+      }
       dot.dataset.sensorId = sensor.id;
       el.appendChild(dot);
 

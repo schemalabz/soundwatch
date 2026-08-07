@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
 import dynamic from "next/dynamic";
 import { Link } from "@/i18n/navigation";
@@ -23,6 +23,7 @@ interface SensorData {
   address: string | null;
   latitude: number | null;
   longitude: number | null;
+  isExperimental?: boolean;
   latestReading: Record<string, unknown> | null;
 }
 
@@ -30,15 +31,57 @@ export function MapSection({ sensors }: { sensors: SensorData[] }) {
   const t = useTranslations("map");
   const [showLeaderboard, setShowLeaderboard] = useState(false);
   const [selectedSensor, setSelectedSensor] = useState<SensorData | null>(null);
+  // Admin-only extra: when an admin token from a previous /admin login is in
+  // localStorage, offer bench units on the map. Showing the toggle trusts
+  // localStorage; showing the DATA is gated server-side — a forged toggle
+  // without a valid token gets the public list.
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [showBench, setShowBench] = useState(false);
+  const [allSensors, setAllSensors] = useState<SensorData[] | null>(null);
+
+  useEffect(() => {
+    // Deferred a microtask: the effect body itself sets no state
+    // (react-hooks/set-state-in-effect).
+    void Promise.resolve().then(() =>
+      setIsAdmin(Boolean(localStorage.getItem("sw-admin-token")))
+    );
+  }, []);
+
+  useEffect(() => {
+    if (!showBench || allSensors) return;
+    const adminToken = localStorage.getItem("sw-admin-token");
+    if (!adminToken) return;
+    fetch("/api/sensors?includeExperimental=1", {
+      headers: { Authorization: `Bearer ${adminToken}` },
+      cache: "no-store",
+    })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => { if (j) setAllSensors(j); })
+      .catch(() => {});
+  }, [showBench, allSensors]);
+
+  const shown = showBench && allSensors ? allSensors : sensors;
 
   return (
     <div className="flex flex-1 flex-col md:flex-row relative overflow-hidden">
       <div className="flex-1 relative min-h-0">
         <SensorMap
-          sensors={sensors}
+          sensors={shown}
           selectedSensorId={selectedSensor?.id}
           onSensorClick={(sensor) => setSelectedSensor(sensor as SensorData)}
         />
+
+        {isAdmin && (
+          <label className="absolute top-3 left-3 z-10 flex items-center gap-1.5 bg-white/90 border border-border rounded-lg px-2.5 py-1.5 text-xs text-muted cursor-pointer shadow-sm">
+            <input
+              type="checkbox"
+              checked={showBench}
+              onChange={(e) => setShowBench(e.target.checked)}
+              className="rounded border-border"
+            />
+            bench units
+          </label>
+        )}
 
         {selectedSensor && (
           <SensorPreviewPanel
@@ -63,7 +106,7 @@ export function MapSection({ sensors }: { sensors: SensorData[] }) {
       >
         <div className="flex items-center justify-between mb-3">
           <span className="text-xs text-muted">
-            {t("sensorsActive", { count: sensors.length })}
+            {t("sensorsActive", { count: shown.length })}
           </span>
           {sensors.some((s) => s.latestReading) && (
             <span className="text-xs text-muted">
@@ -81,7 +124,7 @@ export function MapSection({ sensors }: { sensors: SensorData[] }) {
         </div>
 
         <h2 className="text-lg font-bold mb-1">{t("noisiestRightNow")}</h2>
-        <LeaderboardPanel sensors={sensors} mode="noisiest" limit={5} />
+        <LeaderboardPanel sensors={shown} mode="noisiest" limit={5} />
 
         <Link
           href="/leaderboard"

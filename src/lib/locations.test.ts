@@ -85,6 +85,11 @@ describe("computeStage", () => {
     expect(computeStage({ provisionedAt: stale, installedAt: stale, lastSeenAt: stale }, now)).toBe("installed_silent");
     expect(computeStage({ provisionedAt: stale, installedAt: stale, lastSeenAt: null }, now)).toBe("installed_silent");
   });
+  it("experimental units are 'bench' regardless of lifecycle fields — liveness is the dot's job", () => {
+    expect(computeStage({ provisionedAt: stale, installedAt: null, lastSeenAt: recent, isExperimental: true }, now)).toBe("bench");
+    expect(computeStage({ provisionedAt: null, installedAt: stale, lastSeenAt: stale, isExperimental: true }, now)).toBe("bench");
+    expect(computeStage({ provisionedAt: null, installedAt: null, lastSeenAt: null, isExperimental: true }, now)).toBe("bench");
+  });
 });
 
 describe("decideLocationWrite", () => {
