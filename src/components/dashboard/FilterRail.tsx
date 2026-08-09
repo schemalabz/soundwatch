@@ -7,7 +7,7 @@
 import { useMemo } from "react";
 import { dashboardStrings as tr, LOCALE } from "@/lib/strings/dashboard";
 import Link from "next/link";
-import { RotateCcw } from "lucide-react";
+import { MapPin, RotateCcw, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { cn } from "@/lib/utils";
@@ -27,6 +27,7 @@ import {
   selectedDurationMs,
   type DashboardFilters,
   type DayGroup,
+  type LocationPin,
   type HourPreset,
   type PeriodId,
   type TimeSegment,
@@ -44,6 +45,9 @@ export interface FilterRailProps {
   metric: AggKey;
   onMetricChange: (m: AggKey) => void;
   onChange: (filters: DashboardFilters) => void;
+  /** Pin-placement mode is armed (the map waits for a click). */
+  placingPin: boolean;
+  onTogglePlacing: () => void;
 }
 
 const PERIODS: PeriodId[] = ["24h", "7d", "30d"];
@@ -116,6 +120,12 @@ export default function FilterRail(p: FilterRailProps) {
       const sorted = [...p.filters.months].sort((a, b) => a - b);
       parts.push(sorted.map((m) => monthLabels[m]).join(", "));
     }
+    const locs = p.filters.locations;
+    if (locs.length > 2) parts.push(tr.locations.several);
+    else if (locs.length > 0) {
+      const name = (pin: LocationPin) => pin.label ?? `${pin.lat.toFixed(3)}, ${pin.lng.toFixed(3)}`;
+      parts.push(locs.length === 2 ? tr.locations.nearTwo(name(locs[0]), name(locs[1])) : tr.locations.near(name(locs[0])));
+    }
     const sentence = parts.join(" · ");
     return sentence.charAt(0).toUpperCase() + sentence.slice(1);
   }, [unfiltered, p.filters, monthLabels]);
@@ -149,7 +159,7 @@ export default function FilterRail(p: FilterRailProps) {
               size="icon"
               className="-mr-1.5 -mt-1 size-7 shrink-0 text-muted-foreground"
               aria-label={tr.reset}
-              onClick={() => p.onChange({ period: null, days: new Set(), hours: new Set(), months: new Set() })}
+              onClick={() => p.onChange({ period: null, days: new Set(), hours: new Set(), months: new Set(), locations: [] })}
             >
               <RotateCcw className="size-3.5" />
             </Button>
@@ -294,12 +304,68 @@ export default function FilterRail(p: FilterRailProps) {
           </div>
         </section>
 
-        {/* locations — coming soon */}
+        {/* locations: map pins with a radius each */}
         <section>
-          <SectionLabel>{tr.locations.label}</SectionLabel>
-          <div className="rounded-md border border-dashed px-3 py-2.5 text-xs text-muted-foreground">
-            {tr.locations.soon}
-          </div>
+          <SectionLabel onClear={p.filters.locations.length > 0 ? () => set({ locations: [] }) : null}>
+            {tr.locations.label}
+          </SectionLabel>
+          {p.filters.locations.length > 0 && (
+            <ul className="mb-1.5 flex flex-col gap-1">
+              {p.filters.locations.map((pin, i) => (
+                <li key={`${pin.lng}:${pin.lat}`} className="flex items-center gap-2 rounded-md border px-2 py-1.5">
+                  <MapPin className="size-3.5 shrink-0 text-sound" />
+                  <span className="min-w-0 flex-1 truncate text-[12px] font-medium">
+                    {pin.label ?? <span className="font-normal text-muted-foreground">{tr.locations.resolving}</span>}
+                  </span>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <button
+                        type="button"
+                        title={tr.locations.radius}
+                        className="shrink-0 border-b border-dotted border-muted-foreground/60 text-[10.5px] tabular-nums text-muted-foreground transition-colors hover:border-sound hover:text-foreground"
+                      >
+                        {pin.radiusM >= 1000 ? `${pin.radiusM / 1000} χλμ` : `${pin.radiusM} μ`}
+                      </button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="min-w-24">
+                      {[250, 500, 1000, 2000].map((r) => (
+                        <DropdownMenuItem
+                          key={r}
+                          onClick={() =>
+                            set({ locations: p.filters.locations.map((q, j) => (j === i ? { ...q, radiusM: r } : q)) })
+                          }
+                          className={cn("text-xs tabular-nums", r === pin.radiusM && "font-semibold text-sound")}
+                        >
+                          {r >= 1000 ? `${r / 1000} χλμ` : `${r} μ`}
+                        </DropdownMenuItem>
+                      ))}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                  <button
+                    type="button"
+                    aria-label={tr.locations.remove}
+                    onClick={() => set({ locations: p.filters.locations.filter((_, j) => j !== i) })}
+                    className="shrink-0 text-muted-foreground transition-colors hover:text-foreground"
+                  >
+                    <X className="size-3" />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+          <button
+            type="button"
+            onClick={p.onTogglePlacing}
+            className={cn(
+              "w-full rounded-md border border-dashed px-3 py-2 text-left text-xs transition-colors",
+              p.placingPin
+                ? "border-sound bg-sound/8 font-medium text-sound"
+                : "text-muted-foreground hover:border-sound/60 hover:text-foreground"
+            )}
+          >
+            <MapPin className="mr-1.5 inline size-3.5 align-[-2px]" />
+            {p.placingPin ? tr.locations.placing : tr.locations.add}
+          </button>
         </section>
       </div>
 

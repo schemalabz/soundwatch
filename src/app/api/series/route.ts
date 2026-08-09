@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
+import { locationSql } from "@/lib/server/filterSql";
 import { instantMatches, type DashboardFilters, type DayGroup, type HourPreset } from "@/lib/dashboard/filters";
 import { athensWallTime } from "@/lib/dashboard/time";
 
@@ -105,6 +106,7 @@ function filtersFromQuery(q: URLSearchParams): DashboardFilters {
     days: new Set(days === "weekend" || days === "weekday" ? [days as DayGroup] : []),
     hours: new Set(hours.filter((h): h is HourPreset => ["day", "evening", "night", "peak"].includes(h))),
     months: new Set(months.map((m) => m - 1)),
+    locations: [], // spatial filtering happens in SQL (locationSql), not here
   };
 }
 
@@ -128,6 +130,7 @@ export async function GET(req: NextRequest) {
     WHERE s.is_active AND NOT s.is_experimental AND s.latitude IS NOT NULL
       AND r.laeq IS NOT NULL
       AND r.recorded_at > '${new Date(fromMs).toISOString()}'::timestamp
+      ${locationSql(q)}
     GROUP BY 1, 2`);
 
   const dims = {

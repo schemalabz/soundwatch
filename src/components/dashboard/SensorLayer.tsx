@@ -15,7 +15,7 @@
 // - Live mode reuses /api/sensors (latestReading IS the live frame), polled
 //   gently, with a slow "creep" transition instead of the 1s playback tween.
 
-import { useEffect, useReducer, useRef, useState } from "react";
+import { useEffect, useMemo, useReducer, useRef, useState } from "react";
 import type mapboxgl from "mapbox-gl";
 import {
   FrameStore,
@@ -26,7 +26,7 @@ import {
   type FrameData,
 } from "@/lib/dashboard/frames";
 import { levelColor, levelScale, paletteStops } from "@/lib/dashboard/levels";
-import type { TimeSegment } from "@/lib/dashboard/filters";
+import { withinLocations, type LocationPin, type TimeSegment } from "@/lib/dashboard/filters";
 
 interface SensorMeta {
   id: string;
@@ -46,6 +46,10 @@ export interface SensorLayerProps {
   onSensorClick?: (sensorId: string) => void;
   /** When set (aggregate mode), shown instead of frame/live data. */
   overrideFrame?: FrameData | null;
+  /** Spatial filter: markers exist only inside these pins (empty = all). */
+  locations?: readonly LocationPin[];
+  /** Pin-placement mode: sensor markers must not swallow map clicks. */
+  clickThrough?: boolean;
 }
 
 const MARKER_PX = 30;
@@ -146,7 +150,7 @@ function applyValue(
   }
 }
 
-export default function SensorLayer({ map, cursor, stepMs, segments, playing, metric, onSensorClick, overrideFrame }: SensorLayerProps) {
+export default function SensorLayer({ map, cursor, stepMs, segments, playing, metric, onSensorClick, overrideFrame, locations, clickThrough }: SensorLayerProps) {
   const [sensors, setSensors] = useState<SensorMeta[]>([]);
   const [version, bumpVersion] = useReducer((v: number) => v + 1, 0);
   const [zoomBucket, setZoomBucket] = useState(0);
@@ -158,6 +162,13 @@ export default function SensorLayer({ map, cursor, stepMs, segments, playing, me
   useEffect(() => {
     onSensorClickRef.current = onSensorClick;
   }, [onSensorClick]);
+
+  // While placing a location pin, clicks must fall through to the map.
+  useEffect(() => {
+    for (const [, h] of markersRef.current) {
+      h.marker.getElement().style.pointerEvents = clickThrough ? "none" : "auto";
+    }
+  }, [clickThrough, version]);
 
   // --- zoom tracking (quantized to 0.25 so label toggling is cheap) ---
   useEffect(() => {
@@ -190,15 +201,21 @@ export default function SensorLayer({ map, cursor, stepMs, segments, playing, me
   }, []);
 
   // --- markers lifecycle ---
+  // Location pins simply decide which markers EXIST — frames stay unfiltered
+  // (they're per-sensor values, so hiding markers is exact and cache-safe).
+  const shownSensors = useMemo(
+    () => (locations && locations.length > 0 ? sensors.filter((s) => withinLocations(s.longitude, s.latitude, locations)) : sensors),
+    [sensors, locations]
+  );
   useEffect(() => {
-    if (!map || sensors.length === 0) return;
+    if (!map || shownSensors.length === 0) return;
     const markers = markersRef.current;
     let disposed = false;
     let handles: MarkerHandle[] = [];
     // mapbox-gl is loaded dynamically alongside MapCanvas; import for Marker.
     import("mapbox-gl").then(({ default: gl }) => {
       if (disposed) return;
-      for (const s of sensors) {
+      for (const s of shownSensors) {
         const { root, circle, label } = makeMarkerElement();
         root.addEventListener("click", (e) => {
           e.stopPropagation();
@@ -220,7 +237,7 @@ export default function SensorLayer({ map, cursor, stepMs, segments, playing, me
       markers.clear();
       handles = [];
     };
-  }, [map, sensors]);
+  }, [map, shownSensors]);
 
   // --- live frame polling (only while the playhead is live) ---
   // Live IS a frame: the trailing 5 minutes at "now", computed with the

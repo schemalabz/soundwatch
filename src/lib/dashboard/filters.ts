@@ -37,12 +37,22 @@ export const PERIOD_MS: Record<PeriodId, number> = {
   "30d": 30 * 86_400_000,
 };
 
+/** A spatial filter pin: keep sensors within radiusM of (lng, lat). */
+export interface LocationPin {
+  lng: number;
+  lat: number;
+  radiusM: number;
+  /** Reverse-geocoded short address ("Πυθαγόρα 4"); null while resolving. */
+  label: string | null;
+}
+
 export interface DashboardFilters {
   period: PeriodId | null;
   days: ReadonlySet<DayGroup>;
   hours: ReadonlySet<HourPreset>;
   /** 0 = January ... 11 = December */
   months: ReadonlySet<number>;
+  locations: readonly LocationPin[];
 }
 
 export const EMPTY_FILTERS: DashboardFilters = {
@@ -50,6 +60,7 @@ export const EMPTY_FILTERS: DashboardFilters = {
   days: new Set(),
   hours: new Set(),
   months: new Set(),
+  locations: [],
 };
 
 /** The domain start the period dictates (data start when no period). */
@@ -59,7 +70,11 @@ export function periodStartMs(f: DashboardFilters, dataStartMs: number, nowMs: n
 
 export function isUnfiltered(f: DashboardFilters): boolean {
   return (
-    f.period === null && effectiveDays(f).size === 0 && effectiveHours(f).size === 0 && effectiveMonths(f).size === 0
+    f.period === null &&
+    effectiveDays(f).size === 0 &&
+    effectiveHours(f).size === 0 &&
+    effectiveMonths(f).size === 0 &&
+    f.locations.length === 0
   );
 }
 
@@ -145,7 +160,29 @@ export function filtersToAggregateQuery(f: DashboardFilters, effectiveStartMs: n
   if (hours.size > 0) params.set("hours", [...hours].join(","));
   const months = effectiveMonths(f);
   if (months.size > 0 && months.size < 12) params.set("months", [...months].map((m) => m + 1).join(","));
+  if (f.locations.length > 0) {
+    params.set(
+      "loc",
+      f.locations.map((p) => `${p.lng.toFixed(5)}:${p.lat.toFixed(5)}:${Math.round(p.radiusM)}`).join(",")
+    );
+  }
   return params.toString();
+}
+
+// Planar meters-per-degree approximation — centimeter-league error at city
+// scale, and identical to the SQL predicate in src/lib/server/filterSql.ts.
+const M_PER_DEG_LAT = 110_574;
+const M_PER_DEG_LNG_EQ = 111_320;
+
+/** Is the point inside ANY of the location pins? (No pins = everywhere.) */
+export function withinLocations(lng: number, lat: number, locations: readonly LocationPin[]): boolean {
+  if (locations.length === 0) return true;
+  for (const p of locations) {
+    const dx = (lng - p.lng) * Math.cos((p.lat * Math.PI) / 180) * M_PER_DEG_LNG_EQ;
+    const dy = (lat - p.lat) * M_PER_DEG_LAT;
+    if (dx * dx + dy * dy <= p.radiusM * p.radiusM) return true;
+  }
+  return false;
 }
 
 /** Which hours of the day (0-23) the filters admit — for muting chart

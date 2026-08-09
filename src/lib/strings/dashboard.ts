@@ -23,7 +23,14 @@ export const dashboardStrings = {
   months: { label: "Μήνες" },
   locations: {
     label: "Τοποθεσίες",
-    soon: "Έρχεται σύντομα — αναζήτηση διεύθυνσης με ακτίνα.",
+    add: "Σημείο στον χάρτη",
+    placing: "Κάνε κλικ στον χάρτη…",
+    resolving: "Εντοπισμός…",
+    remove: "Αφαίρεση",
+    radius: "Ακτίνα",
+    near: (a: string) => `κοντά στην ${a}`,
+    nearTwo: (a: string, b: string) => `κοντά στην ${a} και την ${b}`,
+    several: "διάφορες τοποθεσίες",
   },
   pane: {
     close: "Κλείσιμο",

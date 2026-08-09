@@ -25,8 +25,10 @@ import {
 } from "@/lib/dashboard/filters";
 import type { FrameData } from "@/lib/dashboard/frames";
 import type { FreshnessResponse } from "@/types/freshness";
+import { reverseGeocode } from "@/lib/dashboard/geocode";
 import FilterRail from "./FilterRail";
 import SensorLayer from "./SensorLayer";
+import LocationLayer from "./LocationLayer";
 import SensorPane from "./SensorPane";
 import CurrentDate from "./CurrentDate";
 import SkipFlash, { SKIP_HOLD_MS, type SkipEvent } from "./SkipFlash";
@@ -57,6 +59,7 @@ export default function DashboardShell() {
   const [selectedSensorId, setSelectedSensorId] = useState<string | null>(null);
   const [mode, setMode] = useState<BarMode>("instants");
   const [view, setView] = useState<DashboardView>("map");
+  const [placingPin, setPlacingPin] = useState(false);
   const [aggKey, setAggKey] = useState<AggKey>("laeq");
   const [aggData, setAggData] = useState<Record<string, Record<AggKey, number> & { n: number }> | null>(null);
   const skipSeq = useRef(0);
@@ -198,6 +201,33 @@ export default function DashboardShell() {
     if (v !== "map") setPlaying(false);
   }, []);
 
+  // Pin placement: arming jumps to the map (that's where you click); the
+  // pin lands immediately with a null label and the reverse-geocoded street
+  // name streams in when Mapbox answers.
+  const onTogglePlacing = useCallback(() => {
+    setView("map");
+    setPlacingPin((prev) => !prev);
+  }, []);
+
+  const onPlacePin = useCallback((lng: number, lat: number) => {
+    setPlacingPin(false);
+    setFilters((prev) => ({
+      ...prev,
+      locations: [...prev.locations, { lng, lat, radiusM: 500, label: null }],
+    }));
+    reverseGeocode(lng, lat).then((label) => {
+      if (!label) return;
+      setFilters((prev) => ({
+        ...prev,
+        locations: prev.locations.map((p) => (p.lng === lng && p.lat === lat ? { ...p, label } : p)),
+      }));
+    });
+  }, []);
+
+  const onRemovePin = useCallback((index: number) => {
+    setFilters((prev) => ({ ...prev, locations: prev.locations.filter((_, i) => i !== index) }));
+  }, []);
+
   const onGoToMap = useCallback(
     (lng: number, lat: number) => {
       setView("map");
@@ -260,6 +290,8 @@ export default function DashboardShell() {
     metric: aggKey,
     onMetricChange: setAggKey,
     onChange: applyFilters,
+    placingPin,
+    onTogglePlacing,
   };
 
   if (!mounted) return <div className="h-full bg-background" />;
@@ -286,6 +318,15 @@ export default function DashboardShell() {
             metric={aggKey}
             onSensorClick={setSelectedSensorId}
             overrideFrame={overrideFrame}
+            locations={filters.locations}
+            clickThrough={placingPin}
+          />
+          <LocationLayer
+            map={mapInstance}
+            locations={filters.locations}
+            placing={placingPin}
+            onPlace={onPlacePin}
+            onRemove={onRemovePin}
           />
           {view === "board" && (
             <Leaderboard aggData={aggData} metric={aggKey} onSensorClick={setSelectedSensorId} />

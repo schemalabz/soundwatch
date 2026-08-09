@@ -55,3 +55,23 @@ export function filterSql(q: URLSearchParams): string {
   const predicates = filterPredicates(q);
   return predicates.length > 0 ? `AND ${predicates.join(" AND ")}` : "";
 }
+
+/**
+ * Spatial predicate over the sensors table from the loc= wire param
+ * (lng:lat:radiusM CSV). Planar meters approximation, same constants as
+ * withinLocations client-side. Values are validated finite numbers —
+ * nothing user-typed is inlined. Returns '' when no pins.
+ */
+export function locationSql(q: URLSearchParams): string {
+  const pins = (q.get("loc") ?? "")
+    .split(",")
+    .filter(Boolean)
+    .map((s) => s.split(":").map(Number))
+    .filter((a) => a.length === 3 && a.every(Number.isFinite) && a[2] > 0);
+  if (pins.length === 0) return "";
+  const preds = pins.map(([lng, lat, r]) => {
+    const mPerDegLng = (Math.cos((lat * Math.PI) / 180) * 111320).toFixed(3);
+    return `(power((s.longitude - ${lng}) * ${mPerDegLng}, 2) + power((s.latitude - ${lat}) * 110574, 2) <= ${Math.round(r * r)})`;
+  });
+  return `AND (${preds.join(" OR ")})`;
+}
