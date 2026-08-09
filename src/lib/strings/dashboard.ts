@@ -25,6 +25,23 @@ export const dashboardStrings = {
     label: "Τοποθεσίες",
     soon: "Έρχεται σύντομα — αναζήτηση διεύθυνσης με ακτίνα.",
   },
+  pane: {
+    close: "Κλείσιμο",
+    lastReading: (ago: string) => `μέτρηση πριν ${ago}`,
+    noData: "Χωρίς δεδομένα",
+    last24h: "Τελευταίες 24 ώρες",
+    statAvg: "Μέσο",
+    statMin: "Ελάχ.",
+    statMax: "Μέγ.",
+  },
+  footer: {
+    about: "Σχετικά",
+    privacy: "Απόρρητο",
+    terms: "Όροι",
+    api: "API",
+    status: "Κατάσταση",
+    soon: "σύντομα",
+  },
   timebar: {
     live: "Μετάβαση στο τώρα",
     liveExcluded: "Το «τώρα» δεν περιλαμβάνεται στα επιλεγμένα φίλτρα",

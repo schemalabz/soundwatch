@@ -6,6 +6,7 @@
 
 import { useMemo } from "react";
 import { dashboardStrings as tr, LOCALE } from "@/lib/strings/dashboard";
+import Link from "next/link";
 import { RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
@@ -257,6 +258,18 @@ export default function FilterRail(p: FilterRailProps) {
             {tr.locations.soon}
           </div>
         </section>
+      </div>
+
+      {/* footer */}
+      <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 border-t px-5 py-3 text-[10.5px] text-muted-foreground/70">
+        {([tr.footer.about, tr.footer.privacy, tr.footer.terms, tr.footer.api] as string[]).map((label) => (
+          <span key={label} className="cursor-default" title={tr.footer.soon}>
+            {label}
+          </span>
+        ))}
+        <Link href="/status" className="font-medium text-muted-foreground transition-colors hover:text-foreground">
+          {tr.footer.status}
+        </Link>
       </div>
     </div>
   );

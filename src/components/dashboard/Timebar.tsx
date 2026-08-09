@@ -42,7 +42,7 @@ export interface TimebarProps {
   labels: { live: string; liveExcluded: string; play: string; pause: string; speed: string };
   onCursorChange: (cursor: number | "live") => void;
   onPlayToggle: () => void;
-  onSpeedCycle: () => void;
+  onSpeedSelect: (index: number) => void;
 }
 
 export default function Timebar(props: TimebarProps) {
@@ -268,11 +268,48 @@ function LiveZone({ p, compact }: { p: TimebarProps; compact?: boolean }) {
   );
 }
 
-function PlayControls({ p, vertical }: { p: TimebarProps; vertical?: boolean }) {
-  const speed = PLAYBACK_SPEEDS[p.speedIndex];
-  const speedLabel = p.locale === "el" ? speed.label : speed.labelEn;
+/**
+ * The speed picker: one line — tortoise, current value, rabbit — with four
+ * underline dashes stretched beneath the whole line (icons included), the
+ * active dash lit. Clicking the line cycles; dashes select directly.
+ */
+function SpeedLadder({ p }: { p: TimebarProps }) {
+  const label = p.locale === "el" ? PLAYBACK_SPEEDS[p.speedIndex].label : PLAYBACK_SPEEDS[p.speedIndex].labelEn;
   return (
-    <div className={cn("flex items-center", vertical ? "flex-col gap-1" : "gap-1")}>
+    <div className="flex flex-col items-stretch gap-[3px]" role="group" aria-label={p.labels.speed}>
+      <button
+        type="button"
+        onClick={() => p.onSpeedSelect((p.speedIndex + 1) % PLAYBACK_SPEEDS.length)}
+        aria-label={p.labels.speed}
+        className="flex items-center justify-center gap-1.5 text-[10px] font-medium tabular-nums leading-none tracking-tight text-muted-foreground transition-colors hover:text-foreground"
+      >
+        <Turtle className="size-3 shrink-0 opacity-55" />
+        <span className="w-[2.2rem] text-center">{label}</span>
+        <Rabbit className="size-3 shrink-0 opacity-55" />
+      </button>
+      <div className="flex items-center gap-[3px]">
+        {PLAYBACK_SPEEDS.map((s, i) => (
+          <button
+            key={i}
+            type="button"
+            aria-label={p.locale === "el" ? s.label : s.labelEn}
+            aria-pressed={i === p.speedIndex}
+            title={p.locale === "el" ? s.label : s.labelEn}
+            onClick={() => p.onSpeedSelect(i)}
+            className={cn(
+              "h-[3px] flex-1 rounded-full transition-colors",
+              i === p.speedIndex ? "bg-sound" : "bg-silver/45 hover:bg-silver/80"
+            )}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function PlayControls({ p, vertical }: { p: TimebarProps; vertical?: boolean }) {
+  return (
+    <div className={cn("flex items-center", vertical ? "flex-col gap-1" : "gap-1.5")}>
       <Button
         variant="ghost"
         size="icon"
@@ -282,25 +319,7 @@ function PlayControls({ p, vertical }: { p: TimebarProps; vertical?: boolean }) 
       >
         {p.playing ? <Pause className="size-3.5" /> : <Play className="size-3.5 translate-x-px" />}
       </Button>
-      <button
-        type="button"
-        onClick={p.onSpeedCycle}
-        aria-label={p.labels.speed}
-        className="flex items-center gap-1 rounded px-1 py-0.5 text-[10px] font-medium tabular-nums tracking-tight text-muted-foreground transition-colors hover:text-foreground"
-      >
-        <Turtle className="size-3 shrink-0 opacity-45" />
-        <span className="flex flex-col items-center gap-[3px]">
-          {/* fixed width: the label must not resize the bar as it cycles */}
-          <span className="inline-block w-[2.6rem] text-center leading-none">{speedLabel}</span>
-          <span className="relative block h-[2px] w-[2.6rem] overflow-hidden rounded-full bg-silver/40">
-            <span
-              className="absolute inset-y-0 left-0 rounded-full bg-slate transition-[width] duration-200"
-              style={{ width: `${((p.speedIndex + 1) / PLAYBACK_SPEEDS.length) * 100}%` }}
-            />
-          </span>
-        </span>
-        <Rabbit className="size-3 shrink-0 opacity-45" />
-      </button>
+      <SpeedLadder p={p} />
     </div>
   );
 }

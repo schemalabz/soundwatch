@@ -41,6 +41,7 @@ export interface SensorLayerProps {
   stepMs: number;
   segments: TimeSegment[];
   playing: boolean;
+  onSensorClick?: (sensorId: string) => void;
 }
 
 const MARKER_PX = 30;
@@ -53,11 +54,15 @@ const LIVE_TWEEN_MS = 4000;
 interface MarkerHandle {
   marker: mapboxgl.Marker;
   circle: HTMLSpanElement;
+  label: HTMLSpanElement;
 }
 
-function makeMarkerElement(): { root: HTMLDivElement; circle: HTMLSpanElement } {
+// The label shows once the ring is big enough to hold two digits.
+const LABEL_MIN_SCALE = 0.78;
+
+function makeMarkerElement(): { root: HTMLDivElement; circle: HTMLSpanElement; label: HTMLSpanElement } {
   const root = document.createElement("div");
-  root.style.cssText = `width:${MARKER_PX}px;height:${MARKER_PX}px;display:grid;place-items:center;pointer-events:none;`;
+  root.style.cssText = `position:relative;width:${MARKER_PX}px;height:${MARKER_PX}px;display:grid;place-items:center;pointer-events:auto;cursor:pointer;`;
   const circle = document.createElement("span");
   circle.style.cssText = [
     `width:${MARKER_PX}px`,
@@ -69,32 +74,64 @@ function makeMarkerElement(): { root: HTMLDivElement; circle: HTMLSpanElement } 
     "will-change:transform,opacity",
     `transition:transform ${PLAYBACK_TWEEN_MS}ms cubic-bezier(0.33,0,0.2,1),border-color ${PLAYBACK_TWEEN_MS}ms linear,opacity 400ms linear`,
   ].join(";");
+  // dB value, centered over (not inside) the scaled ring so text never warps.
+  const label = document.createElement("span");
+  label.style.cssText = [
+    "position:absolute",
+    "inset:0",
+    "display:grid",
+    "place-items:center",
+    "font-size:8.5px",
+    "font-weight:650",
+    "font-variant-numeric:tabular-nums",
+    "letter-spacing:-0.02em",
+    "opacity:0",
+    `transition:color ${PLAYBACK_TWEEN_MS}ms linear,opacity 300ms linear`,
+    "user-select:none",
+  ].join(";");
   root.appendChild(circle);
-  return { root, circle };
+  root.appendChild(label);
+  return { root, circle, label };
 }
 
 /** Apply one sensor's frame value to its circle. null = no data (gray). */
-function applyValue(circle: HTMLSpanElement, laeq: number | null, tweenMs: number): void {
-  circle.style.transitionDuration = `${tweenMs}ms,${tweenMs}ms,400ms`;
+function applyValue(h: Pick<MarkerHandle, "circle" | "label">, laeq: number | null, tweenMs: number): void {
+  h.circle.style.transitionDuration = `${tweenMs}ms,${tweenMs}ms,400ms`;
+  h.label.style.transitionDuration = `${tweenMs}ms,300ms`;
   if (laeq == null) {
-    circle.style.borderColor = "rgba(191,192,192,0.55)";
-    circle.style.transform = "scale(0.35)";
-    circle.style.opacity = "0.6";
+    h.circle.style.borderColor = "rgba(191,192,192,0.55)";
+    h.circle.style.transform = "scale(0.35)";
+    h.circle.style.opacity = "0.6";
+    h.label.style.opacity = "0";
   } else {
     const stops = paletteStops();
-    circle.style.borderColor = levelColor(laeq, stops);
-    circle.style.transform = `scale(${levelScale(laeq, stops).toFixed(3)})`;
-    circle.style.opacity = "1";
+    const scale = levelScale(laeq, stops);
+    const color = levelColor(laeq, stops);
+    h.circle.style.borderColor = color;
+    h.circle.style.transform = `scale(${scale.toFixed(3)})`;
+    h.circle.style.opacity = "1";
+    // Show the value only when the ring is wide enough to frame it.
+    if (scale >= LABEL_MIN_SCALE) {
+      h.label.textContent = String(Math.round(laeq));
+      h.label.style.color = color;
+      h.label.style.opacity = "1";
+    } else {
+      h.label.style.opacity = "0";
+    }
   }
 }
 
-export default function SensorLayer({ map, cursor, stepMs, segments, playing }: SensorLayerProps) {
+export default function SensorLayer({ map, cursor, stepMs, segments, playing, onSensorClick }: SensorLayerProps) {
   const [sensors, setSensors] = useState<SensorMeta[]>([]);
   const [version, bumpVersion] = useReducer((v: number) => v + 1, 0);
   const storeRef = useRef(new FrameStore());
   const markersRef = useRef(new Map<string, MarkerHandle>());
   const liveFrameRef = useRef<FrameData>({});
   const lastAppliedRef = useRef<number | "live" | null>(null);
+  const onSensorClickRef = useRef(onSensorClick);
+  useEffect(() => {
+    onSensorClickRef.current = onSensorClick;
+  }, [onSensorClick]);
 
   // --- sensor metadata (once) ---
   useEffect(() => {
@@ -125,11 +162,15 @@ export default function SensorLayer({ map, cursor, stepMs, segments, playing }: 
     import("mapbox-gl").then(({ default: gl }) => {
       if (disposed) return;
       for (const s of sensors) {
-        const { root, circle } = makeMarkerElement();
+        const { root, circle, label } = makeMarkerElement();
+        root.addEventListener("click", (e) => {
+          e.stopPropagation();
+          onSensorClickRef.current?.(s.id);
+        });
         const marker = new gl.Marker({ element: root, anchor: "center" })
           .setLngLat([s.longitude, s.latitude])
           .addTo(map);
-        const handle = { marker, circle };
+        const handle = { marker, circle, label };
         markers.set(s.id, handle);
         handles.push(handle);
       }
@@ -223,7 +264,7 @@ export default function SensorLayer({ map, cursor, stepMs, segments, playing }: 
 
     for (const [id, handle] of markersRef.current) {
       const v = frame?.[id];
-      applyValue(handle.circle, v ? v.laeq : null, tween);
+      applyValue(handle, v ? v.laeq : null, tween);
     }
   }, [cursorQ, stepMs, version]);
 

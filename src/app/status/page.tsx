@@ -1,125 +1,118 @@
 "use client";
 
-// Minimal data-freshness dashboard: proves the simulator/ingestion pipeline
-// is alive ("last data X seconds ago") and deep ("goes back N days") for all
-// 50 sensors. This is scaffolding for pipeline verification, not the product
-// UI — the real dashboard replaces this page.
+// Network status: every sensor with its last-hour liveness dot and a
+// 30-day liveness strip (6h cells). Public, honest, quiet.
 
 import { useEffect, useState } from "react";
-import type { FreshnessResponse } from "@/types/freshness";
+import Link from "next/link";
+import { ArrowLeft } from "lucide-react";
+import { cn } from "@/lib/utils";
 
-const POLL_MS = 5000;
-
-function dotColor(secondsAgo: number | null): string {
-  if (secondsAgo == null) return "bg-stone-300";
-  if (secondsAgo < 15) return "bg-green-500";
-  if (secondsAgo < 120) return "bg-amber-500";
-  return "bg-red-500";
+interface StatusSensor {
+  id: string;
+  deviceId: string;
+  name: string | null;
+  secondsAgo: number | null;
+  cells: string;
 }
 
-function ago(secondsAgo: number | null): string {
-  if (secondsAgo == null) return "never";
-  if (secondsAgo < 90) return `${secondsAgo}s ago`;
-  if (secondsAgo < 5400) return `${Math.round(secondsAgo / 60)}m ago`;
-  return `${(secondsAgo / 3600).toFixed(1)}h ago`;
+interface StatusResponse {
+  bucketHours: number;
+  windowDays: number;
+  sensors: StatusSensor[];
 }
 
-function span(spanDays: number | null): string {
-  if (spanDays == null) return "—";
-  if (spanDays < 1) return `${(spanDays * 24).toFixed(1)}h`;
-  return `${spanDays.toFixed(1)}d`;
+function ago(s: number | null): string {
+  if (s == null) return "ποτέ";
+  if (s < 90) return `πριν ${s}δ`;
+  if (s < 5400) return `πριν ${Math.round(s / 60)}λ`;
+  if (s < 90000) return `πριν ${Math.round(s / 3600)}ω`;
+  return `πριν ${Math.round(s / 86400)}ημ`;
 }
 
-export default function FreshnessDashboard() {
-  const [data, setData] = useState<FreshnessResponse | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    const load = async () => {
-      try {
-        const res = await fetch("/api/freshness", { cache: "no-store" });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const json = (await res.json()) as FreshnessResponse;
-        if (!cancelled) {
-          setData(json);
-          setError(null);
-        }
-      } catch (e) {
-        if (!cancelled) setError(e instanceof Error ? e.message : String(e));
-      }
-    };
-    load();
-    const timer = setInterval(load, POLL_MS);
-    return () => {
-      cancelled = true;
-      clearInterval(timer);
-    };
-  }, []);
-
+function LivenessStrip({ cells }: { cells: string }) {
+  const n = cells.length;
   return (
-    <div className="flex-1 overflow-y-auto">
-      <div className="max-w-3xl mx-auto w-full px-6 py-8">
-      <h1 className="text-xl font-bold mb-1">Pipeline freshness</h1>
-      <p className="text-sm text-stone-500 mb-6">
-        Live view of what the ingestion pipeline holds, per sensor. Refreshes every {POLL_MS / 1000}s.
-      </p>
-
-      {error && (
-        <div className="mb-4 rounded border border-red-300 bg-red-50 px-4 py-2 text-sm text-red-700">
-          Failed to load: {error}
-        </div>
+    <svg viewBox={`0 0 ${n} 8`} preserveAspectRatio="none" className="h-3.5 w-full min-w-40" aria-hidden>
+      {[...cells].map((c, i) =>
+        c === "1" ? <rect key={i} x={i + 0.08} y={0} width={0.84} height={8} rx={0.3} fill="var(--sw-slate)" opacity={0.75} /> : null
       )}
-
-      {data && (
-        <>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-8">
-            <StatCard label="Sensors" value={String(data.fleet.total)} />
-            <StatCard label="Reporting (60s)" value={String(data.fleet.reportingLast60s)} />
-            <StatCard label="Newest data" value={ago(data.fleet.newestSecondsAgo)} />
-            <StatCard label="History depth" value={span(data.fleet.oldestDataDays)} />
-          </div>
-
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="text-left text-stone-500 border-b border-stone-200">
-                <th className="py-2 pr-2 font-medium">Sensor</th>
-                <th className="py-2 pr-2 font-medium">Last data</th>
-                <th className="py-2 pr-2 font-medium text-right">LAeq</th>
-                <th className="py-2 font-medium text-right">Goes back</th>
-              </tr>
-            </thead>
-            <tbody>
-              {data.sensors.map((s) => (
-                <tr key={s.id} className="border-b border-stone-100">
-                  <td className="py-1.5 pr-2">
-                    <span className={`inline-block w-2 h-2 rounded-full mr-2 ${dotColor(s.secondsAgo)}`} />
-                    {s.name ?? s.deviceId}
-                    <span className="text-stone-400 ml-2 text-xs">{s.deviceId}</span>
-                  </td>
-                  <td className="py-1.5 pr-2 tabular-nums">{ago(s.secondsAgo)}</td>
-                  <td className="py-1.5 pr-2 tabular-nums text-right">
-                    {s.lastLaeq != null ? `${s.lastLaeq.toFixed(1)} dB` : "—"}
-                  </td>
-                  <td className="py-1.5 tabular-nums text-right">{span(s.spanDays)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </>
-      )}
-
-        {!data && !error && <p className="text-stone-400 text-sm">Loading…</p>}
-      </div>
-    </div>
+    </svg>
   );
 }
 
-function StatCard({ label, value }: { label: string; value: string }) {
+export default function StatusPage() {
+  const [data, setData] = useState<StatusResponse | null>(null);
+  const [error, setError] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    const load = () =>
+      fetch("/api/status", { cache: "no-store" })
+        .then((r) => r.json())
+        .then((d) => !cancelled && setData(d))
+        .catch(() => !cancelled && setError(true));
+    load();
+    const t = setInterval(load, 60_000);
+    return () => {
+      cancelled = true;
+      clearInterval(t);
+    };
+  }, []);
+
+  const online = data?.sensors.filter((s) => s.secondsAgo != null && s.secondsAgo < 3600).length ?? 0;
+
   return (
-    <div className="rounded-lg border border-stone-200 px-4 py-3">
-      <div className="text-xs text-stone-500">{label}</div>
-      <div className="text-lg font-semibold tabular-nums">{value}</div>
+    <div className="flex-1 overflow-y-auto">
+      <div className="mx-auto w-full max-w-3xl px-6 py-8">
+        <Link
+          href="/"
+          className="mb-6 inline-flex items-center gap-1.5 text-[12px] font-medium text-muted-foreground transition-colors hover:text-foreground"
+        >
+          <ArrowLeft className="size-3.5" /> Χάρτης
+        </Link>
+
+        <div className="mb-1 flex items-baseline gap-2">
+          <h1 className="text-xl font-bold tracking-tight">Κατάσταση δικτύου</h1>
+          <span className="size-[5px] translate-y-[-2px] rounded-full bg-sound" />
+        </div>
+        {data && (
+          <p className="text-[13px] text-muted-foreground">
+            {online} από {data.sensors.length} αισθητήρες ενεργοί την τελευταία ώρα · ιστορικό {data.windowDays} ημερών
+          </p>
+        )}
+
+        {error && <p className="mt-8 text-sm text-destructive">Σφάλμα φόρτωσης — δοκιμάστε ξανά.</p>}
+
+        <div className="mt-7 space-y-1.5">
+          {/* strip legend */}
+          {data && (
+            <div className="mb-1 flex justify-between pl-[13.5rem] pr-0 text-[9.5px] uppercase tracking-wide text-muted-foreground/70 max-md:hidden">
+              <span>{data.windowDays} ημέρες πριν</span>
+              <span>τώρα</span>
+            </div>
+          )}
+          {(data?.sensors ?? []).map((s) => {
+            const on = s.secondsAgo != null && s.secondsAgo < 3600;
+            return (
+              <div key={s.id} className="flex items-center gap-3 rounded-md px-2 py-1 hover:bg-secondary/60 max-md:flex-wrap">
+                <span
+                  className={cn("size-2 shrink-0 rounded-full", on ? "bg-sound" : "bg-silver")}
+                  title={on ? "Ενεργός την τελευταία ώρα" : "Ανενεργός"}
+                />
+                <div className="w-40 shrink-0 truncate">
+                  <span className="text-[13px] font-medium leading-tight">{s.name ?? s.deviceId}</span>
+                </div>
+                <span className="w-16 shrink-0 text-right text-[11px] tabular-nums text-muted-foreground">{ago(s.secondsAgo)}</span>
+                <div className="min-w-0 flex-1">
+                  <LivenessStrip cells={s.cells} />
+                </div>
+              </div>
+            );
+          })}
+          {!data && !error && <p className="text-sm text-muted-foreground">Φόρτωση…</p>}
+        </div>
+      </div>
     </div>
   );
 }
