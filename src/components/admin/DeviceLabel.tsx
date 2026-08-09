@@ -135,7 +135,7 @@ export default function DeviceLabel({
       >
         <div className="flex items-center justify-between">
           <h3 className="font-bold">Label — {sensor.deviceId}</h3>
-          <button onClick={onClose} className="text-muted hover:text-foreground text-lg">
+          <button onClick={onClose} className="text-muted-foreground hover:text-foreground text-lg">
             ✕
           </button>
         </div>
@@ -146,7 +146,7 @@ export default function DeviceLabel({
           style={{ width: W / 2, height: "auto" }}
           className="border border-border rounded"
         />
-        <p className="text-xs text-muted max-w-[200px]">
+        <p className="text-xs text-muted-foreground max-w-[200px]">
           50 mm tape · 8 dots/mm · print at 100%, no scaling
         </p>
         <button

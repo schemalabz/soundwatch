@@ -1,0 +1,47 @@
+// Greek UI strings for the installer flow. The app is deliberately
+// single-locale for now; when proper i18n lands, this module is the
+// extraction point — every install-facing string lives here and nowhere else.
+
+export const installStrings = {
+  title: "Εγκατάσταση Soundwatch",
+  device: (token: string) => `Συσκευή ${token}`,
+  hardwareLine: (id: string) => `hardware ${id}`,
+  setupNetwork: (ap: string) => ` · δίκτυο εγκατάστασης ${ap}`,
+  checking: "Έλεγχος…",
+  live: "✓ Λαμβάνουμε δεδομένα",
+  stale: "⚠ Λειτουργούσε, τώρα σίγησε",
+  neverSeen: "… Δεν στέλνει ακόμα",
+  unknownToken: "✕ Άγνωστη συσκευή",
+  lastReading: (s: number) => `τελευταία μέτρηση πριν από ${s}s`,
+  battery: (n: number) => ` · μπαταρία ${n}%`,
+  wifi: (n: number) => ` · wifi ${n} dBm`,
+  // steps 1-3 carry inline <b> emphasis and live directly in the page JSX
+  step4: "Επιστρέψτε εδώ — μπορεί να πάρει μερικά λεπτά.",
+  staleHint: "Έστελνε δεδομένα νωρίτερα και τώρα σταμάτησε. Ελέγξτε ότι έχει ρεύμα και περιμένετε ένα λεπτό.",
+  whereInstalled: "Πού εγκαταστάθηκε;",
+  recorded: "Καταχωρήθηκε",
+  updateHere: "Ενημέρωση θέσης στο σημείο μου",
+  saving: "Αποθήκευση…",
+  locationSaved: "Η θέση αποθηκεύτηκε.",
+  gpsFailed: "Δεν ήταν δυνατή η ανάγνωση GPS. Επιτρέψτε την πρόσβαση τοποθεσίας ή επιλέξτε σημείο από τη λίστα.",
+  saveFailed: "Δεν ήταν δυνατή η αποθήκευση της θέσης.",
+  networkError: "Σφάλμα δικτύου — δοκιμάστε ξανά.",
+  alreadyLocated: "Η συσκευή έχει ήδη καταχωρημένη θέση. Αποθηκεύστε ξανά μόνο αν είστε σίγουροι ότι κρατάτε το σωστό κουτί.",
+  pickSite: "Διαλέξτε το σημείο όπου βρίσκεστε. Αν επιτρέψετε την πρόσβαση τοποθεσίας, τα κοντινότερα εμφανίζονται πρώτα.",
+  loadingSites: "Φόρτωση σημείων…",
+  searchSites: "Αναζήτηση σημείων…",
+  noSitesMatch: "Κανένα σημείο δεν ταιριάζει.",
+  metersAway: (m: number) => ` — ${m} μ`,
+  occupiedLive: "έχει ήδη μονάδα (ενεργή)",
+  occupiedSilent: "έχει ήδη μονάδα (σιωπηλή)",
+  showAll: (n: number) => `Εμφάνιση και των ${n} σημείων`,
+  occupiedWarning: (state: "live" | "silent") =>
+    `Αυτό το σημείο έχει ήδη μονάδα (${state === "live" ? "ενεργή" : "σιωπηλή"}). Συνεχίστε μόνο αν την αντικαθιστάτε.`,
+  installAnyway: "Εγκατάσταση εδώ ούτως ή άλλως",
+  confirmSite: (name: string) => `Επιβεβαίωση: ${name}`,
+  overrideLocation: "Αντικατάσταση θέσης",
+  somewhereElse: "Βρίσκομαι κάπου αλλού",
+  movePin: "Μετακινήστε τον χάρτη ώστε η πινέζα να δείχνει το σημείο της μονάδας και επιβεβαιώστε.",
+  pinConfirm: "Εδώ βρίσκεται η μονάδα",
+  backToList: "← Πίσω στη λίστα σημείων",
+} as const;

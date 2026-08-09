@@ -228,11 +228,11 @@ export default function AdminPage() {
           <h1 className="text-2xl font-bold mt-2">Sensor Admin</h1>
         </div>
         <div className="flex items-center gap-4 text-sm font-medium">
-          <span className="text-muted">{count("minted")} minted</span>
+          <span className="text-muted-foreground">{count("minted")} minted</span>
           <span className="text-[#b45309]">{count("in_box")} in box</span>
           <span className="text-[#22c55e]">{count("installed_live")} live</span>
           <span className="text-[#ef4444]">{count("installed_silent")} silent</span>
-          <label className="flex items-center gap-1.5 text-muted font-normal cursor-pointer">
+          <label className="flex items-center gap-1.5 text-muted-foreground font-normal cursor-pointer">
             <input
               type="checkbox"
               checked={showExperimental}
@@ -247,16 +247,16 @@ export default function AdminPage() {
       <div className="flex gap-6">
         <div className="flex-1 bg-white rounded-xl border border-border overflow-hidden">
           <table className="w-full text-sm">
-            <thead className="bg-light border-b border-border">
+            <thead className="bg-muted border-b border-border">
               <tr>
-                <th className="text-left p-3 text-muted font-medium">Stage</th>
-                <th className="text-left p-3 text-muted font-medium">Device ID</th>
-                <th className="text-left p-3 text-muted font-medium">HW</th>
-                <th className="text-left p-3 text-muted font-medium">AP</th>
-                <th className="text-left p-3 text-muted font-medium">Site</th>
-                <th className="text-left p-3 text-muted font-medium">Name</th>
-                <th className="text-left p-3 text-muted font-medium">Interval</th>
-                <th className="text-left p-3 text-muted font-medium">Last Seen</th>
+                <th className="text-left p-3 text-muted-foreground font-medium">Stage</th>
+                <th className="text-left p-3 text-muted-foreground font-medium">Device ID</th>
+                <th className="text-left p-3 text-muted-foreground font-medium">HW</th>
+                <th className="text-left p-3 text-muted-foreground font-medium">AP</th>
+                <th className="text-left p-3 text-muted-foreground font-medium">Site</th>
+                <th className="text-left p-3 text-muted-foreground font-medium">Name</th>
+                <th className="text-left p-3 text-muted-foreground font-medium">Interval</th>
+                <th className="text-left p-3 text-muted-foreground font-medium">Last Seen</th>
                 <th className="p-3"></th>
               </tr>
             </thead>
@@ -267,8 +267,8 @@ export default function AdminPage() {
                   onClick={() => openEdit(sensor)}
                   className={`border-b border-border/50 cursor-pointer transition-colors ${
                     editingSensor?.id === sensor.id
-                      ? "bg-light"
-                      : "hover:bg-light/50"
+                      ? "bg-muted"
+                      : "hover:bg-muted/50"
                   }`}
                 >
                   <td className="p-3">
@@ -280,7 +280,7 @@ export default function AdminPage() {
                   </td>
                   <td className="p-3 font-mono text-xs">{sensor.deviceId}</td>
                   <td className="p-3 font-mono text-xs">{sensor.hardwareId ? sensor.hardwareId.slice(-4) : "—"}</td>
-                  <td className="p-3 text-muted text-xs">{sensor.apName || "—"}</td>
+                  <td className="p-3 text-muted-foreground text-xs">{sensor.apName || "—"}</td>
                   <td className="p-3">
                     {sensor.plannedLocation?.name ??
                       (sensor.latitude != null
@@ -289,7 +289,7 @@ export default function AdminPage() {
                   </td>
                   <td className="p-3">{sensor.name || "—"}</td>
                   <td className="p-3">{sensor.readingIntervalS}s</td>
-                  <td className="p-3 text-muted">
+                  <td className="p-3 text-muted-foreground">
                     {sensor.lastSeenAt
                       ? new Date(sensor.lastSeenAt).toLocaleString()
                       : "Never"}
@@ -299,7 +299,7 @@ export default function AdminPage() {
                       onClick={(e) => { e.stopPropagation(); setLabelSensor(sensor); }}
                       disabled={!sensor.apName}
                       title={sensor.apName ? "Print label" : "Provision first — label needs the setup AP name"}
-                      className="text-xs border border-border rounded px-2 py-1 hover:bg-light disabled:opacity-40 disabled:cursor-not-allowed"
+                      className="text-xs border border-border rounded px-2 py-1 hover:bg-muted disabled:opacity-40 disabled:cursor-not-allowed"
                     >
                       Label
                     </button>
@@ -316,15 +316,15 @@ export default function AdminPage() {
               <h3 className="font-bold">Edit Sensor</h3>
               <button
                 onClick={() => { setEditingSensor(null); setEditForm(null); }}
-                className="text-muted hover:text-foreground text-lg"
+                className="text-muted-foreground hover:text-foreground text-lg"
               >
                 ✕
               </button>
             </div>
 
-            <p className="font-mono text-xs text-muted">{editingSensor.deviceId}</p>
+            <p className="font-mono text-xs text-muted-foreground">{editingSensor.deviceId}</p>
 
-            <div className="text-xs text-muted space-y-1">
+            <div className="text-xs text-muted-foreground space-y-1">
               {editingSensor.hardwareId && (
                 <p>hardware <span className="font-mono">{editingSensor.hardwareId}</span></p>
               )}
@@ -338,7 +338,7 @@ export default function AdminPage() {
             </div>
 
             <label className="block">
-              <span className="text-xs text-muted">Name</span>
+              <span className="text-xs text-muted-foreground">Name</span>
               <input
                 value={editForm.name}
                 onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
@@ -347,7 +347,7 @@ export default function AdminPage() {
             </label>
 
             <label className="block">
-              <span className="text-xs text-muted">Address</span>
+              <span className="text-xs text-muted-foreground">Address</span>
               <input
                 value={editForm.address}
                 onChange={(e) => setEditForm({ ...editForm, address: e.target.value })}
@@ -357,7 +357,7 @@ export default function AdminPage() {
 
             <div className="grid grid-cols-2 gap-3">
               <label className="block">
-                <span className="text-xs text-muted">Latitude</span>
+                <span className="text-xs text-muted-foreground">Latitude</span>
                 <input
                   value={editForm.latitude}
                   onChange={(e) => setEditForm({ ...editForm, latitude: e.target.value })}
@@ -365,7 +365,7 @@ export default function AdminPage() {
                 />
               </label>
               <label className="block">
-                <span className="text-xs text-muted">Longitude</span>
+                <span className="text-xs text-muted-foreground">Longitude</span>
                 <input
                   value={editForm.longitude}
                   onChange={(e) => setEditForm({ ...editForm, longitude: e.target.value })}
@@ -375,7 +375,7 @@ export default function AdminPage() {
             </div>
 
             <label className="block">
-              <span className="text-xs text-muted">Reading Interval (seconds)</span>
+              <span className="text-xs text-muted-foreground">Reading Interval (seconds)</span>
               <input
                 type="number"
                 value={editForm.readingIntervalS}
@@ -385,7 +385,7 @@ export default function AdminPage() {
             </label>
 
             <label className="block">
-              <span className="text-xs text-muted">Target Firmware Version</span>
+              <span className="text-xs text-muted-foreground">Target Firmware Version</span>
               <input
                 value={editForm.targetFirmwareVersion}
                 onChange={(e) => setEditForm({ ...editForm, targetFirmwareVersion: e.target.value })}
@@ -414,14 +414,14 @@ export default function AdminPage() {
               </button>
               <button
                 onClick={() => { setEditingSensor(null); setEditForm(null); }}
-                className="px-4 py-2 border border-border rounded-lg text-sm hover:bg-light transition-colors"
+                className="px-4 py-2 border border-border rounded-lg text-sm hover:bg-muted transition-colors"
               >
                 Cancel
               </button>
             </div>
 
             {editingSensor.firmwareVersion && (
-              <p className="text-xs text-muted pt-2">
+              <p className="text-xs text-muted-foreground pt-2">
                 Current firmware: {editingSensor.firmwareVersion}
               </p>
             )}
@@ -430,7 +430,7 @@ export default function AdminPage() {
               onClick={() => setLabelSensor(editingSensor)}
               disabled={!editingSensor.apName}
               title={editingSensor.apName ? "Print label" : "Provision first — label needs the setup AP name"}
-              className="w-full border border-border rounded-lg py-2 text-sm hover:bg-light disabled:opacity-40 disabled:cursor-not-allowed"
+              className="w-full border border-border rounded-lg py-2 text-sm hover:bg-muted disabled:opacity-40 disabled:cursor-not-allowed"
             >
               Print label
             </button>
@@ -470,7 +470,7 @@ export default function AdminPage() {
                   </button>
                   <button
                     onClick={() => { setDeleteInfo(null); setDeleteTyped(""); }}
-                    className="px-4 py-2 border border-border rounded-lg text-sm hover:bg-light"
+                    className="px-4 py-2 border border-border rounded-lg text-sm hover:bg-muted"
                   >
                     Cancel
                   </button>
