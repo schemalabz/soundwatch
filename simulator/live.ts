@@ -44,19 +44,19 @@ export function runLive(): void {
     clients.push(client);
 
     client.on("connect", () => {
-      // Announce identity once, like the firmware's createInfo() on boot.
-      // Retained (unlike real firmware) so the ingester picks it up even when
-      // it subscribes after the simulator connected — startup order in a
-      // compose stack is not guaranteed.
+      if (looping.has(sensor.deviceId)) return; // reconnect, not first connect
+      looping.add(sensor.deviceId);
+      // Announce identity once per process, like the firmware's createInfo()
+      // on boot. Retained (unlike real firmware) so the ingester picks it up
+      // even when it subscribes after the simulator connected. Once only:
+      // the ingester bumps lastSeenAt on /info, so re-announcing on every
+      // MQTT reconnect would keep outage-dark sensors looking "online".
       client.publish(
         `device/sck/${sensor.deviceId}/info`,
         JSON.stringify({ id: hardwareId(sensor.deviceId), hw_ver: "2.3", mac: "SIM" }),
         { retain: true }
       );
-      if (!looping.has(sensor.deviceId)) {
-        looping.add(sensor.deviceId);
-        scheduleNext(client, sensor);
-      }
+      scheduleNext(client, sensor);
     });
     client.on("error", (err) => {
       console.error(`${sensor.deviceId}: MQTT error:`, err.message);

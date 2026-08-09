@@ -16,7 +16,7 @@ backfills 90 days of history and then streams live readings:
 npm run local:up
 ```
 
-First run builds images and backfills ~6.5M readings (~4 min; the command
+First run builds images and backfills ~6M readings (~5-6 min; the command
 streams backfill progress and exits when it completes — the stack keeps
 running). Then:
 
@@ -35,7 +35,9 @@ Knobs (env vars): `SIM_INTERVAL_S` (live cadence, default 5s),
 
 The simulated data is deterministic and realistic: per-neighborhood base
 levels, archetype diurnal curves (nightlife/commercial/arterial/residential),
-weekday/weekend contrast, and sporadic loud events — see `simulator/`.
+weekday/weekend contrast, sporadic loud events, and sensor outages (units
+occasionally go dark for 1 minute to 10 days; a few units are chronically
+flaky, most are solid) — see `simulator/`.
 
 ## Host-mode development
 

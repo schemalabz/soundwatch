@@ -1,5 +1,12 @@
 FROM node:22-bookworm-slim AS base
 
+# openssl must exist before `prisma generate` runs: Prisma detects the host
+# openssl version to pick the "native" query engine, and without the binary
+# it guesses openssl 1.1 — which then fails to load at runtime on bookworm
+# (openssl 3). Affects arm64 local builds; amd64 prod was saved by the
+# explicit debian-openssl-3.0.x binaryTarget.
+RUN apt-get update -y && apt-get install -y openssl && rm -rf /var/lib/apt/lists/*
+
 # --- Dependencies ---
 FROM base AS deps
 WORKDIR /app
@@ -19,8 +26,6 @@ RUN npm run build
 # --- Runner ---
 FROM base AS runner
 WORKDIR /app
-
-RUN apt-get update -y && apt-get install -y openssl && rm -rf /var/lib/apt/lists/*
 
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
