@@ -45,11 +45,6 @@ export interface TimebarProps {
   orientation: "horizontal" | "vertical";
   locale: string;
   labels: { live: string; liveExcluded: string; play: string; pause: string; speed: string };
-  mode: BarMode;
-  aggKey: AggKey;
-  aggLoading: boolean;
-  onModeChange: (mode: BarMode) => void;
-  onAggChange: (key: AggKey) => void;
   onCursorChange: (cursor: number | "live") => void;
   onPlayToggle: () => void;
   onSpeedSelect: (index: number) => void;
@@ -91,8 +86,15 @@ function useCursorLabel(p: TimebarProps): string {
 }
 
 /** Observed pixel length of the rail along its axis. */
-function useRailLength(ref: React.RefObject<HTMLDivElement | null>, axis: "x" | "y"): number {
+function useRailLength(
+  ref: React.RefObject<HTMLDivElement | null>,
+  axis: "x" | "y",
+  remountKey: unknown
+): number {
   const [length, setLength] = useState(0);
+  // remountKey re-runs the effect when the rail branch unmounts/remounts
+  // (mode switching) — otherwise the observer keeps watching a dead node
+  // and the graduations never come back.
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
@@ -103,7 +105,7 @@ function useRailLength(ref: React.RefObject<HTMLDivElement | null>, axis: "x" | 
     });
     ro.observe(el);
     return () => ro.disconnect();
-  }, [ref, axis]);
+  }, [ref, axis, remountKey]);
   return length;
 }
 
@@ -222,77 +224,46 @@ function gaps(p: TimebarProps): TimeSegment[] {
   return out;
 }
 
-/** The mode tabs: underlined, active underline in the sound accent. */
-function ModeTabs({ p, compact }: { p: TimebarProps; compact?: boolean }) {
+/** The scope picker: its own small card — the timeline bar only exists in
+ *  instants mode, so the tabs must live outside it. */
+export function ModePicker({
+  mode,
+  aggLoading,
+  compact,
+  onModeChange,
+}: {
+  mode: BarMode;
+  aggLoading: boolean;
+  compact?: boolean;
+  onModeChange: (mode: BarMode) => void;
+}) {
   return (
-    <div className={cn("flex", compact ? "flex-col gap-0.5 px-1" : "gap-4 px-1")} role="tablist">
+    <div
+      className={cn(
+        "pointer-events-auto flex flex-col justify-center gap-1 rounded-xl border bg-card/95 shadow-[0_2px_16px_-4px_rgb(45_49_66/0.18)] backdrop-blur-sm",
+        compact ? "px-1.5 py-1" : "px-3 py-1.5"
+      )}
+      role="tablist"
+    >
       {(["instants", "aggregate"] as BarMode[]).map((m) => (
         <button
           key={m}
           type="button"
           role="tab"
-          aria-selected={p.mode === m}
-          onClick={() => p.onModeChange(m)}
+          aria-selected={mode === m}
+          onClick={() => onModeChange(m)}
           className={cn(
-            "border-b-2 pb-0.5 font-medium tracking-tight transition-colors",
+            "self-start border-b-2 pb-0.5 font-medium tracking-tight transition-colors",
             compact ? "text-[8.5px]" : "text-[11px]",
-            p.mode === m
-              ? "border-sound text-foreground"
-              : "border-transparent text-muted-foreground hover:text-foreground"
+            mode === m ? "border-sound text-foreground" : "border-transparent text-muted-foreground hover:text-foreground"
           )}
         >
           {tr.modes[m]}
         </button>
       ))}
-    </div>
-  );
-}
-
-/** The shared metric picker: every frame window AND every aggregate is
- *  computed with this — common to both modes. */
-function MetricChips({ p, compact }: { p: TimebarProps; compact?: boolean }) {
-  return (
-    <div className={cn("flex items-center", compact ? "flex-col gap-1 px-1" : "gap-1")}>
-      {AGG_KEYS.map((k) => {
-        const active = p.aggKey === k;
-        return (
-          <Tooltip key={k}>
-            <TooltipTrigger asChild>
-              <button
-                type="button"
-                aria-pressed={active}
-                onClick={() => p.onAggChange(k)}
-                className={cn(
-                  "rounded-md border font-medium transition-colors",
-                  compact ? "w-full px-1 py-0.5 text-[8px]" : "px-2 py-0.5 text-[10.5px]",
-                  active
-                    ? "border-sound/50 bg-sound/12 text-foreground"
-                    : "border-transparent bg-secondary text-muted-foreground hover:text-foreground"
-                )}
-              >
-                {tr.aggregations[k].label}
-              </button>
-            </TooltipTrigger>
-            <TooltipContent side={compact ? "left" : "bottom"}>{tr.aggregations[k].hint}</TooltipContent>
-          </Tooltip>
-        );
-      })}
-    </div>
-  );
-}
-
-/** Aggregate mode's content row: just the explanation + compute state. */
-function AggregatePanel({ p, compact }: { p: TimebarProps; compact?: boolean }) {
-  if (compact) {
-    return (
-      <div className="flex flex-1 items-center justify-center px-1 text-center text-[8px] leading-tight text-muted-foreground">
-        {p.aggLoading ? "…" : tr.aggregations[p.aggKey].label}
-      </div>
-    );
-  }
-  return (
-    <div className="flex flex-1 items-center px-2 text-[11px] text-muted-foreground">
-      {p.aggLoading ? "Υπολογισμός…" : tr.aggregations[p.aggKey].hint}
+      {mode === "aggregate" && aggLoading && (
+        <span className={cn("text-muted-foreground", compact ? "text-[7.5px]" : "text-[9.5px]")}>Υπολογισμός…</span>
+      )}
     </div>
   );
 }
@@ -419,21 +390,14 @@ function HorizontalTimebar(p: TimebarProps) {
   const cursorLabel = useCursorLabel(p);
   const { railRef, dragging, hoverFraction, onPointerDown, onPointerMove, onPointerUp, onPointerLeave, onKeyDown } =
     usePointerScrub(p, "x");
-  const railLength = useRailLength(railRef, "x");
+  const railLength = useRailLength(railRef, "x", null);
   const graduations = useGraduations(p, railLength);
   const isLive = p.cursor === "live";
   const cursorF = fraction(cursorMs);
 
   return (
-    <div className="pointer-events-auto flex h-[6rem] flex-col rounded-xl border bg-card/95 pl-2 pr-3 shadow-[0_2px_16px_-4px_rgb(45_49_66/0.18)] backdrop-blur-sm">
-      <div className="flex items-center justify-between pl-1 pr-1 pt-1.5">
-        <ModeTabs p={p} />
-        <MetricChips p={p} />
-      </div>
-      {p.mode === "aggregate" ? (
-        <AggregatePanel p={p} />
-      ) : (
-      <div className="flex flex-1 items-stretch gap-2.5">
+    <div className="pointer-events-auto flex h-[4.25rem] flex-1 rounded-xl border bg-card/95 shadow-[0_2px_16px_-4px_rgb(45_49_66/0.18)] backdrop-blur-sm">
+      <div className="flex flex-1 items-stretch gap-2.5 pl-2 pr-3">
       <div className="flex items-center">
         <PlayControls p={p} />
       </div>
@@ -532,7 +496,6 @@ function HorizontalTimebar(p: TimebarProps) {
         <LiveZone p={p} />
       </div>
       </div>
-      )}
     </div>
   );
 }
@@ -549,20 +512,13 @@ function VerticalTimebar(p: TimebarProps) {
     usePointerScrub(p, "y");
   void dragging;
   void hoverFraction;
-  const railLength = useRailLength(railRef, "y");
+  const railLength = useRailLength(railRef, "y", null);
   const graduations = useGraduations(p, railLength);
   const isLive = p.cursor === "live";
   const cursorF = fraction(cursorMs);
 
   return (
-    <div className="pointer-events-auto flex w-12 flex-col items-stretch gap-1.5 rounded-xl border bg-card/95 py-2 shadow-[0_2px_16px_-4px_rgb(45_49_66/0.18)] backdrop-blur-sm">
-      <ModeTabs p={p} compact />
-      <MetricChips p={p} compact />
-      <div className="mx-3 h-px bg-border" />
-      {p.mode === "aggregate" ? (
-        <AggregatePanel p={p} compact />
-      ) : (
-      <>
+    <div className="pointer-events-auto flex w-12 flex-1 flex-col items-stretch gap-1.5 rounded-xl border bg-card/95 py-2 shadow-[0_2px_16px_-4px_rgb(45_49_66/0.18)] backdrop-blur-sm">
       <div className="flex justify-center">
         <LiveZone p={p} compact />
       </div>
@@ -656,8 +612,6 @@ function VerticalTimebar(p: TimebarProps) {
       <div className="flex justify-center">
         <PlayControls p={p} vertical />
       </div>
-      </>
-      )}
     </div>
   );
 }

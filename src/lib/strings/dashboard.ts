@@ -9,7 +9,7 @@ export const dashboardStrings = {
     everything: "Όλες οι μετρήσεις",
     weekend: "Σαββατοκύριακα",
     weekday: "Καθημερινές",
-    receipt: (hours: string, days: number) => `≈ ${hours} ώρες επιλεγμένες · δεδομένα ${days} ημερών`,
+    receipt: (count: string, days: number) => `≈ ${count} μετρήσεις · ${days} ημέρες`,
   },
   period: {
     label: "Περίοδος",
@@ -46,6 +46,7 @@ export const dashboardStrings = {
     instants: "Στιγμιότυπα",
     aggregate: "Συγκεντρωτικά",
   },
+  metricLabel: "Μέτρηση με",
   aggregations: {
     laeq: { label: "Μέση", hint: "Ενεργειακός μέσος (LAeq)" },
     l50: { label: "Διάμεσος", hint: "Τυπική στάθμη (L50)" },

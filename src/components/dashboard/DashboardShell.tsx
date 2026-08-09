@@ -30,7 +30,7 @@ import SensorLayer from "./SensorLayer";
 import SensorPane from "./SensorPane";
 import CurrentDate from "./CurrentDate";
 import SkipFlash, { SKIP_HOLD_MS, type SkipEvent } from "./SkipFlash";
-import Timebar, { PLAYBACK_SPEEDS, type AggKey, type BarMode } from "./Timebar";
+import Timebar, { ModePicker, PLAYBACK_SPEEDS, type AggKey, type BarMode } from "./Timebar";
 
 const MapCanvas = dynamic(() => import("./MapCanvas"), { ssr: false });
 
@@ -231,11 +231,6 @@ export default function DashboardShell() {
     freshSecondsAgo: freshness?.fleet.newestSecondsAgo ?? null,
     locale,
     labels: tr.timebar,
-    mode,
-    aggKey,
-    aggLoading,
-    onModeChange,
-    onAggChange: setAggKey,
     onCursorChange,
     onPlayToggle,
     onSpeedSelect: (i: number) => setSpeedIndex(Math.max(0, Math.min(PLAYBACK_SPEEDS.length - 1, i))),
@@ -243,7 +238,16 @@ export default function DashboardShell() {
 
   const activeFilterCount =
     (filters.period ? 1 : 0) + filters.days.size + filters.hours.size + filters.months.size;
-  const railProps = { filters, segments, dataStartMs: rangeStartMs, nowMs, onChange: applyFilters };
+  const railProps = {
+    filters,
+    segments,
+    dataStartMs: rangeStartMs,
+    nowMs,
+    sensorCount: freshness?.fleet.total ?? 50,
+    metric: aggKey,
+    onMetricChange: setAggKey,
+    onChange: applyFilters,
+  };
 
   if (!mounted) return <div className="h-full bg-background" />;
 
@@ -297,12 +301,14 @@ export default function DashboardShell() {
 
           {/* the timebar */}
           {isMobile === true ? (
-            <div className="pointer-events-none absolute bottom-24 right-2 top-16 z-10 flex">
-              <Timebar {...timebarProps} orientation="vertical" />
+            <div className="pointer-events-none absolute bottom-24 right-2 top-16 z-10 flex flex-col items-end gap-2">
+              {mode === "instants" && <Timebar {...timebarProps} orientation="vertical" />}
+              <ModePicker mode={mode} aggLoading={aggLoading} onModeChange={onModeChange} compact />
             </div>
           ) : (
-            <div className="pointer-events-none absolute inset-x-0 bottom-4 z-10 px-4">
-              <Timebar {...timebarProps} orientation="horizontal" />
+            <div className="pointer-events-none absolute inset-x-0 bottom-4 z-10 flex items-stretch gap-2 px-4">
+              <ModePicker mode={mode} aggLoading={aggLoading} onModeChange={onModeChange} />
+              {mode === "instants" && <Timebar {...timebarProps} orientation="horizontal" />}
             </div>
           )}
         </div>

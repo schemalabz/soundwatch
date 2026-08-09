@@ -120,6 +120,13 @@
   }
 }
 
+/* Hide mapbox chrome (wordmark + attribution button). NOTE: most Mapbox
+   plans contractually require visible attribution — revisit before launch. */
+.mapboxgl-ctrl-logo,
+.mapboxgl-ctrl-attrib {
+  display: none !important;
+}
+
 /* VHS dressing for the time-jump hold: rolling tracking band + jitter. */
 @keyframes sw-vhs-roll {
   0% {

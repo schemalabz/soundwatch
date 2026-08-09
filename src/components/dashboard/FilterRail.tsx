@@ -11,6 +11,14 @@ import { RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { cn } from "@/lib/utils";
+import { ChevronDown } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { AGG_KEYS, type AggKey } from "./Timebar";
 import {
   hasAnyMatch,
   HOUR_PRESET_RANGES,
@@ -31,6 +39,10 @@ export interface FilterRailProps {
   /** Oldest data instant — BEFORE any period narrowing. */
   dataStartMs: number;
   nowMs: number;
+  /** Fleet size, for the measurement-count estimate. */
+  sensorCount: number;
+  metric: AggKey;
+  onMetricChange: (m: AggKey) => void;
   onChange: (filters: DashboardFilters) => void;
 }
 
@@ -109,10 +121,13 @@ export default function FilterRail(p: FilterRailProps) {
   }, [unfiltered, p.filters, monthLabels]);
 
   const receipt = useMemo(() => {
-    const hours = Math.round(selectedDurationMs(p.segments) / 3600_000);
+    // ~1 reading per sensor-minute: an honest ≈ for "how much data backs
+    // this view", not a promise of exact row counts.
+    const readings = Math.round((selectedDurationMs(p.segments) / 60_000) * p.sensorCount);
+    const compact = new Intl.NumberFormat(locale, { notation: "compact", maximumFractionDigits: 1 }).format(readings);
     const spanDays = Math.max(1, Math.round((p.nowMs - effectiveStartMs) / 86_400_000));
-    return tr.summary.receipt(hours.toLocaleString(locale), spanDays);
-  }, [p.segments, p.nowMs, effectiveStartMs, locale]);
+    return tr.summary.receipt(compact, spanDays);
+  }, [p.segments, p.nowMs, effectiveStartMs, p.sensorCount, locale]);
 
   const set = (partial: Partial<DashboardFilters>) => p.onChange({ ...p.filters, ...partial });
 
@@ -140,7 +155,33 @@ export default function FilterRail(p: FilterRailProps) {
             </Button>
           )}
         </div>
-        <p className="mt-1 text-xs tabular-nums text-muted-foreground">{receipt}</p>
+        <p className="mt-1 text-xs tabular-nums text-muted-foreground">
+          {receipt}
+          {" · "}
+          {/* the metric every view is computed with — click to change it */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                type="button"
+                title={tr.aggregations[p.metric].hint}
+                className="inline-flex items-baseline gap-0.5 border-b border-dotted border-muted-foreground/60 font-medium text-foreground/80 transition-colors hover:border-sound hover:text-foreground"
+              >
+                {tr.aggregations[p.metric].label.toLowerCase()}
+                <ChevronDown className="size-2.5 self-center opacity-60" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="w-64">
+              {AGG_KEYS.map((k) => (
+                <DropdownMenuItem key={k} onSelect={() => p.onMetricChange(k)} className="flex flex-col items-start gap-0">
+                  <span className={cn("text-[13px] font-medium", p.metric === k && "text-sound")}>
+                    {tr.aggregations[k].label}
+                  </span>
+                  <span className="text-[11px] text-muted-foreground">{tr.aggregations[k].hint}</span>
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </p>
       </div>
 
       <div className="flex-1 space-y-7 overflow-y-auto px-5 py-6">

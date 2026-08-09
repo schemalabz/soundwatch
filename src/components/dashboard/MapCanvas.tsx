@@ -37,7 +37,6 @@ export default function MapCanvas({
       touchPitch: false,
       attributionControl: false,
     });
-    map.addControl(new mapboxgl.AttributionControl({ compact: true }), "bottom-right");
     map.on("error", (e) => {
       // Bad/expired token etc. — fall back instead of a broken canvas.
       if (!map.isStyleLoaded()) setFailed(true);
