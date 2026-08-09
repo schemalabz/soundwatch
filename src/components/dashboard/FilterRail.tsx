@@ -4,10 +4,10 @@
 // a generated sentence states what the filters currently select, with the
 // selected data volume beneath it — the filters' "receipt".
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { dashboardStrings as tr, LOCALE } from "@/lib/strings/dashboard";
 import Link from "next/link";
-import { MapPin, RotateCcw, X } from "lucide-react";
+import { MapPin, RotateCcw, Search, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { cn } from "@/lib/utils";
@@ -31,8 +31,11 @@ import {
   type HourPreset,
   type PeriodId,
   type TimeSegment,
+  withinLocations,
 } from "@/lib/dashboard/filters";
 import { ATHENS_TZ } from "@/lib/dashboard/time";
+import { searchAddress, type AddressHit } from "@/lib/dashboard/geocode";
+import type { SensorMeta } from "./SensorLayer";
 
 export interface FilterRailProps {
   filters: DashboardFilters;
@@ -40,14 +43,18 @@ export interface FilterRailProps {
   /** Oldest data instant — BEFORE any period narrowing. */
   dataStartMs: number;
   nowMs: number;
-  /** Fleet size, for the measurement-count estimate. */
+  /** Fleet size, for the measurement-count estimate (fallback until the
+   *  sensor list arrives). */
   sensorCount: number;
+  /** Fleet metadata — coordinates drive the location-aware receipt. */
+  sensors: SensorMeta[];
   metric: AggKey;
   onMetricChange: (m: AggKey) => void;
   onChange: (filters: DashboardFilters) => void;
   /** Pin-placement mode is armed (the map waits for a click). */
   placingPin: boolean;
   onTogglePlacing: () => void;
+  onAddPin: (lng: number, lat: number, label: string) => void;
 }
 
 const PERIODS: PeriodId[] = ["24h", "7d", "30d"];
@@ -66,6 +73,69 @@ function SectionLabel({ children, onClear }: { children: React.ReactNode; onClea
         >
           {tr.clear}
         </button>
+      )}
+    </div>
+  );
+}
+
+/** Debounced Mapbox address autocomplete; a pick becomes a location pin. */
+function AddressSearch({ onPick }: { onPick: (lng: number, lat: number, label: string) => void }) {
+  const [query, setQuery] = useState("");
+  // Results are tagged with the query that produced them — anything typed
+  // since simply derives to "no hits" (no state resets inside the effect).
+  const [result, setResult] = useState<{ q: string; hits: AddressHit[] } | null>(null);
+  const q = query.trim();
+  const hits = q.length >= 3 && result?.q === q ? result.hits : [];
+
+  useEffect(() => {
+    if (q.length < 3) return;
+    let cancelled = false;
+    const timer = setTimeout(() => {
+      searchAddress(q).then((results) => {
+        if (!cancelled) setResult({ q, hits: results });
+      });
+    }, 300);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [q]);
+
+  return (
+    <div>
+      <div className="flex items-center gap-2 rounded-md border px-2 py-1.5 focus-within:border-sound/60">
+        <Search className="size-3.5 shrink-0 text-muted-foreground" />
+        <input
+          type="text"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder={tr.locations.search}
+          className="min-w-0 flex-1 bg-transparent text-xs outline-none placeholder:text-muted-foreground"
+        />
+        {query && (
+          <button type="button" aria-label={tr.clear} onClick={() => setQuery("")} className="text-muted-foreground hover:text-foreground">
+            <X className="size-3" />
+          </button>
+        )}
+      </div>
+      {hits.length > 0 && (
+        <ul className="mt-1 overflow-hidden rounded-md border">
+          {hits.map((h, i) => (
+            <li key={`${h.lng}:${h.lat}:${i}`}>
+              <button
+                type="button"
+                onClick={() => {
+                  onPick(h.lng, h.lat, h.label);
+                  setQuery("");
+                }}
+                className="w-full px-2.5 py-1.5 text-left transition-colors hover:bg-sound/8"
+              >
+                <span className="block truncate text-[12px] font-medium">{h.label}</span>
+                {h.context && <span className="block truncate text-[9.5px] text-muted-foreground">{h.context}</span>}
+              </button>
+            </li>
+          ))}
+        </ul>
       )}
     </div>
   );
@@ -130,14 +200,21 @@ export default function FilterRail(p: FilterRailProps) {
     return sentence.charAt(0).toUpperCase() + sentence.slice(1);
   }, [unfiltered, p.filters, monthLabels]);
 
+  // ~1 reading per sensor-minute over the sensors the location pins keep:
+  // an honest ≈ for "how much data backs this view". Until the sensor list
+  // arrives, fall back to the fleet total (never flash a false red zero).
+  const matchedSensors = useMemo(() => {
+    if (p.sensors.length === 0) return p.sensorCount;
+    if (p.filters.locations.length === 0) return p.sensors.length;
+    return p.sensors.filter((s) => withinLocations(s.longitude, s.latitude, p.filters.locations)).length;
+  }, [p.sensors, p.sensorCount, p.filters.locations]);
+
   const receipt = useMemo(() => {
-    // ~1 reading per sensor-minute: an honest ≈ for "how much data backs
-    // this view", not a promise of exact row counts.
-    const readings = Math.round((selectedDurationMs(p.segments) / 60_000) * p.sensorCount);
+    const readings = Math.round((selectedDurationMs(p.segments) / 60_000) * matchedSensors);
     const compact = new Intl.NumberFormat(locale, { notation: "compact", maximumFractionDigits: 1 }).format(readings);
     const spanDays = Math.max(1, Math.round((p.nowMs - effectiveStartMs) / 86_400_000));
-    return tr.summary.receipt(compact, spanDays);
-  }, [p.segments, p.nowMs, effectiveStartMs, p.sensorCount, locale]);
+    return { zero: readings === 0, text: tr.summary.receipt(compact, spanDays), days: tr.summary.daysPart(spanDays) };
+  }, [p.segments, p.nowMs, effectiveStartMs, matchedSensors, locale]);
 
   const set = (partial: Partial<DashboardFilters>) => p.onChange({ ...p.filters, ...partial });
 
@@ -166,7 +243,17 @@ export default function FilterRail(p: FilterRailProps) {
           )}
         </div>
         <p className="mt-1 text-xs tabular-nums text-muted-foreground">
-          {receipt}
+          {receipt.zero ? (
+            <>
+              <span className="font-semibold" style={{ color: "var(--sw-loud)" }}>
+                {tr.summary.zeroMeasurements}
+              </span>
+              {" · "}
+              {receipt.days}
+            </>
+          ) : (
+            receipt.text
+          )}
           {" · "}
           {/* the metric every view is computed with — click to change it */}
           <DropdownMenu>
@@ -311,8 +398,12 @@ export default function FilterRail(p: FilterRailProps) {
           </SectionLabel>
           {p.filters.locations.length > 0 && (
             <ul className="mb-1.5 flex flex-col gap-1">
-              {p.filters.locations.map((pin, i) => (
-                <li key={`${pin.lng}:${pin.lat}`} className="flex items-center gap-2 rounded-md border px-2 py-1.5">
+              {p.filters.locations.map((pin, i) => {
+                const hasSensors =
+                  p.sensors.length === 0 || p.sensors.some((s) => withinLocations(s.longitude, s.latitude, [pin]));
+                return (
+                <li key={`${pin.lng}:${pin.lat}`} className="rounded-md border px-2 py-1.5">
+                <div className="flex items-center gap-2">
                   <MapPin className="size-3.5 shrink-0 text-sound" />
                   <span className="min-w-0 flex-1 truncate text-[12px] font-medium">
                     {pin.label ?? <span className="font-normal text-muted-foreground">{tr.locations.resolving}</span>}
@@ -349,15 +440,23 @@ export default function FilterRail(p: FilterRailProps) {
                   >
                     <X className="size-3" />
                   </button>
+                </div>
+                {!hasSensors && (
+                  <p className="mt-1 pl-[1.375rem] text-[10px] leading-snug" style={{ color: "var(--sw-loud)" }}>
+                    {tr.locations.noSensors}
+                  </p>
+                )}
                 </li>
-              ))}
+                );
+              })}
             </ul>
           )}
+          <AddressSearch onPick={p.onAddPin} />
           <button
             type="button"
             onClick={p.onTogglePlacing}
             className={cn(
-              "w-full rounded-md border border-dashed px-3 py-2 text-left text-xs transition-colors",
+              "mt-1.5 w-full rounded-md border border-dashed px-3 py-2 text-left text-xs transition-colors",
               p.placingPin
                 ? "border-sound bg-sound/8 font-medium text-sound"
                 : "text-muted-foreground hover:border-sound/60 hover:text-foreground"

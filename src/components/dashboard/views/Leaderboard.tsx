@@ -5,42 +5,26 @@
 // quietest and loudest of the list, colored by the same level ramp as the
 // map circles, so the two views read as one system.
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 import { dashboardStrings as tr } from "@/lib/strings/dashboard";
 import { levelColor, paletteStops } from "@/lib/dashboard/levels";
 import { fmtDb, fmtInt } from "@/lib/dashboard/format";
 import type { AggKey } from "../Timebar";
-
-interface SensorMeta {
-  id: string;
-  name: string | null;
-  address: string | null;
-}
+import type { SensorMeta } from "../SensorLayer";
 
 export default function Leaderboard({
   aggData,
   metric,
+  sensors,
   onSensorClick,
 }: {
   aggData: Record<string, Record<AggKey, number> & { n: number }> | null;
   metric: AggKey;
+  sensors: SensorMeta[];
   onSensorClick: (id: string) => void;
 }) {
-  const [meta, setMeta] = useState<Map<string, SensorMeta> | null>(null);
+  const meta = useMemo(() => new Map(sensors.map((s) => [s.id, s])), [sensors]);
   const stops = useMemo(() => paletteStops(), []);
-
-  useEffect(() => {
-    let cancelled = false;
-    fetch("/api/sensors", { cache: "no-store" })
-      .then((r) => r.json())
-      .then((body: SensorMeta[]) => {
-        if (!cancelled) setMeta(new Map(body.map((s) => [s.id, s])));
-      })
-      .catch(() => {});
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   const rows = useMemo(() => {
     if (!aggData) return null;
@@ -75,7 +59,7 @@ export default function Leaderboard({
         ) : (
           <ol className="mt-5">
             {rows.map((row, i) => {
-              const m = meta?.get(row.id);
+              const m = meta.get(row.id);
               const color = levelColor(row.value, stops);
               return (
                 <li key={row.id}>

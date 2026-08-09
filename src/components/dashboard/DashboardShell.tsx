@@ -27,7 +27,7 @@ import type { FrameData } from "@/lib/dashboard/frames";
 import type { FreshnessResponse } from "@/types/freshness";
 import { reverseGeocode } from "@/lib/dashboard/geocode";
 import FilterRail from "./FilterRail";
-import SensorLayer from "./SensorLayer";
+import SensorLayer, { type SensorMeta } from "./SensorLayer";
 import LocationLayer from "./LocationLayer";
 import SensorPane from "./SensorPane";
 import CurrentDate from "./CurrentDate";
@@ -55,6 +55,7 @@ export default function DashboardShell() {
   const [speedIndex, setSpeedIndex] = useState(1);
   const [nowMs, setNowMs] = useState(() => Date.now());
   const [freshness, setFreshness] = useState<FreshnessResponse | null>(null);
+  const [sensorList, setSensorList] = useState<SensorMeta[]>([]);
   const [skip, setSkip] = useState<SkipEvent | null>(null);
   const [selectedSensorId, setSelectedSensorId] = useState<string | null>(null);
   const [mode, setMode] = useState<BarMode>("instants");
@@ -73,6 +74,26 @@ export default function DashboardShell() {
   useEffect(() => {
     const timer = setInterval(() => setNowMs(Date.now()), 1000);
     return () => clearInterval(timer);
+  }, []);
+
+  // Fleet metadata, fetched once and shared by every consumer (markers,
+  // leaderboard names, location-pin viability in the rail).
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/sensors", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((list: { id: string; name: string | null; address: string | null; latitude: number | null; longitude: number | null }[]) => {
+        if (cancelled) return;
+        setSensorList(
+          list
+            .filter((s) => s.latitude != null && s.longitude != null)
+            .map((s) => ({ id: s.id, name: s.name, address: s.address, latitude: s.latitude!, longitude: s.longitude! }))
+        );
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   // Data range + liveness from the pipeline.
@@ -224,6 +245,15 @@ export default function DashboardShell() {
     });
   }, []);
 
+  // Address search picks arrive labeled; show the new pin when the map is up.
+  const onAddPin = useCallback(
+    (lng: number, lat: number, label: string) => {
+      setFilters((prev) => ({ ...prev, locations: [...prev.locations, { lng, lat, radiusM: 500, label }] }));
+      if (view === "map") mapInstance?.flyTo({ center: [lng, lat], zoom: Math.max(mapInstance.getZoom(), 12.5), duration: 1200 });
+    },
+    [view, mapInstance]
+  );
+
   const onRemovePin = useCallback((index: number) => {
     setFilters((prev) => ({ ...prev, locations: prev.locations.filter((_, i) => i !== index) }));
   }, []);
@@ -287,11 +317,13 @@ export default function DashboardShell() {
     dataStartMs: rangeStartMs,
     nowMs,
     sensorCount: freshness?.fleet.total ?? 50,
+    sensors: sensorList,
     metric: aggKey,
     onMetricChange: setAggKey,
     onChange: applyFilters,
     placingPin,
     onTogglePlacing,
+    onAddPin,
   };
 
   if (!mounted) return <div className="h-full bg-background" />;
@@ -311,6 +343,7 @@ export default function DashboardShell() {
           <MapCanvas onReady={setMapInstance} />
           <SensorLayer
             map={mapInstance}
+            sensors={sensorList}
             cursor={cursor}
             stepMs={PLAYBACK_SPEEDS[speedIndex].simSecondsPerRealSecond * 1000}
             segments={segments}
@@ -329,7 +362,7 @@ export default function DashboardShell() {
             onRemove={onRemovePin}
           />
           {view === "board" && (
-            <Leaderboard aggData={aggData} metric={aggKey} onSensorClick={setSelectedSensorId} />
+            <Leaderboard aggData={aggData} metric={aggKey} sensors={sensorList} onSensorClick={setSelectedSensorId} />
           )}
           {view === "charts" && (
             <ChartsView

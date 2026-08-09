@@ -28,15 +28,18 @@ import {
 import { levelColor, levelScale, paletteStops } from "@/lib/dashboard/levels";
 import { withinLocations, type LocationPin, type TimeSegment } from "@/lib/dashboard/filters";
 
-interface SensorMeta {
+export interface SensorMeta {
   id: string;
   name: string | null;
+  address: string | null;
   latitude: number;
   longitude: number;
 }
 
 export interface SensorLayerProps {
   map: mapboxgl.Map | null;
+  /** Fleet metadata, fetched once by the shell. */
+  sensors: SensorMeta[];
   cursor: number | "live";
   stepMs: number;
   segments: TimeSegment[];
@@ -150,8 +153,7 @@ function applyValue(
   }
 }
 
-export default function SensorLayer({ map, cursor, stepMs, segments, playing, metric, onSensorClick, overrideFrame, locations, clickThrough }: SensorLayerProps) {
-  const [sensors, setSensors] = useState<SensorMeta[]>([]);
+export default function SensorLayer({ map, sensors, cursor, stepMs, segments, playing, metric, onSensorClick, overrideFrame, locations, clickThrough }: SensorLayerProps) {
   const [version, bumpVersion] = useReducer((v: number) => v + 1, 0);
   const [zoomBucket, setZoomBucket] = useState(0);
   const storeRef = useRef(new FrameStore());
@@ -180,25 +182,6 @@ export default function SensorLayer({ map, cursor, stepMs, segments, playing, me
       map.off("zoom", update);
     };
   }, [map]);
-
-  // --- sensor metadata (once) ---
-  useEffect(() => {
-    let cancelled = false;
-    fetch("/api/sensors", { cache: "no-store" })
-      .then((r) => r.json())
-      .then((list: { id: string; name: string | null; latitude: number | null; longitude: number | null }[]) => {
-        if (cancelled) return;
-        setSensors(
-          list
-            .filter((s) => s.latitude != null && s.longitude != null)
-            .map((s) => ({ id: s.id, name: s.name, latitude: s.latitude!, longitude: s.longitude! }))
-        );
-      })
-      .catch(() => {});
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   // --- markers lifecycle ---
   // Location pins simply decide which markers EXIST — frames stay unfiltered
