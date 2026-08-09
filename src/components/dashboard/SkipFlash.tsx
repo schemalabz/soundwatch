@@ -21,7 +21,10 @@ export interface SkipEvent {
   targetMs: number;
 }
 
-const FLASH_MS = 650;
+// The jump is a held beat: playback pauses for this long (see the shell's
+// frame clock) while the frozen still + landing stamp stay up.
+export const SKIP_HOLD_MS = 3000;
+const FLASH_MS = SKIP_HOLD_MS;
 const PIXEL = 7; // display pixels per dither cell
 const BAYER4 = [
   [0, 8, 2, 10],
@@ -54,10 +57,23 @@ function ditherInto(target: HTMLCanvasElement, source: HTMLCanvasElement): boole
     const ink = paletteColor("--sw-ink", "#2d3142");
     const paper = paletteColor("--sw-paper", "#ffffff");
     const d = img.data;
+    // The light basemap has almost no dynamic range (everything ~0.94
+    // luminance) — raw thresholding degenerates into a sparse dot grid.
+    // Stretch the frame's 2nd..98th percentile range to full scale first so
+    // the dither renders actual map structure.
+    const lums = new Float32Array(w * h);
+    for (let i = 0, px = 0; i < d.length; i += 4, px++) {
+      lums[px] = (0.2126 * d[i] + 0.7152 * d[i + 1] + 0.0722 * d[i + 2]) / 255;
+    }
+    const sorted = Float32Array.from(lums).sort();
+    const lo = sorted[Math.floor(sorted.length * 0.02)];
+    const hi = sorted[Math.floor(sorted.length * 0.98)];
+    const span = Math.max(0.04, hi - lo);
     for (let y = 0; y < h; y++) {
       for (let x = 0; x < w; x++) {
-        const i = (y * w + x) * 4;
-        const lum = (0.2126 * d[i] + 0.7152 * d[i + 1] + 0.0722 * d[i + 2]) / 255;
+        const px = y * w + x;
+        const i = px * 4;
+        const lum = Math.min(1, Math.max(0, (lums[px] - lo) / span));
         const c = lum > BAYER4[y % 4][x % 4] ? paper : ink;
         d[i] = c[0];
         d[i + 1] = c[1];
