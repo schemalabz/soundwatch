@@ -151,7 +151,7 @@ function RangePicker({
   }
   return (
     <form
-      className="mt-1.5 rounded-md border border-sound/50 bg-sound/4 p-2"
+      className="mt-1.5 rounded-md border p-2"
       onSubmit={(e) => {
         e.preventDefault();
         submit();
@@ -183,14 +183,14 @@ function RangePicker({
         <button
           type="submit"
           disabled={!valid}
-          className="flex-1 rounded-md bg-sound py-1.5 text-[11px] font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-35"
+          className="flex-1 rounded-md border border-sound/40 py-1 text-[11px] font-medium text-sound transition-colors hover:bg-sound/10 disabled:opacity-35"
         >
           {tr.period.rangeApply}
         </button>
         <button
           type="button"
           onClick={() => setOpen(false)}
-          className="rounded-md border px-2.5 py-1.5 text-[11px] text-muted-foreground transition-colors hover:text-foreground"
+          className="px-2 py-1 text-[11px] text-muted-foreground transition-colors hover:text-foreground"
         >
           {tr.period.rangeCancel}
         </button>
