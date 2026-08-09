@@ -18,6 +18,7 @@ import {
   EMPTY_FILTERS,
   instantMatches,
   isUnfiltered,
+  periodStartMs,
   selectedSegments,
   type DashboardFilters,
 } from "@/lib/dashboard/filters";
@@ -77,7 +78,8 @@ export default function DashboardShell() {
   // Segments are memoized on a minute-quantized clock: recomputing the
   // 90-day Athens-wall-time walk every second would be wasted work.
   const nowMinute = Math.floor(nowMs / 60_000) * 60_000;
-  const rangeStartMinute = Math.floor(rangeStartMs / 60_000) * 60_000;
+  const effectiveStartMs = periodStartMs(filters, rangeStartMs, nowMs);
+  const rangeStartMinute = Math.floor(effectiveStartMs / 60_000) * 60_000;
   const segments = useMemo(
     () => selectedSegments(filters, rangeStartMinute, nowMinute),
     [filters, rangeStartMinute, nowMinute]
@@ -94,11 +96,11 @@ export default function DashboardShell() {
       setCursor((prev) => {
         if (prev !== "live") return prev;
         if (instantMatches(next, Date.now())) return prev;
-        const segs = selectedSegments(next, rangeStartMinute, nowMinute);
+        const segs = selectedSegments(next, Math.floor(periodStartMs(next, rangeStartMs, Date.now()) / 60_000) * 60_000, nowMinute);
         return segs.length > 0 ? segs[segs.length - 1].endMs - 1 : prev;
       });
     },
-    [rangeStartMinute, nowMinute]
+    [rangeStartMs, nowMinute]
   );
 
   // Playback is a FRAME clock, not an animation: one discrete step per real
@@ -149,11 +151,18 @@ export default function DashboardShell() {
     if (c === "live") setPlaying(false);
   }, []);
 
+  // A single contiguous selection ZOOMS the bar: the domain becomes that
+  // interval (graduations re-densify to it) and no highlight is drawn —
+  // highlights only exist to mark a selection inside a larger domain.
+  const singleInterval = segments.length === 1;
+  const domainStartMs = singleInterval ? segments[0].startMs : effectiveStartMs;
+  const domainEndMs = singleInterval ? (liveAllowed ? nowMs : segments[0].endMs) : nowMs;
+
   const timebarProps = {
-    rangeStartMs,
-    nowMs,
+    rangeStartMs: domainStartMs,
+    nowMs: domainEndMs,
     segments,
-    filtered,
+    filtered: filtered && !singleInterval,
     cursor,
     playing,
     speedIndex,
@@ -166,8 +175,9 @@ export default function DashboardShell() {
     onSpeedCycle: () => setSpeedIndex((i) => (i + 1) % PLAYBACK_SPEEDS.length),
   };
 
-  const activeFilterCount = filters.days.size + filters.hours.size + filters.months.size;
-  const railProps = { filters, segments, rangeStartMs, nowMs, onChange: applyFilters };
+  const activeFilterCount =
+    (filters.period ? 1 : 0) + filters.days.size + filters.hours.size + filters.months.size;
+  const railProps = { filters, segments, dataStartMs: rangeStartMs, nowMs, onChange: applyFilters };
 
   if (!mounted) return <div className="h-full bg-background" />;
 

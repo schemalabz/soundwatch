@@ -11,7 +11,7 @@
 // geometry and pointer handling.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Pause, Play } from "lucide-react";
+import { Pause, Play, Rabbit, Turtle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
@@ -20,6 +20,7 @@ import { computeGraduations } from "@/lib/dashboard/graduations";
 import { ATHENS_TZ } from "@/lib/dashboard/time";
 
 export const PLAYBACK_SPEEDS = [
+  { label: "1λ/δ", labelEn: "1m/s", simSecondsPerRealSecond: 60 },
   { label: "10λ/δ", labelEn: "10m/s", simSecondsPerRealSecond: 600 },
   { label: "1ω/δ", labelEn: "1h/s", simSecondsPerRealSecond: 3600 },
   { label: "6ω/δ", labelEn: "6h/s", simSecondsPerRealSecond: 21600 },
@@ -199,6 +200,18 @@ function usePointerScrub(p: TimebarProps, axis: "x" | "y") {
   return { railRef, dragging, hoverFraction, onPointerDown, onPointerMove, onPointerUp, onPointerLeave, onKeyDown };
 }
 
+/** The complement of the selected segments within the domain. */
+function gaps(p: TimebarProps): TimeSegment[] {
+  const out: TimeSegment[] = [];
+  let cursor = p.rangeStartMs;
+  for (const s of p.segments) {
+    if (s.startMs > cursor) out.push({ startMs: cursor, endMs: s.startMs });
+    cursor = Math.max(cursor, s.endMs);
+  }
+  if (cursor < p.nowMs) out.push({ startMs: cursor, endMs: p.nowMs });
+  return out;
+}
+
 function LiveZone({ p, compact }: { p: TimebarProps; compact?: boolean }) {
   const isLive = p.cursor === "live";
   const zone = (
@@ -273,9 +286,20 @@ function PlayControls({ p, vertical }: { p: TimebarProps; vertical?: boolean }) 
         type="button"
         onClick={p.onSpeedCycle}
         aria-label={p.labels.speed}
-        className="rounded px-1 py-0.5 text-[10px] font-medium tabular-nums tracking-tight text-muted-foreground transition-colors hover:text-foreground"
+        className="flex items-center gap-1 rounded px-1 py-0.5 text-[10px] font-medium tabular-nums tracking-tight text-muted-foreground transition-colors hover:text-foreground"
       >
-        {speedLabel}
+        <Turtle className="size-3 shrink-0 opacity-45" />
+        <span className="flex flex-col items-center gap-[3px]">
+          {/* fixed width: the label must not resize the bar as it cycles */}
+          <span className="inline-block w-[2.6rem] text-center leading-none">{speedLabel}</span>
+          <span className="relative block h-[2px] w-[2.6rem] overflow-hidden rounded-full bg-silver/40">
+            <span
+              className="absolute inset-y-0 left-0 rounded-full bg-slate transition-[width] duration-200"
+              style={{ width: `${((p.speedIndex + 1) / PLAYBACK_SPEEDS.length) * 100}%` }}
+            />
+          </span>
+        </span>
+        <Rabbit className="size-3 shrink-0 opacity-45" />
       </button>
     </div>
   );
@@ -318,38 +342,50 @@ function HorizontalTimebar(p: TimebarProps) {
         onPointerLeave={onPointerLeave}
         onKeyDown={onKeyDown}
       >
-        {/* selection bands: full-height accent washes when filters narrow time */}
+        {/* filter-excluded periods read as disabled: muted washes over the gaps */}
         {p.filtered &&
-          p.segments.map((s) => {
-            const left = fraction(s.startMs) * 100;
-            const width = Math.max(0.12, (fraction(s.endMs) - fraction(s.startMs)) * 100);
+          gaps(p).map((g) => {
+            const left = fraction(g.startMs) * 100;
+            const width = Math.max(0.12, (fraction(g.endMs) - fraction(g.startMs)) * 100);
             return (
               <div
-                key={s.startMs}
-                className="absolute inset-y-0 rounded-[2px] bg-sound/18"
+                key={g.startMs}
+                className="absolute inset-y-0 bg-silver/30"
                 style={{ left: `${left}%`, width: `${width}%` }}
               />
             );
           })}
-        {/* graduations: months span the full height, weeks/days grow from the baseline */}
+        {/* graduations: majors span the full height, mids/minors center on the axis */}
         {graduations.map((g) => (
           <div
-            key={`${g.level}-${g.fraction}`}
+            key={`${g.size}-${g.fraction}`}
             className={cn(
               "pointer-events-none absolute w-px",
-              g.level === "month" && "inset-y-0 bg-silver/60",
-              g.level === "week" && "top-1/2 h-[38%] -translate-y-1/2 bg-silver/70",
-              g.level === "day" && "top-1/2 h-[16%] -translate-y-1/2 bg-silver/45"
+              g.size === "major" && "inset-y-0 bg-silver/60",
+              g.size === "mid" && "top-1/2 h-[38%] -translate-y-1/2 bg-silver/70",
+              g.size === "minor" && "top-1/2 h-[16%] -translate-y-1/2 bg-silver/45"
             )}
             style={{ left: `${g.fraction * 100}%` }}
           >
-            {g.level === "month" && g.label && (
-              <div className="absolute left-1.5 top-1 text-[9px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
-                {g.label}
+            {g.size === "major" && g.sectionLabel && (
+              <div className="absolute left-1.5 top-1 whitespace-nowrap text-[9px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+                {g.sectionLabel}
               </div>
             )}
           </div>
         ))}
+        {/* cell numbers live in the middle of their interval, clear of any tick */}
+        {graduations
+          .filter((g) => g.cellLabel)
+          .map((g) => (
+            <div
+              key={`label-${g.fraction}`}
+              className="pointer-events-none absolute bottom-0.5 -translate-x-1/2 text-[8px] tabular-nums leading-none text-muted-foreground/60"
+              style={{ left: `${(g.fraction + (g.cellSpan ?? 0) / 2) * 100}%` }}
+            >
+              {g.cellLabel}
+            </div>
+          ))}
         {/* hover ghost */}
         {hoverFraction != null && !dragging && (
           <div
@@ -428,38 +464,54 @@ function VerticalTimebar(p: TimebarProps) {
         onPointerLeave={onPointerLeave}
         onKeyDown={onKeyDown}
       >
-        {/* selection bands */}
+        {/* filter-excluded periods read as disabled */}
         {p.filtered &&
-          p.segments.map((s) => {
-            const top = (1 - fraction(s.endMs)) * 100;
-            const height = Math.max(0.12, (fraction(s.endMs) - fraction(s.startMs)) * 100);
+          gaps(p).map((g) => {
+            const top = (1 - fraction(g.endMs)) * 100;
+            const height = Math.max(0.12, (fraction(g.endMs) - fraction(g.startMs)) * 100);
             return (
               <div
-                key={s.startMs}
-                className="absolute inset-x-0 rounded-[2px] bg-sound/18"
+                key={g.startMs}
+                className="absolute inset-x-0 bg-silver/30"
                 style={{ top: `${top}%`, height: `${height}%` }}
               />
             );
           })}
-        {/* graduations: months span the full width, weeks/days grow from the left */}
+        {/* graduations: majors span the full width, mids/minors grow from the left */}
         {graduations.map((g) => (
           <div
-            key={`${g.level}-${g.fraction}`}
+            key={`${g.size}-${g.fraction}`}
             className={cn(
               "pointer-events-none absolute h-px",
-              g.level === "month" && "inset-x-0 bg-silver/60",
-              g.level === "week" && "left-1/2 w-[38%] -translate-x-1/2 bg-silver/70",
-              g.level === "day" && "left-1/2 w-[16%] -translate-x-1/2 bg-silver/45"
+              g.size === "major" && "inset-x-0 bg-silver/60",
+              g.size === "mid" && "left-0 w-[34%] bg-silver/70",
+              g.size === "minor" && "left-0 w-[15%] bg-silver/45"
             )}
             style={{ top: `${(1 - g.fraction) * 100}%` }}
           >
-            {g.level === "month" && g.label && (
-              <div className="absolute left-0.5 top-0.5 text-[8px] font-semibold uppercase tracking-[0.06em] text-muted-foreground">
-                {g.label}
+            {g.size === "major" && g.sectionLabel && (
+              <div
+                className={cn(
+                  "absolute left-0.5 whitespace-nowrap text-[8px] font-semibold uppercase tracking-[0.06em] text-muted-foreground",
+                  g.fraction === 0 ? "bottom-0.5" : "top-0.5"
+                )}
+              >
+                {g.sectionLabel}
               </div>
             )}
           </div>
         ))}
+        {graduations
+          .filter((g) => g.cellLabel)
+          .map((g) => (
+            <div
+              key={`label-${g.fraction}`}
+              className="pointer-events-none absolute right-0.5 -translate-y-1/2 text-[7.5px] tabular-nums leading-none text-muted-foreground/60"
+              style={{ top: `${(1 - g.fraction - (g.cellSpan ?? 0) / 2) * 100}%` }}
+            >
+              {g.cellLabel}
+            </div>
+          ))}
         {/* needle */}
         <div
           className="pointer-events-none absolute inset-x-0 -translate-y-1/2"

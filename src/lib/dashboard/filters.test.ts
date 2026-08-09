@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   advanceCursor,
   EMPTY_FILTERS,
+  hasAnyMatch,
   instantMatches,
   isUnfiltered,
   selectedDurationMs,
@@ -102,6 +103,32 @@ describe("instantMatches (the LIVE gate)", () => {
     const f = filters({ hours: new Set(["night"]) });
     expect(instantMatches(f, MON_JUNE_15_MIDNIGHT_ATHENS + 2 * HOUR)).toBe(true);
     expect(instantMatches(f, MON_JUNE_15_MIDNIGHT_ATHENS + 12 * HOUR)).toBe(false);
+  });
+});
+
+describe("hasAnyMatch (option viability)", () => {
+  it("rejects weekdays inside a window that is entirely weekend", () => {
+    // Saturday 00:00 + 24h window = all weekend.
+    const satMidnight = MON_JUNE_15_MIDNIGHT_ATHENS + 5 * DAY;
+    expect(hasAnyMatch(filters({ days: new Set(["weekday"]) }), satMidnight, satMidnight + DAY)).toBe(false);
+    expect(hasAnyMatch(filters({ days: new Set(["weekend"]) }), satMidnight, satMidnight + DAY)).toBe(true);
+  });
+
+  it("accepts any hour preset over a full day", () => {
+    for (const h of ["day", "evening", "night"] as const) {
+      expect(hasAnyMatch(filters({ hours: new Set([h]) }), MON_JUNE_15_MIDNIGHT_ATHENS, MON_JUNE_15_MIDNIGHT_ATHENS + DAY)).toBe(true);
+    }
+  });
+
+  it("probes hours on partial edge days", () => {
+    // Window = Monday 10:00-14:00 Athens: "night" (23-07) cannot match.
+    const start = MON_JUNE_15_MIDNIGHT_ATHENS + 10 * HOUR;
+    expect(hasAnyMatch(filters({ hours: new Set(["night"]) }), start, start + 4 * HOUR)).toBe(false);
+    expect(hasAnyMatch(filters({ hours: new Set(["day"]) }), start, start + 4 * HOUR)).toBe(true);
+  });
+
+  it("rejects months absent from the window", () => {
+    expect(hasAnyMatch(filters({ months: new Set([0]) }), MON_JUNE_15_MIDNIGHT_ATHENS, MON_JUNE_15_MIDNIGHT_ATHENS + 10 * DAY)).toBe(false);
   });
 });
 

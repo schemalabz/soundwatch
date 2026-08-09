@@ -21,7 +21,18 @@ export const HOUR_PRESET_RANGES: Record<HourPreset, [number, number]> = {
   night: [23, 7],
 };
 
+// "Period" is one-of (unlike the combinable chips): it narrows the whole
+// domain to a trailing window ending now.
+export type PeriodId = "24h" | "7d" | "30d";
+
+export const PERIOD_MS: Record<PeriodId, number> = {
+  "24h": 24 * 3600_000,
+  "7d": 7 * 86_400_000,
+  "30d": 30 * 86_400_000,
+};
+
 export interface DashboardFilters {
+  period: PeriodId | null;
   days: ReadonlySet<DayGroup>;
   hours: ReadonlySet<HourPreset>;
   /** 0 = January ... 11 = December */
@@ -29,13 +40,21 @@ export interface DashboardFilters {
 }
 
 export const EMPTY_FILTERS: DashboardFilters = {
+  period: null,
   days: new Set(),
   hours: new Set(),
   months: new Set(),
 };
 
+/** The domain start the period dictates (data start when no period). */
+export function periodStartMs(f: DashboardFilters, dataStartMs: number, nowMs: number): number {
+  return f.period ? Math.max(dataStartMs, nowMs - PERIOD_MS[f.period]) : dataStartMs;
+}
+
 export function isUnfiltered(f: DashboardFilters): boolean {
-  return effectiveDays(f).size === 0 && effectiveHours(f).size === 0 && effectiveMonths(f).size === 0;
+  return (
+    f.period === null && effectiveDays(f).size === 0 && effectiveHours(f).size === 0 && effectiveMonths(f).size === 0
+  );
 }
 
 // "Both chips" and "no chips" both mean no restriction.
@@ -72,6 +91,36 @@ export function instantMatches(f: DashboardFilters, epochMs: number): boolean {
     hourMatches(w.hour, effectiveHours(f)) &&
     (effectiveMonths(f).size === 0 || effectiveMonths(f).has(w.month))
   );
+}
+
+/**
+ * Would these filters match ANY instant in [startMs, endMs)? Cheap: walks
+ * days with immediate exit — a matching full day always contains every hour
+ * preset, so hour-level probing is only needed on partial edge days. Used to
+ * disable filter options that would select nothing (e.g. "weekdays" inside a
+ * last-24h window that sits entirely on a Sunday).
+ */
+export function hasAnyMatch(f: DashboardFilters, startMs: number, endMs: number): boolean {
+  if (endMs <= startMs) return false;
+  const days = effectiveDays(f);
+  const hours = effectiveHours(f);
+  const months = effectiveMonths(f);
+
+  let dayStart = startMs;
+  while (dayStart < endMs) {
+    const dayEnd = Math.min(nextAthensMidnight(dayStart), endMs);
+    const w = athensWallTime(dayStart);
+    if (dayMatches(w.dow, days) && (months.size === 0 || months.has(w.month))) {
+      if (hours.size === 0) return true;
+      const fullDay = dayEnd - dayStart >= 23 * 3600_000;
+      if (fullDay) return true; // a full day contains every hour preset
+      for (let t = dayStart; t < dayEnd; t += 3600_000) {
+        if (hourMatches(athensWallTime(t).hour, hours)) return true;
+      }
+    }
+    dayStart = dayEnd;
+  }
+  return false;
 }
 
 export interface TimeSegment {

@@ -4,11 +4,19 @@
 export const dashboardStrings = {
   filters: "Φίλτρα",
   reset: "Καθαρισμός φίλτρων",
+  clear: "Καθαρισμός",
   summary: {
     everything: "Όλες οι μετρήσεις",
     weekend: "Σαββατοκύριακα",
     weekday: "Καθημερινές",
     receipt: (hours: string, days: number) => `≈ ${hours} ώρες επιλεγμένες · δεδομένα ${days} ημερών`,
+  },
+  period: {
+    label: "Περίοδος",
+    "24h": "24 ώρες",
+    "7d": "Εβδομάδα",
+    "30d": "Μήνας",
+    summary: { "24h": "τελευταίες 24 ώρες", "7d": "τελευταία εβδομάδα", "30d": "τελευταίος μήνας" },
   },
   days: { label: "Μέρες", weekend: "ΣΚ", weekday: "Καθημερινές" },
   hours: { label: "Ώρες", day: "Ημέρα", evening: "Βράδυ", night: "Νύχτα" },
