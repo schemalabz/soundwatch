@@ -26,7 +26,7 @@ import type { FreshnessResponse } from "@/types/freshness";
 import FilterRail from "./FilterRail";
 import SensorLayer from "./SensorLayer";
 import SensorPane from "./SensorPane";
-import SkipFlash, { type SkipEvent } from "./SkipFlash";
+import SkipFlash, { SKIP_HOLD_MS, type SkipEvent } from "./SkipFlash";
 import Timebar, { PLAYBACK_SPEEDS } from "./Timebar";
 
 const MapCanvas = dynamic(() => import("./MapCanvas"), { ssr: false });
@@ -50,6 +50,7 @@ export default function DashboardShell() {
   const [skip, setSkip] = useState<SkipEvent | null>(null);
   const [selectedSensorId, setSelectedSensorId] = useState<string | null>(null);
   const skipSeq = useRef(0);
+  const skipHoldUntilRef = useRef(0);
   // Stable identities: MapCanvas keys its (create/destroy!) effect on the
   // onReady callback, and the shell re-renders every second — an inline
   // arrow here would tear the map down each tick. setState is stable.
@@ -134,6 +135,9 @@ export default function DashboardShell() {
     if (!playing) return;
     const stepMs = PLAYBACK_SPEEDS[speedIndex].simSecondsPerRealSecond * 1000;
     const timer = setInterval(() => {
+      // A skip is a held beat: the clock stands still on the landing frame
+      // while the jump cut plays, then stepping resumes.
+      if (Date.now() < skipHoldUntilRef.current) return;
       const { segments: segs, liveAllowed: allowed, rangeStartMs: start } = playbackInputs.current;
       setCursor((prev) => {
         const from = prev === "live" ? (segs[0]?.startMs ?? start) : prev;
@@ -146,6 +150,7 @@ export default function DashboardShell() {
         // the jump cut so the discontinuity reads as intentional.
         if (next - from > stepMs + 1) {
           setSkip({ seq: ++skipSeq.current, targetMs: next });
+          skipHoldUntilRef.current = Date.now() + SKIP_HOLD_MS;
         }
         return next;
       });
