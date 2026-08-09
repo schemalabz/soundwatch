@@ -6,26 +6,7 @@
 // UI — the real dashboard replaces this page.
 
 import { useEffect, useState } from "react";
-
-interface FreshnessSensor {
-  id: string;
-  deviceId: string;
-  name: string | null;
-  secondsAgo: number | null;
-  spanDays: number | null;
-  lastLaeq: number | null;
-}
-
-interface Freshness {
-  now: string;
-  fleet: {
-    total: number;
-    reportingLast60s: number;
-    newestSecondsAgo: number | null;
-    oldestDataDays: number | null;
-  };
-  sensors: FreshnessSensor[];
-}
+import type { FreshnessResponse } from "@/types/freshness";
 
 const POLL_MS = 5000;
 
@@ -50,7 +31,7 @@ function span(spanDays: number | null): string {
 }
 
 export default function FreshnessDashboard() {
-  const [data, setData] = useState<Freshness | null>(null);
+  const [data, setData] = useState<FreshnessResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -59,7 +40,7 @@ export default function FreshnessDashboard() {
       try {
         const res = await fetch("/api/freshness", { cache: "no-store" });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const json = (await res.json()) as Freshness;
+        const json = (await res.json()) as FreshnessResponse;
         if (!cancelled) {
           setData(json);
           setError(null);

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
+import type { FreshnessResponse, FreshnessSensor } from "@/types/freshness";
 
 // Fleet data-freshness overview for the dev dashboard: per sensor, when the
 // newest reading was recorded (staleness), how far back the history reaches
@@ -40,7 +41,7 @@ export async function GET() {
   // recorded_at columns are timestamp-without-tz holding UTC wall time, and
   // Prisma's engine materializes naive timestamps as UTC — no tz correction.
   const nowMs = Date.now();
-  const sensors = rows.map((r) => {
+  const sensors: FreshnessSensor[] = rows.map((r) => {
     const lastMs = r.last_at?.getTime() ?? null;
     const firstMs = r.first_at?.getTime() ?? null;
     return {
@@ -63,7 +64,7 @@ export async function GET() {
     null
   );
 
-  return NextResponse.json({
+  return NextResponse.json<FreshnessResponse>({
     now: new Date(nowMs).toISOString(),
     fleet: {
       total: sensors.length,

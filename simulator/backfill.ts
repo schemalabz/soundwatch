@@ -33,7 +33,7 @@ const INSERT_CONCURRENCY = 4;
 // timestamp(3) WITHOUT time zone holding UTC wall time, and a string cast is
 // immune to the session/container timezone (a Date param would not be).
 type SqlType = "text" | "timestamp" | "float8" | "int4" | "jsonb";
-const COLUMNS: { col: string; field: keyof ReadingRow | "sensorId"; type: SqlType }[] = [
+export const COLUMNS = [
   { col: "sensor_id", field: "sensorId", type: "text" },
   { col: "recorded_at", field: "recordedAt", type: "timestamp" },
   { col: "received_at", field: "receivedAt", type: "timestamp" },
@@ -87,7 +87,16 @@ const COLUMNS: { col: string; field: keyof ReadingRow | "sensorId"; type: SqlTyp
   { col: "sam_git_hash", field: "samGitHash", type: "text" },
   { col: "esp_git_hash", field: "espGitHash", type: "text" },
   { col: "energy_saturations", field: "energySaturations", type: "int4" },
-];
+] as const satisfies readonly { col: string; field: keyof ReadingRow | "sensorId"; type: SqlType }[];
+
+// Compile-time guard: adding a field to ReadingRow (mqtt-ingester/row.ts)
+// without adding it here must not compile — otherwise the backfill would
+// silently insert NULL for the new column and backfill/live parity breaks.
+// (backfill.test.ts additionally checks the col names against the Prisma
+// schema, catching @map drift.)
+type MissingColumns = Exclude<keyof ReadingRow | "sensorId", (typeof COLUMNS)[number]["field"]>;
+const _allReadingRowFieldsCovered: [MissingColumns] extends [never] ? true : { missing: MissingColumns } = true;
+void _allReadingRowFieldsCovered;
 
 const INSERT_SQL = (() => {
   const colNames = COLUMNS.map((c) => c.col).join(", ");
@@ -110,9 +119,10 @@ function toBatchObject(sensorId: string, row: ReadingRow): Record<string, unknow
   return obj;
 }
 
-async function insertBatch(prisma: PrismaClient, rows: { sensorId: string; row: ReadingRow }[]): Promise<void> {
+/** Returns the number of rows actually inserted (ON CONFLICT skips excluded). */
+async function insertBatch(prisma: PrismaClient, rows: { sensorId: string; row: ReadingRow }[]): Promise<number> {
   const payload = JSON.stringify(rows.map(({ sensorId, row }) => toBatchObject(sensorId, row)));
-  await prisma.$executeRawUnsafe(INSERT_SQL, payload);
+  return prisma.$executeRawUnsafe(INSERT_SQL, payload);
 }
 
 export async function backfill(prisma: PrismaClient): Promise<void> {
@@ -123,83 +133,114 @@ export async function backfill(prisma: PrismaClient): Promise<void> {
   }
 
   const sensorIds = await seedFleet(prisma);
-  const endT = Math.floor(Date.now() / 1000);
-  const horizonT = endT - days * 86400;
 
   let totalInserted = 0;
   const startedAt = Date.now();
 
   // Small pool of in-flight inserts; generation keeps running while previous
-  // batches commit on other connections.
+  // batches commit on other connections. Batches never reject unhandled: the
+  // first failure is remembered and re-thrown from the coordinating side, so
+  // the process dies with a clean error (not ERR_UNHANDLED_REJECTION).
   const inflight = new Set<Promise<void>>();
-  const submit = async (batch: { sensorId: string; row: ReadingRow }[]): Promise<void> => {
+  let firstError: unknown = null;
+  const submit = (batch: { sensorId: string; row: ReadingRow }[]): Promise<void> => {
+    const p: Promise<void> = insertBatch(prisma, batch)
+      .then((count) => {
+        totalInserted += count;
+      })
+      .catch((err) => {
+        firstError ??= err;
+      })
+      .finally(() => {
+        inflight.delete(p);
+      });
+    inflight.add(p);
+    return p;
+  };
+  const throttle = async (): Promise<void> => {
     while (inflight.size >= INSERT_CONCURRENCY) {
       await Promise.race(inflight);
     }
-    const p = insertBatch(prisma, batch).then(() => {
-      inflight.delete(p);
-      totalInserted += batch.length;
-    });
-    inflight.add(p);
+    if (firstError) throw firstError;
+  };
+  const drain = async (): Promise<void> => {
+    await Promise.all(inflight);
+    if (firstError) throw firstError;
   };
 
-  for (const sensor of FLEET) {
-    const sensorId = sensorIds.get(sensor.deviceId)!;
-    const phase = phaseOffsetS(sensor.deviceId, intervalS);
+  // One pass = top up every sensor to endT, resuming from its newest reading.
+  const runPass = async (endT: number, horizonT: number, quiet: boolean): Promise<void> => {
+    for (const sensor of FLEET) {
+      const sensorId = sensorIds.get(sensor.deviceId)!;
+      const phase = phaseOffsetS(sensor.deviceId, intervalS);
 
-    // Resume from this sensor's newest reading (top-up idempotency).
-    const existing = await prisma.reading.aggregate({
-      where: { sensorId },
-      _max: { recordedAt: true },
-    });
-    const resumeT = existing._max.recordedAt
-      ? Math.floor(existing._max.recordedAt.getTime() / 1000) + 1
-      : horizonT;
-    const fromT = Math.max(horizonT, resumeT);
+      const existing = await prisma.reading.aggregate({
+        where: { sensorId },
+        _max: { recordedAt: true },
+      });
+      const resumeT = existing._max.recordedAt
+        ? Math.floor(existing._max.recordedAt.getTime() / 1000) + 1
+        : horizonT;
+      const fromT = Math.max(horizonT, resumeT);
 
-    // Walk the sensor's own grid: k*interval + phase.
-    const k = Math.ceil((fromT - phase) / intervalS);
-    let t = k * intervalS + phase;
-    if (t < fromT) t += intervalS;
+      // Walk the sensor's own grid: k*interval + phase (ceil lands on the
+      // first grid point >= fromT).
+      let t = Math.ceil((fromT - phase) / intervalS) * intervalS + phase;
 
-    const gridSlots = t > endT ? 0 : Math.floor((endT - t) / intervalS) + 1;
-    if (gridSlots === 0) {
-      console.log(`${sensor.deviceId}: up to date`);
-      continue;
-    }
-
-    let generated = 0;
-    let darkSlots = 0;
-    let batch: { sensorId: string; row: ReadingRow }[] = [];
-    for (; t <= endT; t += intervalS) {
-      // Outage: the device was dark — no reading exists for this slot.
-      if (!isOnline(sensor.deviceId, t)) {
-        darkSlots++;
+      const gridSlots = t > endT ? 0 : Math.floor((endT - t) / intervalS) + 1;
+      if (gridSlots === 0) {
+        if (!quiet) console.log(`${sensor.deviceId}: up to date`);
         continue;
       }
-      const sim = generateReading(sensor, t, intervalS);
-      const row = payloadToRow(buildPayload(sim), sim.recordedAt);
-      if (!row) throw new Error(`Simulator payload failed to parse for ${sensor.deviceId} at t=${t}`);
-      batch.push({ sensorId, row });
-      if (batch.length >= BATCH_ROWS) {
-        await submit(batch);
-        generated += BATCH_ROWS;
-        batch = [];
+
+      let generated = 0;
+      let darkSlots = 0;
+      let batch: { sensorId: string; row: ReadingRow }[] = [];
+      for (; t <= endT; t += intervalS) {
+        // Outage: the device was dark — no reading exists for this slot.
+        if (!isOnline(sensor.deviceId, t)) {
+          darkSlots++;
+          continue;
+        }
+        const sim = generateReading(sensor, t, intervalS);
+        const row = payloadToRow(buildPayload(sim), sim.recordedAt);
+        if (!row) throw new Error(`Simulator payload failed to parse for ${sensor.deviceId} at t=${t}`);
+        batch.push({ sensorId, row });
+        if (batch.length >= BATCH_ROWS) {
+          await throttle();
+          submit(batch);
+          generated += BATCH_ROWS;
+          batch = [];
+        }
+      }
+      if (batch.length > 0) {
+        await throttle();
+        submit(batch);
+        generated += batch.length;
+      }
+      if (!quiet) {
+        const rate = Math.round(totalInserted / Math.max(1, (Date.now() - startedAt) / 1000));
+        const darkNote = darkSlots > 0 ? `, ${((darkSlots / gridSlots) * 100).toFixed(1)}% dark` : "";
+        console.log(`${sensor.deviceId}: ${generated} rows queued${darkNote} (fleet inserted ${totalInserted}, ${rate} rows/s)`);
       }
     }
-    if (batch.length > 0) {
-      await submit(batch);
-      generated += batch.length;
-    }
-    const rate = Math.round(totalInserted / Math.max(1, (Date.now() - startedAt) / 1000));
-    const darkNote = darkSlots > 0 ? `, ${((darkSlots / gridSlots) * 100).toFixed(1)}% dark` : "";
-    console.log(`${sensor.deviceId}: ${generated} rows queued${darkNote} (fleet inserted ${totalInserted}, ${rate} rows/s)`);
+    await drain();
+  };
+
+  // Main pass, then quick catch-up passes: wall time moves on while the main
+  // pass runs (~minutes on a fresh database), and rows generated against the
+  // original endT would otherwise leave a permanent, unrepairable gap right
+  // before "now" — resume-from-max can never revisit it once live data lands.
+  let endT = Math.floor(Date.now() / 1000);
+  const horizonT = endT - days * 86400;
+  await runPass(endT, horizonT, false);
+  while (Math.floor(Date.now() / 1000) - endT >= intervalS) {
+    endT = Math.floor(Date.now() / 1000);
+    console.log(`Catch-up pass to t=${endT}...`);
+    await runPass(endT, horizonT, true);
   }
 
-  while (inflight.size > 0) {
-    await Promise.race(inflight);
-  }
   const seconds = ((Date.now() - startedAt) / 1000).toFixed(1);
   const rate = Math.round(totalInserted / Math.max(0.001, (Date.now() - startedAt) / 1000));
-  console.log(`Backfill done: ${totalInserted} rows in ${seconds}s (${rate} rows/s)`);
+  console.log(`Backfill done: ${totalInserted} rows inserted in ${seconds}s (${rate} rows/s)`);
 }

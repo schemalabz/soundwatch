@@ -17,7 +17,8 @@ RUN npx prisma generate
 COPY mqtt-ingester ./mqtt-ingester
 COPY simulator ./simulator
 COPY src/types ./src/types
+# tsconfig.json is required at runtime: tsx resolves the @/* path alias
+# (used by mqtt-ingester/parser.ts) from it.
 COPY tsconfig.json ./
-COPY vitest.config.ts ./
 
 CMD ["npx", "tsx", "simulator/index.ts", "live"]

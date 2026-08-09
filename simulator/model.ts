@@ -201,7 +201,7 @@ export function generateReading(sensor: FleetSensor, tSec: number, intervalS: nu
   const lt = localTime(t);
   const intervalIndex = Math.floor(t / intervalS);
   const L = targetLevelDb(sensor, t);
-  const event = maybeEvent(sensor, lt, intervalIndex, L);
+  let event = maybeEvent(sensor, lt, intervalIndex, L);
 
   // --- frame-level histogram (the source of truth for all noise numbers) ---
   const duty = 0.1 + 0.075 * (valueNoise(sensor.deviceId, "duty", t, 7200) + 1); // 0.10-0.25
@@ -213,7 +213,14 @@ export function generateReading(sensor: FleetSensor, tSec: number, intervalS: nu
   // 10*log10(energySum/frameCount) lands on the target L.
   const mu = L - 0.057565 * sigma * sigma;
 
-  const baseFrames = event ? Math.round(frameCount * (1 - event.frameFraction)) : frameCount;
+  let baseFrames = event ? Math.round(frameCount * (1 - event.frameFraction)) : frameCount;
+  // At very short intervals the event mass can round to zero frames; treat
+  // that as no event, or lmaxEst would claim a peak the histogram/energy
+  // never contained.
+  if (event && frameCount - baseFrames <= 0) {
+    event = null;
+    baseFrames = frameCount;
+  }
   const eventFrames = frameCount - baseFrames;
 
   const probs: number[] = new Array(HIST_BINS);

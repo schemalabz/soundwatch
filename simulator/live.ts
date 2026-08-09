@@ -28,6 +28,9 @@ export function runLive(): void {
   console.log(`Simulating ${FLEET.length} sensors -> ${MQTT_URL}, every ${intervalS}s`);
 
   const clients: MqttClient[] = [];
+  // mqtt.js emits "connect" on EVERY reconnect; guard so each sensor gets
+  // exactly one publish loop, or broker blips would multiply the fleet.
+  const looping = new Set<string>();
   let published = 0;
   let dark = 0;
   let minDb = Infinity;
@@ -50,7 +53,10 @@ export function runLive(): void {
         JSON.stringify({ id: hardwareId(sensor.deviceId), hw_ver: "2.3", mac: "SIM" }),
         { retain: true }
       );
-      scheduleNext(client, sensor);
+      if (!looping.has(sensor.deviceId)) {
+        looping.add(sensor.deviceId);
+        scheduleNext(client, sensor);
+      }
     });
     client.on("error", (err) => {
       console.error(`${sensor.deviceId}: MQTT error:`, err.message);
@@ -67,8 +73,10 @@ export function runLive(): void {
     setTimeout(() => {
       // During an outage the device is simply silent; the MQTT connection
       // staying up is fine — data-level darkness (no readings, stale
-      // lastSeenAt) is what the outage model simulates.
-      if (!isOnline(sensor.deviceId, nextT)) {
+      // lastSeenAt) is what the outage model simulates. A disconnected
+      // client also skips (no unbounded offline queue): the model is
+      // deterministic, so missed history is recoverable via backfill.
+      if (!isOnline(sensor.deviceId, nextT) || !client.connected) {
         dark++;
       } else {
         const reading = generateReading(sensor, nextT, intervalS);
