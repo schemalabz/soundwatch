@@ -70,5 +70,13 @@ export default function MapCanvas({
     );
   }
 
-  return <div ref={containerRef} className="absolute inset-0" />;
+  // Two divs on purpose: mapbox-gl's stylesheet forces `position: relative`
+  // on its container (overriding Tailwind's `absolute`), which collapsed the
+  // map to 0 height. The OUTER div owns positioning; the inner container
+  // only needs h-full/w-full, which mapbox never overrides.
+  return (
+    <div className="absolute inset-0">
+      <div ref={containerRef} className="h-full w-full" />
+    </div>
+  );
 }
