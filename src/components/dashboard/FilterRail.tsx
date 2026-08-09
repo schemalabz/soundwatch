@@ -38,6 +38,7 @@ import { summarySentence } from "@/lib/dashboard/summary";
 import RangePicker from "./rail/RangePicker";
 import AddressSearch from "./rail/AddressSearch";
 import type { SensorMeta } from "./SensorLayer";
+import { devRenderCount } from "@/lib/dashboard/devtools";
 
 export interface FilterRailProps {
   filters: DashboardFilters;
@@ -95,7 +96,8 @@ function formatRange(r: DateRange): string {
   return first === last ? first : `${fmt.format(r.startMs).replace(/ \d{4}$/, "")} – ${last}`;
 }
 
-function FilterRail(p: FilterRailProps) {
+function FilterRail(p: FilterRailProps) {  devRenderCount("FilterRail");
+
   const locale = LOCALE;
   const unfiltered = isUnfiltered(p.filters);
   const nowMin = Math.floor(p.nowMs / 60_000) * 60_000;

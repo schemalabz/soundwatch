@@ -12,6 +12,7 @@ import { fmtDb, fmtInt } from "@/lib/dashboard/format";
 import type { AggKey } from "@/lib/dashboard/metrics";
 import type { SensorMeta } from "../SensorLayer";
 import MetricMention from "../MetricMention";
+import { devRenderCount } from "@/lib/dashboard/devtools";
 
 function Leaderboard({
   aggData,
@@ -26,6 +27,7 @@ function Leaderboard({
   onSensorClick: (id: string) => void;
   onMetricRefHover?: (on: boolean) => void;
 }) {
+  devRenderCount("Leaderboard");
   const meta = useMemo(() => new Map(sensors.map((s) => [s.id, s])), [sensors]);
   const stops = useMemo(() => paletteStops(), []);
 

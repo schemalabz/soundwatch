@@ -27,6 +27,7 @@ import {
 } from "@/lib/dashboard/frames";
 import { levelColor, levelScale, paletteStops } from "@/lib/dashboard/levels";
 import { withinLocations, type LocationPin, type TimeSegment } from "@/lib/dashboard/filters";
+import { devExpose, devRenderCount } from "@/lib/dashboard/devtools";
 
 export interface SensorMeta {
   id: string;
@@ -155,6 +156,7 @@ function applyValue(
 
 function SensorLayer({ map, sensors, cursor, stepMs, segments, playing, metric, onSensorClick, overrideFrame, locations, clickThrough }: SensorLayerProps) {
   const hasOverride = overrideFrame != null;
+  devRenderCount("SensorLayer");
   const [version, bumpVersion] = useReducer((v: number) => v + 1, 0);
   const [zoomBucket, setZoomBucket] = useState(0);
   const storeRef = useRef(new FrameStore());
@@ -165,6 +167,11 @@ function SensorLayer({ map, sensors, cursor, stepMs, segments, playing, metric, 
   useEffect(() => {
     onSensorClickRef.current = onSensorClick;
   }, [onSensorClick]);
+
+  // Dev observability: the live FrameStore as window.__swFrameStore.
+  useEffect(() => {
+    devExpose("FrameStore", storeRef.current);
+  }, []);
 
   // While placing a location pin, clicks must fall through to the map.
   useEffect(() => {
@@ -260,6 +267,13 @@ function SensorLayer({ map, sensors, cursor, stepMs, segments, playing, metric, 
       .filter((t, i, arr) => arr.indexOf(t) === i);
     const missing = times.filter((t) => !storeRef.current.has(frameKey(t, windowS, metric)));
     if (missing.length === 0) return;
+    // Batch the lookahead: at steady state playback creates exactly one new
+    // missing frame per tick, and fetching it immediately meant one request
+    // per second (measured). Defer until three frames of debt accumulate —
+    // UNLESS one of the next two frames is missing (the needle must never
+    // starve: first play, post-skip, post-scrub all hit this path).
+    const urgent = missing.includes(times[0]) || (times.length > 1 && missing.includes(times[1]));
+    if (!urgent && missing.length < 3) return;
     for (const t of missing) storeRef.current.markPending(frameKey(t, windowS, metric));
     const controller = new AbortController();
     fetch(`/api/frames?at=${missing.join(",")}&window=${windowS}&metric=${metric}`, { signal: controller.signal })

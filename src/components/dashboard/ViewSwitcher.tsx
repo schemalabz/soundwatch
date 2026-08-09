@@ -14,6 +14,7 @@ import { ChartSpline, Map as MapIcon, Trophy } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { dashboardStrings as tr } from "@/lib/strings/dashboard";
 import type { BarMode } from "./Timebar";
+import { devRenderCount } from "@/lib/dashboard/devtools";
 
 export type DashboardView = "map" | "board" | "charts";
 
@@ -35,6 +36,7 @@ function ViewSwitcher({
   onViewChange: (v: DashboardView) => void;
   onModeChange: (m: BarMode) => void;
 }) {
+  devRenderCount("ViewSwitcher");
   const mapActive = view === "map";
   return (
     <div

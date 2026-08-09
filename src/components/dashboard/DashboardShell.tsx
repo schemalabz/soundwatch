@@ -37,12 +37,14 @@ import { type AggKey } from "@/lib/dashboard/metrics";
 import ViewSwitcher, { type DashboardView } from "./ViewSwitcher";
 import Leaderboard from "./views/Leaderboard";
 import ChartsView from "./views/ChartsView";
+import { devRenderCount } from "@/lib/dashboard/devtools";
 
 const MapCanvas = dynamic(() => import("./MapCanvas"), { ssr: false });
 
 const FALLBACK_SPAN_DAYS = 90;
 
-export default function DashboardShell() {
+export default function DashboardShell() {  devRenderCount("DashboardShell");
+
   const locale = LOCALE;
   const isMobile = useIsMobile();
   // The dashboard is inherently client-side (live wall clock, map, viewport
@@ -118,14 +120,23 @@ export default function DashboardShell() {
     };
   }, []);
 
-  const rangeStartMs = useMemo(() => {
-    const spanDays = freshness?.fleet.oldestDataDays ?? FALLBACK_SPAN_DAYS;
-    return nowMs - spanDays * 86_400_000;
-  }, [freshness, nowMs]);
-
-  // Segments are memoized on a minute-quantized clock: recomputing the
-  // 90-day Athens-wall-time walk every second would be wasted work.
+  // Minute-quantized clock for everything that doesn't display seconds —
+  // memoized children key their props off these, so the per-second wall
+  // clock never reaches them.
   const nowMinute = Math.floor(nowMs / 60_000) * 60_000;
+
+  // Hour-quantized on BOTH factors: deriving this from the ticking clock
+  // (or from freshness's float day-span, which grows a little on every 5s
+  // poll) made dataStartMs a fresh value constantly and silently defeated
+  // React.memo on the whole rail — measured before the fix: rail rendered
+  // 1:1 with the shell's 1 Hz clock. Domain-start precision is cosmetic at
+  // 90 days; an hour of quantization is invisible. Plain arithmetic on
+  // quantized inputs — number props memo-compare by value, no useMemo needed.
+  const spanDays = freshness?.fleet.oldestDataDays ?? FALLBACK_SPAN_DAYS;
+  const rangeStartMs = Math.floor(nowMs / 3600_000) * 3600_000 - Math.round(spanDays * 24) * 3600_000;
+
+  // Segments are memoized on the minute-quantized clock: recomputing the
+  // 90-day Athens-wall-time walk every second would be wasted work.
   const effectiveStartMs = periodStartMs(filters, rangeStartMs, nowMs);
   const rangeStartMinute = Math.floor(effectiveStartMs / 60_000) * 60_000;
   const segments = useMemo(

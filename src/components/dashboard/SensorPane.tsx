@@ -21,6 +21,7 @@ import { quantizeFrameMs, type FrameData } from "@/lib/dashboard/frames";
 import { dashboardStrings as tr } from "@/lib/strings/dashboard";
 import TimelineChart from "./charts/TimelineChart";
 import type { SeriesResponse } from "./charts/types";
+import { devRenderCount } from "@/lib/dashboard/devtools";
 
 interface SensorDetail {
   id: string;
@@ -50,6 +51,7 @@ function SensorPane({
   /** Present outside the map view: jump to the map and fly to this sensor. */
   onGoToMap?: (lng: number, lat: number) => void;
 }) {
+  devRenderCount("SensorPane");
   // Payloads are tagged with the sensor they belong to; switching sensors
   // makes them stale by derivation (no state resets inside effects).
   const [loaded, setLoaded] = useState<{

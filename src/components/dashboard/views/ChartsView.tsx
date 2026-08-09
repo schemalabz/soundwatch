@@ -20,6 +20,7 @@ import MetricMention from "../MetricMention";
 import RadialChart, { type RadialSlice } from "../charts/RadialChart";
 import TimelineChart from "../charts/TimelineChart";
 import type { SeriesBucketData, SeriesResponse } from "../charts/types";
+import { devRenderCount } from "@/lib/dashboard/devtools";
 
 /** Mon-first display order over EXTRACT-style dow (0 = Sunday). */
 const DOW_ORDER = [1, 2, 3, 4, 5, 6, 0];
@@ -72,6 +73,7 @@ function ChartsView({
   nowMs: number;
   onMetricRefHover?: (on: boolean) => void;
 }) {
+  devRenderCount("ChartsView");
   // The response is tagged with the query that produced it — staleness (and
   // therefore "loading") is derived, never set synchronously in the effect.
   const [result, setResult] = useState<{ query: string; data: SeriesResponse } | null>(null);

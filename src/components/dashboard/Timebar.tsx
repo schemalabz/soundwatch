@@ -19,6 +19,7 @@ import { snapToSegments, type TimeSegment } from "@/lib/dashboard/filters";
 import { computeGraduations } from "@/lib/dashboard/graduations";
 import { ATHENS_TZ } from "@/lib/dashboard/time";
 import { dashboardStrings as tr } from "@/lib/strings/dashboard";
+import { devRenderCount } from "@/lib/dashboard/devtools";
 
 export const PLAYBACK_SPEEDS = [
   { label: "1λ/δ", labelEn: "1m/s", simSecondsPerRealSecond: 60 },
@@ -329,6 +330,7 @@ function PlayControls({ p, vertical }: { p: TimebarProps; vertical?: boolean }) 
 /* ------------------------------------------------------------------ */
 
 function HorizontalTimebar(p: TimebarProps) {
+  devRenderCount("Timebar");
   const fraction = useFraction(p);
   const cursorMs = useCursorMs(p);
   const cursorLabel = useCursorLabel(p);
