@@ -11,17 +11,20 @@ import { levelColor, paletteStops } from "@/lib/dashboard/levels";
 import { fmtDb, fmtInt } from "@/lib/dashboard/format";
 import type { AggKey } from "../Timebar";
 import type { SensorMeta } from "../SensorLayer";
+import MetricMention from "../MetricMention";
 
 export default function Leaderboard({
   aggData,
   metric,
   sensors,
   onSensorClick,
+  onMetricRefHover,
 }: {
   aggData: Record<string, Record<AggKey, number> & { n: number }> | null;
   metric: AggKey;
   sensors: SensorMeta[];
   onSensorClick: (id: string) => void;
+  onMetricRefHover?: (on: boolean) => void;
 }) {
   const meta = useMemo(() => new Map(sensors.map((s) => [s.id, s])), [sensors]);
   const stops = useMemo(() => paletteStops(), []);
@@ -45,7 +48,9 @@ export default function Leaderboard({
       <div className="mx-auto max-w-2xl px-6 pb-16 pt-[4.5rem] md:px-8">
         <h2 className="text-[15px] font-semibold tracking-tight">{tr.board.title}</h2>
         <p className="mt-0.5 text-[11px] text-muted-foreground">
-          {tr.board.subtitle(tr.aggregations[metric].hint)}
+          {tr.board.subtitlePrefix}
+          <MetricMention metric={metric} onHover={onMetricRefHover} />
+          {tr.board.subtitleSuffix}
         </p>
 
         {rows == null ? (

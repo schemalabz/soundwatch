@@ -36,6 +36,7 @@ import {
 } from "@/lib/dashboard/filters";
 import { ATHENS_TZ, athensDateStartMs, athensWallTime, nextAthensMidnight } from "@/lib/dashboard/time";
 import { searchAddress, type AddressHit } from "@/lib/dashboard/geocode";
+import { summarySentence } from "@/lib/dashboard/summary";
 import type { SensorMeta } from "./SensorLayer";
 
 export interface FilterRailProps {
@@ -56,6 +57,8 @@ export interface FilterRailProps {
   placingPin: boolean;
   onTogglePlacing: () => void;
   onAddPin: (lng: number, lat: number, label: string) => void;
+  /** A metric mention elsewhere in the app is hovered — light the picker. */
+  metricGlow?: boolean;
 }
 
 const PERIODS: PeriodId[] = ["24h", "7d", "30d"];
@@ -87,8 +90,9 @@ function formatRange(r: DateRange): string {
   return first === last ? first : `${fmt.format(r.startMs).replace(/ \d{4}$/, "")} – ${last}`;
 }
 
-/** Two native date inputs behind a dashed affordance; a confirmed pair
- *  becomes a DateRange (whole Athens days, end inclusive). */
+/** The date-span form behind a dashed affordance. Opens prefilled with the
+ *  last 7 days (no dead disabled state to stare at), labeled fields, Enter
+ *  submits. Whole Athens days, end inclusive. */
 function RangePicker({
   dataStartMs,
   nowMs,
@@ -121,20 +125,23 @@ function RangePicker({
     athensDateStartMs(...fromParts) <= athensDateStartMs(...toParts);
 
   const submit = () => {
-    if (!fromParts || !toParts) return;
-    const startMs = athensDateStartMs(...fromParts);
-    const endMs = nextAthensMidnight(athensDateStartMs(...toParts));
-    onAdd({ startMs, endMs });
+    if (!fromParts || !toParts || !valid) return;
+    onAdd({
+      startMs: athensDateStartMs(...fromParts),
+      endMs: nextAthensMidnight(athensDateStartMs(...toParts)),
+    });
     setOpen(false);
-    setFrom("");
-    setTo("");
   };
 
   if (!open) {
     return (
       <button
         type="button"
-        onClick={() => setOpen(true)}
+        onClick={() => {
+          setFrom(toIso(nowMs - 6 * 86_400_000));
+          setTo(toIso(nowMs));
+          setOpen(true);
+        }}
         className="mt-1.5 w-full rounded-md border border-dashed px-3 py-2 text-left text-xs text-muted-foreground transition-colors hover:border-sound/60 hover:text-foreground"
       >
         <CalendarPlus className="mr-1.5 inline size-3.5 align-[-2px]" />
@@ -143,47 +150,52 @@ function RangePicker({
     );
   }
   return (
-    <div className="mt-1.5 flex items-center gap-1.5 rounded-md border border-sound/50 px-2 py-1.5">
-      <input
-        type="date"
-        value={from}
-        min={minDate}
-        max={to || maxDate}
-        onChange={(e) => setFrom(e.target.value)}
-        aria-label={tr.period.rangeFrom}
-        className="min-w-0 flex-1 bg-transparent text-[11px] tabular-nums outline-none"
-      />
-      <span className="text-[10px] text-muted-foreground">–</span>
-      <input
-        type="date"
-        value={to}
-        min={from || minDate}
-        max={maxDate}
-        onChange={(e) => setTo(e.target.value)}
-        aria-label={tr.period.rangeTo}
-        className="min-w-0 flex-1 bg-transparent text-[11px] tabular-nums outline-none"
-      />
-      <button
-        type="button"
-        disabled={!valid}
-        onClick={submit}
-        className="shrink-0 rounded bg-sound px-1.5 py-0.5 text-[10px] font-medium text-white transition-opacity disabled:opacity-35"
-      >
-        {tr.period.rangeApply}
-      </button>
-      <button
-        type="button"
-        aria-label={tr.clear}
-        onClick={() => {
-          setOpen(false);
-          setFrom("");
-          setTo("");
-        }}
-        className="shrink-0 text-muted-foreground hover:text-foreground"
-      >
-        <X className="size-3" />
-      </button>
-    </div>
+    <form
+      className="mt-1.5 rounded-md border border-sound/50 bg-sound/4 p-2"
+      onSubmit={(e) => {
+        e.preventDefault();
+        submit();
+      }}
+    >
+      <div className="grid grid-cols-2 gap-2">
+        {(
+          [
+            [tr.period.rangeFrom, from, setFrom, minDate, to || maxDate],
+            [tr.period.rangeTo, to, setTo, from || minDate, maxDate],
+          ] as const
+        ).map(([label, value, set, min, max]) => (
+          <label key={label} className="block">
+            <span className="mb-1 block text-[9px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+              {label}
+            </span>
+            <input
+              type="date"
+              value={value}
+              min={min}
+              max={max}
+              onChange={(e) => set(e.target.value)}
+              className="w-full rounded-md border bg-background px-1.5 py-1 text-[11px] tabular-nums outline-none transition-colors focus:border-sound"
+            />
+          </label>
+        ))}
+      </div>
+      <div className="mt-2 flex items-center gap-1.5">
+        <button
+          type="submit"
+          disabled={!valid}
+          className="flex-1 rounded-md bg-sound py-1.5 text-[11px] font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-35"
+        >
+          {tr.period.rangeApply}
+        </button>
+        <button
+          type="button"
+          onClick={() => setOpen(false)}
+          className="rounded-md border px-2.5 py-1.5 text-[11px] text-muted-foreground transition-colors hover:text-foreground"
+        >
+          {tr.period.rangeCancel}
+        </button>
+      </div>
+    </form>
   );
 }
 
@@ -287,33 +299,10 @@ export default function FilterRail(p: FilterRailProps) {
     [monthFmt]
   );
 
-  const summary = useMemo(() => {
-    if (unfiltered) return tr.summary.everything;
-    const parts: string[] = [];
-    if (p.filters.period) {
-      parts.push(tr.period.summary[p.filters.period]);
-    }
-    if (p.filters.ranges.length > 2) parts.push(tr.period.manyRanges(p.filters.ranges.length));
-    else for (const r of p.filters.ranges) parts.push(formatRange(r));
-    if (p.filters.days.size === 1) {
-      parts.push(tr.summary[[...p.filters.days][0]]);
-    }
-    if (p.filters.hours.size > 0 && !(["day", "evening", "night"] as const).every((h) => p.filters.hours.has(h))) {
-      parts.push([...p.filters.hours].map((h) => tr.hours[h].toLowerCase()).join(" + "));
-    }
-    if (p.filters.months.size > 0 && p.filters.months.size < 12) {
-      const sorted = [...p.filters.months].sort((a, b) => a - b);
-      parts.push(sorted.map((m) => monthLabels[m]).join(", "));
-    }
-    const locs = p.filters.locations;
-    if (locs.length > 2) parts.push(tr.locations.several);
-    else if (locs.length > 0) {
-      const name = (pin: LocationPin) => pin.label ?? `${pin.lat.toFixed(3)}, ${pin.lng.toFixed(3)}`;
-      parts.push(locs.length === 2 ? tr.locations.nearTwo(name(locs[0]), name(locs[1])) : tr.locations.near(name(locs[0])));
-    }
-    const sentence = parts.join(" · ");
-    return sentence.charAt(0).toUpperCase() + sentence.slice(1);
-  }, [unfiltered, p.filters, monthLabels]);
+  const sentence = useMemo(
+    () => summarySentence(p.filters, p.dataStartMs, nowMin),
+    [p.filters, p.dataStartMs, nowMin]
+  );
 
   // ~1 reading per sensor-minute over the sensors the location pins keep:
   // an honest ≈ for "how much data backs this view". Until the sensor list
@@ -327,9 +316,8 @@ export default function FilterRail(p: FilterRailProps) {
   const receipt = useMemo(() => {
     const readings = Math.round((selectedDurationMs(p.segments) / 60_000) * matchedSensors);
     const compact = new Intl.NumberFormat(locale, { notation: "compact", maximumFractionDigits: 1 }).format(readings);
-    const spanDays = Math.max(1, Math.round((p.nowMs - effectiveStartMs) / 86_400_000));
-    return { zero: readings === 0, text: tr.summary.receipt(compact, spanDays), days: tr.summary.daysPart(spanDays) };
-  }, [p.segments, p.nowMs, effectiveStartMs, matchedSensors, locale]);
+    return { zero: readings === 0, text: tr.summary.receipt(compact) };
+  }, [p.segments, matchedSensors, locale]);
 
   const set = (partial: Partial<DashboardFilters>) => p.onChange({ ...p.filters, ...partial });
 
@@ -344,7 +332,10 @@ export default function FilterRail(p: FilterRailProps) {
       {/* summary */}
       <div className="border-y bg-card px-5 py-4">
         <div className="flex items-start justify-between gap-2">
-          <p className="text-[15px] font-medium leading-snug text-foreground">{summary}</p>
+          <div className="min-w-0">
+            <p className="text-[15px] font-semibold leading-snug tracking-tight text-foreground">{sentence.title}</p>
+            <p className="mt-0.5 text-[12px] leading-snug text-foreground/75">{sentence.qualifiers}</p>
+          </div>
           {!unfiltered && (
             <Button
               variant="ghost"
@@ -359,13 +350,9 @@ export default function FilterRail(p: FilterRailProps) {
         </div>
         <p className="mt-1 text-xs tabular-nums text-muted-foreground">
           {receipt.zero ? (
-            <>
-              <span className="font-semibold" style={{ color: "var(--sw-loud)" }}>
-                {tr.summary.zeroMeasurements}
-              </span>
-              {" · "}
-              {receipt.days}
-            </>
+            <span className="font-semibold" style={{ color: "var(--sw-loud)" }}>
+              {tr.summary.zeroMeasurements}
+            </span>
           ) : (
             receipt.text
           )}
@@ -376,7 +363,10 @@ export default function FilterRail(p: FilterRailProps) {
               <button
                 type="button"
                 title={tr.aggregations[p.metric].hint}
-                className="inline-flex items-baseline gap-0.5 border-b border-dotted border-muted-foreground/60 font-medium text-foreground/80 transition-colors hover:border-sound hover:text-foreground"
+                className={cn(
+                  "inline-flex items-baseline gap-0.5 rounded-[3px] border-b border-dotted border-muted-foreground/60 font-medium text-foreground/80 transition-all hover:border-sound hover:text-foreground",
+                  p.metricGlow && "-mx-1 border-sound bg-sound/15 px-1 text-foreground"
+                )}
               >
                 {tr.aggregations[p.metric].label.toLowerCase()}
                 <ChevronDown className="size-2.5 self-center opacity-60" />

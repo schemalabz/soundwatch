@@ -61,6 +61,8 @@ export default function DashboardShell() {
   const [mode, setMode] = useState<BarMode>("instants");
   const [view, setView] = useState<DashboardView>("map");
   const [placingPin, setPlacingPin] = useState(false);
+  // A metric mention elsewhere is being hovered — the rail picker lights up.
+  const [metricGlow, setMetricGlow] = useState(false);
   const [aggKey, setAggKey] = useState<AggKey>("laeq");
   const [aggData, setAggData] = useState<Record<string, Record<AggKey, number> & { n: number }> | null>(null);
   const skipSeq = useRef(0);
@@ -324,6 +326,7 @@ export default function DashboardShell() {
     placingPin,
     onTogglePlacing,
     onAddPin,
+    metricGlow,
   };
 
   if (!mounted) return <div className="h-full bg-background" />;
@@ -362,7 +365,13 @@ export default function DashboardShell() {
             onRemove={onRemovePin}
           />
           {view === "board" && (
-            <Leaderboard aggData={aggData} metric={aggKey} sensors={sensorList} onSensorClick={setSelectedSensorId} />
+            <Leaderboard
+              aggData={aggData}
+              metric={aggKey}
+              sensors={sensorList}
+              onSensorClick={setSelectedSensorId}
+              onMetricRefHover={setMetricGlow}
+            />
           )}
           {view === "charts" && (
             <ChartsView
@@ -371,6 +380,7 @@ export default function DashboardShell() {
               filters={filters}
               domainStartMs={rangeStartMinute}
               nowMs={nowMinute}
+              onMetricRefHover={setMetricGlow}
             />
           )}
           {selectedSensorId && (

@@ -16,6 +16,7 @@ import {
 } from "@/lib/dashboard/filters";
 import { athensWallTime, ATHENS_TZ } from "@/lib/dashboard/time";
 import type { AggKey } from "../Timebar";
+import MetricMention from "../MetricMention";
 import RadialChart, { type RadialSlice } from "../charts/RadialChart";
 import TimelineChart from "../charts/TimelineChart";
 import type { SeriesBucketData, SeriesResponse } from "../charts/types";
@@ -23,7 +24,7 @@ import type { SeriesBucketData, SeriesResponse } from "../charts/types";
 /** Mon-first display order over EXTRACT-style dow (0 = Sunday). */
 const DOW_ORDER = [1, 2, 3, 4, 5, 6, 0];
 
-function Section({ title, caption, children }: { title: string; caption?: string; children: React.ReactNode }) {
+function Section({ title, caption, children }: { title: string; caption?: React.ReactNode; children: React.ReactNode }) {
   return (
     <section>
       <h2 className="text-[13px] font-semibold tracking-tight text-foreground">
@@ -61,6 +62,7 @@ export default function ChartsView({
   filters,
   domainStartMs,
   nowMs,
+  onMetricRefHover,
 }: {
   /** from= + filter params, as built by filtersToAggregateQuery. */
   aggQuery: string;
@@ -68,6 +70,7 @@ export default function ChartsView({
   filters: DashboardFilters;
   domainStartMs: number;
   nowMs: number;
+  onMetricRefHover?: (on: boolean) => void;
 }) {
   // The response is tagged with the query that produced it — staleness (and
   // therefore "loading") is derived, never set synchronously in the effect.
@@ -166,11 +169,11 @@ export default function ChartsView({
     <div className="absolute inset-0 z-10 overflow-y-auto bg-background">
       <div className="mx-auto max-w-4xl px-6 pb-16 pt-[4.5rem] md:px-10">
         <div className="flex flex-col gap-10">
-          <Section title={tr.charts.timeline} caption={tr.aggregations[metric].hint}>
+          <Section title={tr.charts.timeline} caption={<MetricMention metric={metric} onHover={onMetricRefHover} />}>
             {loading || !series ? (
               <Skeleton />
             ) : (
-              <TimelineChart points={series.timeline} metric={metric} bucket={series.bucket} />
+              <TimelineChart points={series.timeline} metric={metric} bucket={series.bucket} onMetricRefHover={onMetricRefHover} />
             )}
           </Section>
 

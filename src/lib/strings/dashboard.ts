@@ -5,13 +5,11 @@ export const dashboardStrings = {
   filters: "Φίλτρα",
   reset: "Καθαρισμός φίλτρων",
   clear: "Καθαρισμός",
+  // The verbal summary sentence itself lives in src/lib/dashboard/summary.ts
+  // (it is grammar, not a string table).
   summary: {
-    everything: "Όλες οι μετρήσεις",
-    weekend: "Σαββατοκύριακα",
-    weekday: "Καθημερινές",
-    receipt: (count: string, days: number) => `≈ ${count} μετρήσεις · ${days} ημέρες`,
+    receipt: (count: string) => `≈ ${count} μετρήσεις`,
     zeroMeasurements: "0 μετρήσεις",
-    daysPart: (days: number) => `${days} ημέρες`,
   },
   period: {
     label: "Περίοδος",
@@ -19,11 +17,11 @@ export const dashboardStrings = {
     "24h": "24 ώρες",
     "7d": "7 ημέρες",
     "30d": "30 ημέρες",
-    summary: { "24h": "τελευταίες 24 ώρες", "7d": "τελευταίες 7 ημέρες", "30d": "τελευταίες 30 ημέρες" },
     addRange: "Προσθήκη ημερομηνιών",
     rangeFrom: "Από",
     rangeTo: "Έως",
-    rangeApply: "Προσθήκη",
+    rangeApply: "Προσθήκη περιόδου",
+    rangeCancel: "Άκυρο",
     manyRanges: (n: number) => `${n} περίοδοι`,
   },
   days: { label: "Μέρες", weekend: "ΣΚ", weekday: "Καθημερινές" },
@@ -38,9 +36,6 @@ export const dashboardStrings = {
     radius: "Ακτίνα",
     search: "Αναζήτηση διεύθυνσης…",
     noSensors: "δεν υπάρχουν αισθητήρες σε αυτό το εύρος",
-    near: (a: string) => `κοντά στην ${a}`,
-    nearTwo: (a: string, b: string) => `κοντά στην ${a} και την ${b}`,
-    several: "διάφορες τοποθεσίες",
   },
   pane: {
     close: "Κλείσιμο",
@@ -71,7 +66,8 @@ export const dashboardStrings = {
   },
   board: {
     title: "Κατάταξη αισθητήρων",
-    subtitle: (metric: string) => `Από τον πιο θορυβώδη στον πιο ήσυχο · ${metric} στα επιλεγμένα φίλτρα`,
+    subtitlePrefix: "Από τον πιο θορυβώδη στον πιο ήσυχο · ",
+    subtitleSuffix: " · στα επιλεγμένα φίλτρα",
     measurements: (n: string) => `${n} μετρήσεις`,
     empty: "Χωρίς δεδομένα για τα επιλεγμένα φίλτρα.",
   },
@@ -90,6 +86,10 @@ export const dashboardStrings = {
     noData: "Χωρίς δεδομένα για τα επιλεγμένα φίλτρα.",
   },
   metricLabel: "Μέτρηση με",
+  /** The metric's full wording — label + explanation — used EVERYWHERE the
+   *  metric is referenced outside the picker itself. */
+  aggregationFull: (k: "laeq" | "l50" | "l10" | "l90" | "lmax") =>
+    `${dashboardStrings.aggregations[k].label} — ${dashboardStrings.aggregations[k].hint}`,
   aggregations: {
     laeq: { label: "Μέση", hint: "Ενεργειακός μέσος (LAeq)" },
     l50: { label: "Διάμεσος", hint: "Τυπική στάθμη (L50)" },

@@ -13,6 +13,7 @@ import { levelColor, paletteStops } from "@/lib/dashboard/levels";
 import { fmtDb, fmtInt } from "@/lib/dashboard/format";
 import { LOCALE, dashboardStrings as tr } from "@/lib/strings/dashboard";
 import type { AggKey } from "../Timebar";
+import MetricMention from "../MetricMention";
 import type { SeriesPoint } from "./types";
 
 const H = 200;
@@ -38,10 +39,12 @@ export default function TimelineChart({
   points,
   metric,
   bucket,
+  onMetricRefHover,
 }: {
   points: SeriesPoint[];
   metric: AggKey;
   bucket: "hour" | "day";
+  onMetricRefHover?: (on: boolean) => void;
 }) {
   const [ref, width] = useMeasuredWidth();
   const [hovered, setHovered] = useState<number | null>(null);
@@ -99,22 +102,53 @@ export default function TimelineChart({
     }
     runs.push(run);
 
-    const linePaths: string[] = [];
-    const bandPaths: string[] = [];
+    // Each run renders as one line whose stroke is a horizontal gradient
+    // through the SAME level ramp as the map circles — the line's color IS
+    // the value, everywhere along it.
+    interface Run {
+      path: string;
+      band: string | null;
+      x0: number;
+      x1: number;
+      stops: { offset: number; value: number }[];
+    }
+    const lineRuns: Run[] = [];
     for (const r of runs) {
+      const x0 = x(r[0]);
+      const x1 = x(r[r.length - 1]);
       if (r.length === 1) {
         const i = r[0];
         // A lone bucket has no line — mark it with a short dash.
-        linePaths.push(`M ${x(i) - 2.5} ${y(points[i][metric])} L ${x(i) + 2.5} ${y(points[i][metric])}`);
+        lineRuns.push({
+          path: `M ${x(i) - 2.5} ${y(points[i][metric])} L ${x(i) + 2.5} ${y(points[i][metric])}`,
+          band: null,
+          x0,
+          x1,
+          stops: [{ offset: 0, value: points[i][metric] }],
+        });
         continue;
       }
-      linePaths.push(r.map((i, k) => `${k === 0 ? "M" : "L"} ${x(i)} ${y(points[i][metric])}`).join(" "));
       const up = r.map((i, k) => `${k === 0 ? "M" : "L"} ${x(i)} ${y(points[i].l10)}`).join(" ");
       const down = [...r]
         .reverse()
         .map((i) => `L ${x(i)} ${y(points[i].l90)}`)
         .join(" ");
-      bandPaths.push(`${up} ${down} Z`);
+      lineRuns.push({
+        path: r.map((i, k) => `${k === 0 ? "M" : "L"} ${x(i)} ${y(points[i][metric])}`).join(" "),
+        band: `${up} ${down} Z`,
+        x0,
+        x1,
+        stops: r.map((i) => ({ offset: (x(i) - x0) / Math.max(1, x1 - x0), value: points[i][metric] })),
+      });
+    }
+
+    // Filter-excluded spans between runs: rendered as hatched washes, the
+    // same "intentionally muted" language as the timebar.
+    const gaps: { gx0: number; gx1: number }[] = [];
+    for (let k = 1; k < runs.length; k++) {
+      const gx0 = x(runs[k - 1][runs[k - 1].length - 1]) + 5;
+      const gx1 = x(runs[k][0]) - 5;
+      if (gx1 - gx0 > 8) gaps.push({ gx0, gx1 });
     }
 
     // ~6 x-axis ticks aligned to run starts where possible.
@@ -124,7 +158,7 @@ export default function TimelineChart({
     const gridLevels: number[] = [];
     for (let g = lo; g <= hi; g += 10) if (g % 10 === 0) gridLevels.push(g);
 
-    return { x, y, lo, hi, runs, linePaths, bandPaths, ticks, gridLevels, innerW };
+    return { x, y, lo, hi, runs, lineRuns, gaps, ticks, gridLevels, innerW };
   }, [points, width, metric, bucket]);
 
   if (points.length === 0) {
@@ -151,6 +185,24 @@ export default function TimelineChart({
       >
         {geom && (
           <>
+            {/* frame: y-axis + baseline, solid but quiet */}
+            <line
+              x1={PAD_L}
+              x2={PAD_L}
+              y1={PAD_T}
+              y2={H - PAD_B}
+              style={{ stroke: "var(--sw-silver)", strokeOpacity: 0.7 }}
+              strokeWidth={1}
+            />
+            <line
+              x1={PAD_L}
+              x2={width - PAD_R}
+              y1={H - PAD_B}
+              y2={H - PAD_B}
+              style={{ stroke: "var(--sw-silver)", strokeOpacity: 0.7 }}
+              strokeWidth={1}
+            />
+
             {geom.gridLevels.map((g) => (
               <g key={g}>
                 <line
@@ -158,8 +210,16 @@ export default function TimelineChart({
                   x2={width - PAD_R}
                   y1={geom.y(g)}
                   y2={geom.y(g)}
-                  className="stroke-border"
+                  style={{ stroke: "var(--sw-silver)", strokeOpacity: 0.4 }}
                   strokeDasharray="2 4"
+                  strokeWidth={1}
+                />
+                <line
+                  x1={PAD_L - 3.5}
+                  x2={PAD_L}
+                  y1={geom.y(g)}
+                  y2={geom.y(g)}
+                  style={{ stroke: "var(--sw-silver)", strokeOpacity: 0.9 }}
                   strokeWidth={1}
                 />
                 <text
@@ -174,31 +234,79 @@ export default function TimelineChart({
               </g>
             ))}
 
-            {geom.bandPaths.map((d, i) => (
-              <path key={`b${i}`} d={d} className="fill-silver/35" />
+            <defs>
+              {/* the envelope: warm at the loud edge, silver at the floor */}
+              <linearGradient id="sw-tl-band" x1="0" y1={PAD_T} x2="0" y2={H - PAD_B} gradientUnits="userSpaceOnUse">
+                <stop offset="0" style={{ stopColor: "var(--sw-sound)", stopOpacity: 0.14 }} />
+                <stop offset="1" style={{ stopColor: "var(--sw-silver)", stopOpacity: 0.3 }} />
+              </linearGradient>
+              {/* excluded-period hatch, the timebar's muting language */}
+              <pattern id="sw-tl-hatch" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+                <line x1="0" y1="0" x2="0" y2="6" style={{ stroke: "var(--sw-silver)", strokeOpacity: 0.55 }} strokeWidth="1.2" />
+              </pattern>
+              {/* per-run stroke gradients through the level color ramp */}
+              {geom.lineRuns.map((r, i) => (
+                <linearGradient
+                  key={`g${i}`}
+                  id={`sw-tl-line-${i}`}
+                  x1={r.x0}
+                  x2={Math.max(r.x1, r.x0 + 1)}
+                  y1="0"
+                  y2="0"
+                  gradientUnits="userSpaceOnUse"
+                >
+                  {r.stops.map((s, k) => (
+                    <stop key={k} offset={s.offset} stopColor={levelColor(s.value, stops)} />
+                  ))}
+                </linearGradient>
+              ))}
+            </defs>
+
+            {geom.gaps.map((g, i) => (
+              <rect
+                key={`gap${i}`}
+                x={g.gx0}
+                y={PAD_T}
+                width={g.gx1 - g.gx0}
+                height={H - PAD_T - PAD_B}
+                rx={3}
+                fill="url(#sw-tl-hatch)"
+              />
             ))}
-            {geom.linePaths.map((d, i) => (
+            {geom.lineRuns.map((r, i) =>
+              r.band ? <path key={`b${i}`} d={r.band} fill="url(#sw-tl-band)" /> : null
+            )}
+            {geom.lineRuns.map((r, i) => (
               <path
                 key={`l${i}`}
-                d={d}
+                d={r.path}
                 fill="none"
-                className="stroke-foreground"
-                strokeWidth={1.5}
+                stroke={`url(#sw-tl-line-${i})`}
+                strokeWidth={2}
                 strokeLinejoin="round"
                 strokeLinecap="round"
               />
             ))}
 
             {geom.ticks.map((i) => (
-              <text
-                key={`t${i}`}
-                x={geom.x(i)}
-                y={H - 7}
-                textAnchor="middle"
-                className="fill-muted-foreground text-[8.5px] tabular-nums"
-              >
-                {fmtTick.format(points[i].t)}
-              </text>
+              <g key={`t${i}`}>
+                <line
+                  x1={geom.x(i)}
+                  x2={geom.x(i)}
+                  y1={H - PAD_B}
+                  y2={H - PAD_B + 3.5}
+                  style={{ stroke: "var(--sw-silver)", strokeOpacity: 0.9 }}
+                  strokeWidth={1}
+                />
+                <text
+                  x={geom.x(i)}
+                  y={H - 6}
+                  textAnchor="middle"
+                  className="fill-muted-foreground text-[8.5px] tabular-nums"
+                >
+                  {fmtTick.format(points[i].t)}
+                </text>
+              </g>
             ))}
 
             {hoveredPoint && hovered != null && (
@@ -237,7 +345,7 @@ export default function TimelineChart({
           </>
         ) : (
           <span>
-            — {tr.aggregations[metric].hint} · {tr.charts.timelineBand}
+            — <MetricMention metric={metric} onHover={onMetricRefHover} /> · {tr.charts.timelineBand}
           </span>
         )}
       </div>
