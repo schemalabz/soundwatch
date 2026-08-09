@@ -21,10 +21,16 @@ interface BucketRow {
   sensor_id: string;
   b: bigint;
 }
+interface IngestRow {
+  h: bigint;
+  n: bigint;
+}
+
+const INGEST_DAYS = 7;
 
 export async function GET() {
   const nowMs = Date.now();
-  const [meta, buckets] = await Promise.all([
+  const [meta, buckets, ingest] = await Promise.all([
     prisma.$queryRaw<MetaRow[]>`
       SELECT s.id, s.device_id, s.name, last.recorded_at AS last_at
       FROM sensors s
@@ -44,6 +50,15 @@ export async function GET() {
       WHERE s.is_active AND NOT s.is_experimental AND s.latitude IS NOT NULL
         AND rb.bucket > now() - make_interval(days => ${WINDOW_DAYS}::int)
       GROUP BY 1, 2`,
+    // Ingest volume: readings per hour, fleet-wide, straight off the rollup.
+    prisma.$queryRaw<IngestRow[]>`
+      SELECT extract(epoch FROM rb.bucket)::bigint / 3600 AS h, sum(rb.n)::bigint AS n
+      FROM readings_hour_bins rb
+      JOIN sensors s ON s.id = rb.sensor_id
+      WHERE s.is_active AND NOT s.is_experimental AND s.latitude IS NOT NULL
+        AND rb.bucket > now() - make_interval(days => ${INGEST_DAYS}::int)
+      GROUP BY 1
+      ORDER BY 1`,
   ]);
 
   const nowBucket = Math.floor(nowMs / 1000 / BUCKET_S);
@@ -73,5 +88,13 @@ export async function GET() {
     };
   });
 
-  return NextResponse.json({ bucketHours: BUCKET_S / 3600, windowDays: WINDOW_DAYS, sensors });
+  return NextResponse.json({
+    bucketHours: BUCKET_S / 3600,
+    windowDays: WINDOW_DAYS,
+    sensors,
+    ingest: {
+      days: INGEST_DAYS,
+      hours: ingest.map((r) => ({ t: Number(r.h) * 3600_000, n: Number(r.n) })),
+    },
+  });
 }

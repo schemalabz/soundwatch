@@ -23,6 +23,7 @@ interface StatusResponse {
   bucketHours: number;
   windowDays: number;
   sensors: StatusSensor[];
+  ingest?: { days: number; hours: { t: number; n: number }[] };
 }
 
 const ONLINE_S = 3600;
@@ -56,6 +57,49 @@ function LivenessStrip({ cells }: { cells: string }) {
   );
 }
 
+/** Hourly ingest bars over the last days; the current (partial) hour fades. */
+function IngestChart({ hours }: { hours: { t: number; n: number }[] }) {
+  const n = hours.length;
+  if (n === 0) return null;
+  // Square-root scale: ingest cadence can differ by an order of magnitude
+  // (the local sim streams at 5s against a 60s backfill) and a linear scale
+  // would flatten the normal regime to nothing.
+  const max = Math.max(...hours.map((h) => Math.sqrt(h.n)));
+  const dayFmt = new Intl.DateTimeFormat("el", { weekday: "short" });
+  // A label at each local midnight.
+  const dayTicks = hours.map((h, i) => ({ i, isMidnight: new Date(h.t).getHours() === 0 })).filter((x) => x.isMidnight);
+  return (
+    <div>
+      <svg viewBox={`0 0 ${n} 40`} preserveAspectRatio="none" className="h-16 w-full" aria-hidden>
+        {hours.map((h, i) => {
+          const bh = max > 0 ? (Math.sqrt(h.n) / max) * 38 : 0;
+          return (
+            <rect
+              key={h.t}
+              x={i + 0.12}
+              y={40 - bh}
+              width={0.76}
+              height={bh}
+              rx={0.3}
+              fill="var(--sw-slate)"
+              opacity={i === n - 1 ? 0.35 : 0.7}
+            >
+              <title>{`${new Date(h.t).toLocaleString("el", { weekday: "short", hour: "2-digit" })}: ${h.n.toLocaleString("el")} μετρήσεις`}</title>
+            </rect>
+          );
+        })}
+      </svg>
+      <div className="relative mt-0.5 h-3.5 text-[9px] uppercase text-muted-foreground/70">
+        {dayTicks.map(({ i }) => (
+          <span key={i} className="absolute -translate-x-1/2" style={{ left: `${((i + 0.5) / n) * 100}%` }}>
+            {dayFmt.format(hours[i].t)}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function Dot({ on }: { on: boolean }) {
   return (
     <span
@@ -78,7 +122,7 @@ export default function StatusPage() {
         .then((d) => !cancelled && setData(d))
         .catch(() => !cancelled && setError(true));
     load();
-    const t = setInterval(load, 60_000);
+    const t = setInterval(load, 10_000);
     return () => {
       cancelled = true;
       clearInterval(t);
@@ -144,6 +188,21 @@ export default function StatusPage() {
         )}
 
         {error && <p className="mt-8 text-sm text-destructive">Σφάλμα φόρτωσης — δοκιμάστε ξανά.</p>}
+
+        {/* ingest volume */}
+        {data?.ingest && data.ingest.hours.length > 0 && (
+          <div className="mt-6 rounded-xl border bg-card px-4 pb-2 pt-3">
+            <div className="mb-2 flex items-baseline justify-between">
+              <h2 className="text-[11px] font-semibold uppercase tracking-[0.1em] text-muted-foreground/80">
+                Μετρήσεις ανά ώρα · {data.ingest.days} ημέρες
+              </h2>
+              <span className="text-[11px] tabular-nums text-muted-foreground">
+                σύνολο {data.ingest.hours.reduce((s, h) => s + h.n, 0).toLocaleString("el")}
+              </span>
+            </div>
+            <IngestChart hours={data.ingest.hours} />
+          </div>
+        )}
 
         <div className="mt-6 rounded-xl border bg-card">
           {/* column headers, aligned to the row grid */}

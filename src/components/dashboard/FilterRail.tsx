@@ -65,6 +65,11 @@ const PERIODS: PeriodId[] = ["24h", "7d", "30d"];
 const DAY_GROUPS: DayGroup[] = ["weekend", "weekday"];
 const HOUR_PRESETS: HourPreset[] = ["day", "evening", "night", "peak"];
 
+const CHIP =
+  "rounded-md border-0 bg-secondary/60 text-foreground/75 shadow-none transition-colors hover:bg-secondary hover:text-foreground " +
+  "data-[state=on]:bg-sound/15 data-[state=on]:text-foreground data-[state=on]:inset-ring data-[state=on]:inset-ring-sound/40 " +
+  "disabled:pointer-events-none disabled:bg-transparent disabled:text-muted-foreground/35 disabled:opacity-100";
+
 function SectionLabel({ children, onClear }: { children: React.ReactNode; onClear?: (() => void) | null }) {
   return (
     <div className="mb-2 flex items-baseline justify-between">
@@ -142,7 +147,7 @@ function RangePicker({
           setTo(toIso(nowMs));
           setOpen(true);
         }}
-        className="mt-1.5 w-full rounded-md border border-dashed px-3 py-2 text-left text-xs text-muted-foreground transition-colors hover:border-sound/60 hover:text-foreground"
+        className="mt-1.5 w-full rounded-md border border-dashed border-border/80 px-3 py-1.5 text-left text-[11.5px] text-muted-foreground transition-colors hover:border-sound/60 hover:text-foreground"
       >
         <CalendarPlus className="mr-1.5 inline size-3.5 align-[-2px]" />
         {tr.period.addRange}
@@ -200,7 +205,15 @@ function RangePicker({
 }
 
 /** Debounced Mapbox address autocomplete; a pick becomes a location pin. */
-function AddressSearch({ onPick }: { onPick: (lng: number, lat: number, label: string) => void }) {
+function AddressSearch({
+  onPick,
+  placing,
+  onTogglePlacing,
+}: {
+  onPick: (lng: number, lat: number, label: string) => void;
+  placing: boolean;
+  onTogglePlacing: () => void;
+}) {
   const [query, setQuery] = useState("");
   // Results are tagged with the query that produced them — anything typed
   // since simply derives to "no hits" (no state resets inside the effect).
@@ -238,7 +251,21 @@ function AddressSearch({ onPick }: { onPick: (lng: number, lat: number, label: s
             <X className="size-3" />
           </button>
         )}
+        <span className="h-4 w-px shrink-0 bg-border" />
+        <button
+          type="button"
+          title={placing ? tr.locations.placing : tr.locations.add}
+          aria-pressed={placing}
+          onClick={onTogglePlacing}
+          className={cn(
+            "-my-0.5 -mr-1 shrink-0 rounded p-1 transition-colors",
+            placing ? "bg-sound/15 text-sound" : "text-muted-foreground hover:text-foreground"
+          )}
+        >
+          <MapPin className="size-3.5" />
+        </button>
       </div>
+      {placing && <p className="mt-1 text-[10px] text-sound">{tr.locations.placing}</p>}
       {hits.length > 0 && (
         <ul className="mt-1 overflow-hidden rounded-md border">
           {hits.map((h, i) => (
@@ -386,7 +413,7 @@ export default function FilterRail(p: FilterRailProps) {
         </p>
       </div>
 
-      <div className="flex-1 space-y-7 overflow-y-auto px-5 py-6">
+      <div className="flex-1 space-y-6 overflow-y-auto px-5 py-5">
         {/* period — trailing presets (one-of) OR custom date spans */}
         <section>
           <SectionLabel
@@ -401,8 +428,7 @@ export default function FilterRail(p: FilterRailProps) {
           <div className="mb-1.5 text-[10px] text-muted-foreground">{tr.period.recent}</div>
           <ToggleGroup
             type="single"
-            variant="outline"
-            spacing={0}
+            spacing={1}
             value={p.filters.period ?? ""}
             onValueChange={(v: string) => set({ period: (v || null) as PeriodId | null, ranges: [] })}
             className="w-full"
@@ -412,7 +438,7 @@ export default function FilterRail(p: FilterRailProps) {
                 key={id}
                 value={id}
                 disabled={p.filters.period !== id && !viability.period[id]}
-                className="flex-1 data-[state=on]:bg-sound/12 data-[state=on]:text-foreground data-[state=on]:inset-ring data-[state=on]:inset-ring-sound/50 disabled:opacity-35"
+                className={cn("flex-1 text-[13px]", CHIP)}
               >
                 {tr.period[id]}
               </ToggleGroupItem>
@@ -447,7 +473,7 @@ export default function FilterRail(p: FilterRailProps) {
         <section>
           <SectionLabel onClear={p.filters.days.size > 0 ? () => set({ days: new Set() }) : null}>{tr.days.label}</SectionLabel>
           <ToggleGroup
-            type="multiple" variant="outline"
+            type="multiple"
             spacing={1}
             value={[...p.filters.days]}
             onValueChange={(v: string[]) => set({ days: new Set(v as DayGroup[]) })}
@@ -458,7 +484,7 @@ export default function FilterRail(p: FilterRailProps) {
                 key={g}
                 value={g}
                 disabled={!p.filters.days.has(g) && !viability.days[g]}
-                className="flex-1 data-[state=on]:bg-sound/12 data-[state=on]:text-foreground data-[state=on]:inset-ring data-[state=on]:inset-ring-sound/50 disabled:opacity-35"
+                className={cn("flex-1 text-[13px]", CHIP)}
               >
                 {tr.days[g]}
               </ToggleGroupItem>
@@ -470,7 +496,7 @@ export default function FilterRail(p: FilterRailProps) {
         <section>
           <SectionLabel onClear={p.filters.hours.size > 0 ? () => set({ hours: new Set() }) : null}>{tr.hours.label}</SectionLabel>
           <ToggleGroup
-            type="multiple" variant="outline"
+            type="multiple"
             spacing={1}
             value={[...p.filters.hours]}
             onValueChange={(v: string[]) => set({ hours: new Set(v as HourPreset[]) })}
@@ -481,7 +507,7 @@ export default function FilterRail(p: FilterRailProps) {
                 key={h}
                 value={h}
                 disabled={!p.filters.hours.has(h) && !viability.hours[h]}
-                className="flex-col gap-0 py-1.5 data-[state=on]:bg-sound/12 data-[state=on]:text-foreground data-[state=on]:inset-ring data-[state=on]:inset-ring-sound/50 disabled:opacity-35"
+                className={cn("h-auto flex-col gap-0 py-1.5", CHIP)}
               >
                 <span className="text-[13px] leading-tight">{tr.hours[h]}</span>
                 <span className="text-[9.5px] tabular-nums leading-tight text-muted-foreground">
@@ -513,13 +539,8 @@ export default function FilterRail(p: FilterRailProps) {
                     else next.add(m);
                     set({ months: next });
                   }}
-                  className={cn(
-                    "rounded-md border py-1.5 text-[11px] font-medium capitalize transition-colors",
-                    on
-                      ? "border-sound/50 bg-sound/12 text-foreground"
-                      : "border-transparent bg-secondary text-muted-foreground hover:text-foreground",
-                    !selectable && "cursor-default opacity-30 hover:text-muted-foreground"
-                  )}
+                  data-state={on ? "on" : "off"}
+                  className={cn("py-1.5 text-[11px] font-medium capitalize", CHIP)}
                 >
                   {label.replace(".", "")}
                 </button>
@@ -588,20 +609,7 @@ export default function FilterRail(p: FilterRailProps) {
               })}
             </ul>
           )}
-          <AddressSearch onPick={p.onAddPin} />
-          <button
-            type="button"
-            onClick={p.onTogglePlacing}
-            className={cn(
-              "mt-1.5 w-full rounded-md border border-dashed px-3 py-2 text-left text-xs transition-colors",
-              p.placingPin
-                ? "border-sound bg-sound/8 font-medium text-sound"
-                : "text-muted-foreground hover:border-sound/60 hover:text-foreground"
-            )}
-          >
-            <MapPin className="mr-1.5 inline size-3.5 align-[-2px]" />
-            {p.placingPin ? tr.locations.placing : tr.locations.add}
-          </button>
+          <AddressSearch onPick={p.onAddPin} placing={p.placingPin} onTogglePlacing={p.onTogglePlacing} />
         </section>
       </div>
 
