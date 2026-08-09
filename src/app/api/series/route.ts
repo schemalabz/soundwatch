@@ -101,7 +101,14 @@ function filtersFromQuery(q: URLSearchParams): DashboardFilters {
     .split(",")
     .map(Number)
     .filter((m) => Number.isInteger(m) && m >= 1 && m <= 12);
+  const ranges = (q.get("ranges") ?? "")
+    .split(",")
+    .filter(Boolean)
+    .map((s) => s.split(":").map(Number))
+    .filter((a) => a.length === 2 && a.every((n) => Number.isFinite(n) && n > 0) && a[0] < a[1])
+    .map(([startMs, endMs]) => ({ startMs, endMs }));
   return {
+    ranges,
     period: null,
     days: new Set(days === "weekend" || days === "weekday" ? [days as DayGroup] : []),
     hours: new Set(hours.filter((h): h is HourPreset => ["day", "evening", "night", "peak"].includes(h))),

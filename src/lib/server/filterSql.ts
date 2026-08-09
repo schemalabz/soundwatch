@@ -75,3 +75,19 @@ export function locationSql(q: URLSearchParams): string {
   });
   return `AND (${preds.join(" OR ")})`;
 }
+
+/** Time-span predicate from the ranges= wire param (startMs:endMs CSV,
+ *  [start, end) semantics matching the client). Validated numbers only. */
+export function rangesSql(q: URLSearchParams): string {
+  const ranges = (q.get("ranges") ?? "")
+    .split(",")
+    .filter(Boolean)
+    .map((s) => s.split(":").map(Number))
+    .filter((a) => a.length === 2 && a.every((n) => Number.isFinite(n) && n > 0) && a[0] < a[1]);
+  if (ranges.length === 0) return "";
+  const preds = ranges.map(
+    ([s, e]) =>
+      `(r.recorded_at >= '${new Date(s).toISOString()}'::timestamp AND r.recorded_at < '${new Date(e).toISOString()}'::timestamp)`
+  );
+  return `AND (${preds.join(" OR ")})`;
+}

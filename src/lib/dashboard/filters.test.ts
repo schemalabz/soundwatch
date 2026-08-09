@@ -121,6 +121,39 @@ describe("instantMatches (the LIVE gate)", () => {
   });
 });
 
+describe("custom date ranges", () => {
+  const DAY2 = MON_JUNE_15_MIDNIGHT_ATHENS + 2 * DAY;
+  const DAY4 = MON_JUNE_15_MIDNIGHT_ATHENS + 4 * DAY;
+
+  it("instantMatches admits only instants inside a range", () => {
+    const f = filters({ ranges: [{ startMs: DAY2, endMs: DAY4 }] });
+    expect(instantMatches(f, DAY2 + 5 * HOUR)).toBe(true);
+    expect(instantMatches(f, MON_JUNE_15_MIDNIGHT_ATHENS + 5 * HOUR)).toBe(false);
+    expect(instantMatches(f, DAY4 + 1)).toBe(false); // end exclusive
+  });
+
+  it("a single contiguous range yields one segment covering it exactly", () => {
+    const f = filters({ ranges: [{ startMs: DAY2, endMs: DAY4 }] });
+    const segs = selectedSegments(f, MON_JUNE_15_MIDNIGHT_ATHENS, MON_JUNE_15_MIDNIGHT_ATHENS + 7 * DAY);
+    expect(segs).toEqual([{ startMs: DAY2, endMs: DAY4 }]);
+  });
+
+  it("two disjoint ranges yield two segments; hour presets intersect them", () => {
+    const f = filters({
+      ranges: [
+        { startMs: MON_JUNE_15_MIDNIGHT_ATHENS, endMs: MON_JUNE_15_MIDNIGHT_ATHENS + DAY },
+        { startMs: DAY4, endMs: DAY4 + DAY },
+      ],
+    });
+    expect(selectedSegments(f, MON_JUNE_15_MIDNIGHT_ATHENS, MON_JUNE_15_MIDNIGHT_ATHENS + 7 * DAY)).toHaveLength(2);
+    const withNight = filters({ ranges: [...f.ranges], hours: new Set(["night"]) });
+    const segs = selectedSegments(withNight, MON_JUNE_15_MIDNIGHT_ATHENS, MON_JUNE_15_MIDNIGHT_ATHENS + 7 * DAY);
+    // night 23-07 inside two separated days: 00-07 + 23-24 per day = 4 segments
+    expect(segs).toHaveLength(4);
+    expect(segs.every((s) => instantMatches(withNight, s.startMs))).toBe(true);
+  });
+});
+
 describe("hasAnyMatch (option viability)", () => {
   it("rejects weekdays inside a window that is entirely weekend", () => {
     // Saturday 00:00 + 24h window = all weekend.

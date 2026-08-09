@@ -72,3 +72,11 @@ export function nextAthensMidnight(epochMs: number): number {
   }
   return hi;
 }
+
+/** Epoch ms of Athens wall midnight for a calendar date (m is 0-based).
+ *  Noon UTC is always afternoon of the same Athens day; subtracting the
+ *  wall hour lands exactly on 00:00 (offsets are whole hours). */
+export function athensDateStartMs(year: number, month: number, day: number): number {
+  const noon = Date.UTC(year, month, day, 12);
+  return noon - athensWallTime(noon).hour * 3600_000;
+}

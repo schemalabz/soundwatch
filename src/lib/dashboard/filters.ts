@@ -37,6 +37,13 @@ export const PERIOD_MS: Record<PeriodId, number> = {
   "30d": 30 * 86_400_000,
 };
 
+/** An absolute date span, [startMs, endMs) in Athens wall time (endMs is
+ *  the midnight AFTER the last included day). */
+export interface DateRange {
+  startMs: number;
+  endMs: number;
+}
+
 /** A spatial filter pin: keep sensors within radiusM of (lng, lat). */
 export interface LocationPin {
   lng: number;
@@ -52,6 +59,9 @@ export interface DashboardFilters {
   hours: ReadonlySet<HourPreset>;
   /** 0 = January ... 11 = December */
   months: ReadonlySet<number>;
+  /** Custom date spans (one-of with period: the UI clears one when the
+   *  other is chosen; the math simply ANDs whatever is set). */
+  ranges: readonly DateRange[];
   locations: readonly LocationPin[];
 }
 
@@ -60,6 +70,7 @@ export const EMPTY_FILTERS: DashboardFilters = {
   days: new Set(),
   hours: new Set(),
   months: new Set(),
+  ranges: [],
   locations: [],
 };
 
@@ -74,6 +85,7 @@ export function isUnfiltered(f: DashboardFilters): boolean {
     effectiveDays(f).size === 0 &&
     effectiveHours(f).size === 0 &&
     effectiveMonths(f).size === 0 &&
+    f.ranges.length === 0 &&
     f.locations.length === 0
   );
 }
@@ -108,14 +120,32 @@ function hourMatches(hour: number, hours: ReadonlySet<HourPreset>): boolean {
   return false;
 }
 
+function inRanges(epochMs: number, ranges: readonly DateRange[]): boolean {
+  if (ranges.length === 0) return true;
+  for (const r of ranges) if (epochMs >= r.startMs && epochMs < r.endMs) return true;
+  return false;
+}
+
 /** Does the instant t satisfy the filters? (Used for the LIVE gate.) */
 export function instantMatches(f: DashboardFilters, epochMs: number): boolean {
   const w = athensWallTime(epochMs);
   return (
     dayMatches(w.dow, effectiveDays(f)) &&
     hourMatches(w.hour, effectiveHours(f)) &&
-    (effectiveMonths(f).size === 0 || effectiveMonths(f).has(w.month))
+    (effectiveMonths(f).size === 0 || effectiveMonths(f).has(w.month)) &&
+    inRanges(epochMs, f.ranges)
   );
+}
+
+/** How a day sits against the range set: fully covered, partially, or out. */
+function dayRangeState(dayStart: number, dayEnd: number, ranges: readonly DateRange[]): "full" | "partial" | "out" {
+  if (ranges.length === 0) return "full";
+  let partial = false;
+  for (const r of ranges) {
+    if (r.startMs <= dayStart && dayEnd <= r.endMs) return "full";
+    if (r.startMs < dayEnd && r.endMs > dayStart) partial = true;
+  }
+  return partial ? "partial" : "out";
 }
 
 /**
@@ -135,12 +165,13 @@ export function hasAnyMatch(f: DashboardFilters, startMs: number, endMs: number)
   while (dayStart < endMs) {
     const dayEnd = Math.min(nextAthensMidnight(dayStart), endMs);
     const w = athensWallTime(dayStart);
-    if (dayMatches(w.dow, days) && (months.size === 0 || months.has(w.month))) {
-      if (hours.size === 0) return true;
+    const rangeState = dayRangeState(dayStart, dayEnd, f.ranges);
+    if (rangeState !== "out" && dayMatches(w.dow, days) && (months.size === 0 || months.has(w.month))) {
       const fullDay = dayEnd - dayStart >= 23 * 3600_000;
-      if (fullDay) return true; // a full day contains every hour preset
+      if (rangeState === "full" && hours.size === 0) return true;
+      if (rangeState === "full" && fullDay) return true; // a full day contains every hour preset
       for (let t = dayStart; t < dayEnd; t += 3600_000) {
-        if (hourMatches(athensWallTime(t).hour, hours)) return true;
+        if (hourMatches(athensWallTime(t).hour, hours) && inRanges(t, f.ranges)) return true;
       }
     }
     dayStart = dayEnd;
@@ -160,6 +191,9 @@ export function filtersToAggregateQuery(f: DashboardFilters, effectiveStartMs: n
   if (hours.size > 0) params.set("hours", [...hours].join(","));
   const months = effectiveMonths(f);
   if (months.size > 0 && months.size < 12) params.set("months", [...months].map((m) => m + 1).join(","));
+  if (f.ranges.length > 0) {
+    params.set("ranges", f.ranges.map((r) => `${Math.floor(r.startMs)}:${Math.floor(r.endMs)}`).join(","));
+  }
   if (f.locations.length > 0) {
     params.set(
       "loc",
@@ -232,9 +266,10 @@ export function selectedSegments(f: DashboardFilters, rangeStartMs: number, rang
   while (dayStart < rangeEndMs) {
     const dayEnd = Math.min(nextAthensMidnight(dayStart), rangeEndMs);
     const w = athensWallTime(dayStart);
-    const dayOk = dayMatches(w.dow, days) && (months.size === 0 || months.has(w.month));
+    const rangeState = dayRangeState(dayStart, dayEnd, f.ranges);
+    const dayOk = rangeState !== "out" && dayMatches(w.dow, days) && (months.size === 0 || months.has(w.month));
 
-    if (dayOk && hours.size === 0) {
+    if (dayOk && rangeState === "full" && hours.size === 0) {
       // Whole day selected — no need to walk hours.
       if (open && open.endMs === dayStart) open.endMs = dayEnd;
       else segments.push((open = { startMs: dayStart, endMs: dayEnd }));
@@ -243,7 +278,7 @@ export function selectedSegments(f: DashboardFilters, rangeStartMs: number, rang
       let t = dayStart;
       while (t < dayEnd) {
         const hourEnd = Math.min(t + 3600_000, dayEnd);
-        if (hourMatches(athensWallTime(t).hour, hours)) {
+        if (hourMatches(athensWallTime(t).hour, hours) && inRanges(t, f.ranges)) {
           if (open && open.endMs === t) open.endMs = hourEnd;
           else segments.push((open = { startMs: t, endMs: hourEnd }));
         }

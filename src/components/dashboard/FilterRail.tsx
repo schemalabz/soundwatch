@@ -7,7 +7,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { dashboardStrings as tr, LOCALE } from "@/lib/strings/dashboard";
 import Link from "next/link";
-import { MapPin, RotateCcw, Search, X } from "lucide-react";
+import { CalendarPlus, MapPin, RotateCcw, Search, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { cn } from "@/lib/utils";
@@ -26,6 +26,7 @@ import {
   periodStartMs,
   selectedDurationMs,
   type DashboardFilters,
+  type DateRange,
   type DayGroup,
   type LocationPin,
   type HourPreset,
@@ -33,7 +34,7 @@ import {
   type TimeSegment,
   withinLocations,
 } from "@/lib/dashboard/filters";
-import { ATHENS_TZ } from "@/lib/dashboard/time";
+import { ATHENS_TZ, athensDateStartMs, athensWallTime, nextAthensMidnight } from "@/lib/dashboard/time";
 import { searchAddress, type AddressHit } from "@/lib/dashboard/geocode";
 import type { SensorMeta } from "./SensorLayer";
 
@@ -74,6 +75,114 @@ function SectionLabel({ children, onClear }: { children: React.ReactNode; onClea
           {tr.clear}
         </button>
       )}
+    </div>
+  );
+}
+
+/** "15 Μαΐ – 20 Μαΐ 2026" (endMs is exclusive: display the last included day). */
+function formatRange(r: DateRange): string {
+  const fmt = new Intl.DateTimeFormat(LOCALE, { timeZone: ATHENS_TZ, day: "numeric", month: "short", year: "numeric" });
+  const first = fmt.format(r.startMs);
+  const last = fmt.format(r.endMs - 1);
+  return first === last ? first : `${fmt.format(r.startMs).replace(/ \d{4}$/, "")} – ${last}`;
+}
+
+/** Two native date inputs behind a dashed affordance; a confirmed pair
+ *  becomes a DateRange (whole Athens days, end inclusive). */
+function RangePicker({
+  dataStartMs,
+  nowMs,
+  onAdd,
+}: {
+  dataStartMs: number;
+  nowMs: number;
+  onAdd: (r: DateRange) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [from, setFrom] = useState("");
+  const [to, setTo] = useState("");
+
+  const toIso = (ms: number) => {
+    const w = athensWallTime(ms);
+    return `${w.year}-${String(w.month + 1).padStart(2, "0")}-${String(w.day).padStart(2, "0")}`;
+  };
+  const minDate = toIso(dataStartMs);
+  const maxDate = toIso(nowMs);
+
+  const parse = (s: string): [number, number, number] | null => {
+    const m = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    return m ? [Number(m[1]), Number(m[2]) - 1, Number(m[3])] : null;
+  };
+  const fromParts = parse(from);
+  const toParts = parse(to);
+  const valid =
+    fromParts != null &&
+    toParts != null &&
+    athensDateStartMs(...fromParts) <= athensDateStartMs(...toParts);
+
+  const submit = () => {
+    if (!fromParts || !toParts) return;
+    const startMs = athensDateStartMs(...fromParts);
+    const endMs = nextAthensMidnight(athensDateStartMs(...toParts));
+    onAdd({ startMs, endMs });
+    setOpen(false);
+    setFrom("");
+    setTo("");
+  };
+
+  if (!open) {
+    return (
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="mt-1.5 w-full rounded-md border border-dashed px-3 py-2 text-left text-xs text-muted-foreground transition-colors hover:border-sound/60 hover:text-foreground"
+      >
+        <CalendarPlus className="mr-1.5 inline size-3.5 align-[-2px]" />
+        {tr.period.addRange}
+      </button>
+    );
+  }
+  return (
+    <div className="mt-1.5 flex items-center gap-1.5 rounded-md border border-sound/50 px-2 py-1.5">
+      <input
+        type="date"
+        value={from}
+        min={minDate}
+        max={to || maxDate}
+        onChange={(e) => setFrom(e.target.value)}
+        aria-label={tr.period.rangeFrom}
+        className="min-w-0 flex-1 bg-transparent text-[11px] tabular-nums outline-none"
+      />
+      <span className="text-[10px] text-muted-foreground">–</span>
+      <input
+        type="date"
+        value={to}
+        min={from || minDate}
+        max={maxDate}
+        onChange={(e) => setTo(e.target.value)}
+        aria-label={tr.period.rangeTo}
+        className="min-w-0 flex-1 bg-transparent text-[11px] tabular-nums outline-none"
+      />
+      <button
+        type="button"
+        disabled={!valid}
+        onClick={submit}
+        className="shrink-0 rounded bg-sound px-1.5 py-0.5 text-[10px] font-medium text-white transition-opacity disabled:opacity-35"
+      >
+        {tr.period.rangeApply}
+      </button>
+      <button
+        type="button"
+        aria-label={tr.clear}
+        onClick={() => {
+          setOpen(false);
+          setFrom("");
+          setTo("");
+        }}
+        className="shrink-0 text-muted-foreground hover:text-foreground"
+      >
+        <X className="size-3" />
+      </button>
     </div>
   );
 }
@@ -156,7 +265,7 @@ export default function FilterRail(p: FilterRailProps) {
     const f = p.filters;
     return {
       period: Object.fromEntries(
-        (["24h", "7d", "30d"] as PeriodId[]).map((id) => [id, test({ ...f, period: id })])
+        (["24h", "7d", "30d"] as PeriodId[]).map((id) => [id, test({ ...f, period: id, ranges: [] })])
       ) as Record<PeriodId, boolean>,
       days: Object.fromEntries(
         (["weekend", "weekday"] as DayGroup[]).map((g) => [g, test({ ...f, days: new Set([...f.days, g]) })])
@@ -180,6 +289,8 @@ export default function FilterRail(p: FilterRailProps) {
     if (p.filters.period) {
       parts.push(tr.period.summary[p.filters.period]);
     }
+    if (p.filters.ranges.length > 2) parts.push(tr.period.manyRanges(p.filters.ranges.length));
+    else for (const r of p.filters.ranges) parts.push(formatRange(r));
     if (p.filters.days.size === 1) {
       parts.push(tr.summary[[...p.filters.days][0]]);
     }
@@ -236,7 +347,7 @@ export default function FilterRail(p: FilterRailProps) {
               size="icon"
               className="-mr-1.5 -mt-1 size-7 shrink-0 text-muted-foreground"
               aria-label={tr.reset}
-              onClick={() => p.onChange({ period: null, days: new Set(), hours: new Set(), months: new Set(), locations: [] })}
+              onClick={() => p.onChange({ period: null, days: new Set(), hours: new Set(), months: new Set(), ranges: [], locations: [] })}
             >
               <RotateCcw className="size-3.5" />
             </Button>
@@ -282,15 +393,24 @@ export default function FilterRail(p: FilterRailProps) {
       </div>
 
       <div className="flex-1 space-y-7 overflow-y-auto px-5 py-6">
-        {/* period — one-of: a single connected segmented bar */}
+        {/* period — trailing presets (one-of) OR custom date spans */}
         <section>
-          <SectionLabel onClear={p.filters.period ? () => set({ period: null }) : null}>{tr.period.label}</SectionLabel>
+          <SectionLabel
+            onClear={
+              p.filters.period || p.filters.ranges.length > 0
+                ? () => set({ period: null, ranges: [] })
+                : null
+            }
+          >
+            {tr.period.label}
+          </SectionLabel>
+          <div className="mb-1.5 text-[10px] text-muted-foreground">{tr.period.recent}</div>
           <ToggleGroup
             type="single"
             variant="outline"
             spacing={0}
             value={p.filters.period ?? ""}
-            onValueChange={(v: string) => set({ period: (v || null) as PeriodId | null })}
+            onValueChange={(v: string) => set({ period: (v || null) as PeriodId | null, ranges: [] })}
             className="w-full"
           >
             {PERIODS.map((id) => (
@@ -304,6 +424,29 @@ export default function FilterRail(p: FilterRailProps) {
               </ToggleGroupItem>
             ))}
           </ToggleGroup>
+          {p.filters.ranges.length > 0 && (
+            <ul className="mt-1.5 flex flex-col gap-1">
+              {p.filters.ranges.map((r, i) => (
+                <li key={`${r.startMs}:${r.endMs}`} className="flex items-center gap-2 rounded-md border px-2 py-1.5">
+                  <CalendarPlus className="size-3.5 shrink-0 text-sound" />
+                  <span className="min-w-0 flex-1 truncate text-[12px] font-medium tabular-nums">{formatRange(r)}</span>
+                  <button
+                    type="button"
+                    aria-label={tr.locations.remove}
+                    onClick={() => set({ ranges: p.filters.ranges.filter((_, j) => j !== i) })}
+                    className="shrink-0 text-muted-foreground transition-colors hover:text-foreground"
+                  >
+                    <X className="size-3" />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+          <RangePicker
+            dataStartMs={p.dataStartMs}
+            nowMs={p.nowMs}
+            onAdd={(r) => set({ ranges: [...p.filters.ranges, r], period: null })}
+          />
         </section>
 
         {/* days */}

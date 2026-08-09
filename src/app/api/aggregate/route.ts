@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { filterSql, locationSql } from "@/lib/server/filterSql";
+import { filterSql, locationSql, rangesSql } from "@/lib/server/filterSql";
 
 // Aggregates over the FILTERED time-set, per sensor: the acoustic summary
 // canon — energy-mean LAeq, median L50, L10 (loud tail), L90 (background
@@ -33,6 +33,7 @@ export async function GET(req: NextRequest) {
 
   const filters = filterSql(q);
   const locations = locationSql(q);
+  const ranges = rangesSql(q);
 
   const rows = await prisma.$queryRawUnsafe<AggRow[]>(`
     SELECT r.sensor_id,
@@ -49,6 +50,7 @@ export async function GET(req: NextRequest) {
       AND r.recorded_at > '${new Date(fromMs).toISOString()}'::timestamp
       ${filters}
       ${locations}
+      ${ranges}
     GROUP BY r.sensor_id`);
 
   const sensors: Record<string, { laeq: number; l50: number; l10: number; l90: number; lmax: number; n: number }> = {};
