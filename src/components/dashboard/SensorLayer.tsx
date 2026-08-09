@@ -48,7 +48,11 @@ const MARKER_PX = 30;
 const PREFETCH_AHEAD = 6;
 const LIVE_POLL_MS = 5000;
 const LIVE_STALE_MS = 3 * 60_000;
-const PLAYBACK_TWEEN_MS = 950;
+// Playback tweens run LINEAR over the full frame second: motion is uniform
+// through the frame and chains continuously into the next one. A paused
+// apply just settles quickly onto the correct value.
+const PLAYBACK_TWEEN_MS = 1000;
+const PAUSED_TWEEN_MS = 180;
 const LIVE_TWEEN_MS = 4000;
 
 interface MarkerHandle {
@@ -57,22 +61,29 @@ interface MarkerHandle {
   label: HTMLSpanElement;
 }
 
-// The label shows once the ring is big enough to hold two digits.
-const LABEL_MIN_SCALE = 0.78;
+// The label needs BOTH a close-enough zoom (city scale, not the whole
+// basin) and a ring wide enough to frame two digits.
+const LABEL_MIN_ZOOM = 12.2;
+const LABEL_MIN_SCALE = 0.62;
 
 function makeMarkerElement(): { root: HTMLDivElement; circle: HTMLSpanElement; label: HTMLSpanElement } {
   const root = document.createElement("div");
-  root.style.cssText = `position:relative;width:${MARKER_PX}px;height:${MARKER_PX}px;display:grid;place-items:center;pointer-events:auto;cursor:pointer;`;
+  // NO inline `position`: mapbox's .mapboxgl-marker class positions the root
+  // absolutely and drives it via transform — an inline position:relative
+  // overrides that class and drops markers into normal flow (they stack
+  // downward off-map). The root still anchors the label: absolutely
+  // positioned elements are containing blocks for absolute children.
+  root.style.cssText = `width:${MARKER_PX}px;height:${MARKER_PX}px;display:grid;place-items:center;pointer-events:auto;cursor:pointer;`;
   const circle = document.createElement("span");
   circle.style.cssText = [
     `width:${MARKER_PX}px`,
     `height:${MARKER_PX}px`,
     "border-radius:9999px",
-    "border:2.5px solid rgba(191,192,192,0.55)", // silver — the no-data state
+    "border:1.5px solid rgba(191,192,192,0.55)", // silver — the no-data state
     "transform:scale(0.35)",
     "opacity:0.6",
     "will-change:transform,opacity",
-    `transition:transform ${PLAYBACK_TWEEN_MS}ms cubic-bezier(0.33,0,0.2,1),border-color ${PLAYBACK_TWEEN_MS}ms linear,opacity 400ms linear`,
+    `transition:transform ${PLAYBACK_TWEEN_MS}ms linear,border-color ${PLAYBACK_TWEEN_MS}ms linear,opacity 400ms linear`,
   ].join(";");
   // dB value, centered over (not inside) the scaled ring so text never warps.
   const label = document.createElement("span");
@@ -95,8 +106,16 @@ function makeMarkerElement(): { root: HTMLDivElement; circle: HTMLSpanElement; l
 }
 
 /** Apply one sensor's frame value to its circle. null = no data (gray). */
-function applyValue(h: Pick<MarkerHandle, "circle" | "label">, laeq: number | null, tweenMs: number): void {
+function applyValue(
+  h: Pick<MarkerHandle, "circle" | "label">,
+  laeq: number | null,
+  tweenMs: number,
+  labelsOn: boolean,
+  timing: "linear" | "ease" = "linear"
+): void {
+  const fn = timing === "linear" ? "linear" : "cubic-bezier(0.25,0,0.2,1)";
   h.circle.style.transitionDuration = `${tweenMs}ms,${tweenMs}ms,400ms`;
+  h.circle.style.transitionTimingFunction = `${fn},${fn},linear`;
   h.label.style.transitionDuration = `${tweenMs}ms,300ms`;
   if (laeq == null) {
     h.circle.style.borderColor = "rgba(191,192,192,0.55)";
@@ -110,8 +129,8 @@ function applyValue(h: Pick<MarkerHandle, "circle" | "label">, laeq: number | nu
     h.circle.style.borderColor = color;
     h.circle.style.transform = `scale(${scale.toFixed(3)})`;
     h.circle.style.opacity = "1";
-    // Show the value only when the ring is wide enough to frame it.
-    if (scale >= LABEL_MIN_SCALE) {
+    // Show the value only when zoomed in enough AND the ring can frame it.
+    if (labelsOn && scale >= LABEL_MIN_SCALE) {
       h.label.textContent = String(Math.round(laeq));
       h.label.style.color = color;
       h.label.style.opacity = "1";
@@ -124,6 +143,7 @@ function applyValue(h: Pick<MarkerHandle, "circle" | "label">, laeq: number | nu
 export default function SensorLayer({ map, cursor, stepMs, segments, playing, onSensorClick }: SensorLayerProps) {
   const [sensors, setSensors] = useState<SensorMeta[]>([]);
   const [version, bumpVersion] = useReducer((v: number) => v + 1, 0);
+  const [zoomBucket, setZoomBucket] = useState(0);
   const storeRef = useRef(new FrameStore());
   const markersRef = useRef(new Map<string, MarkerHandle>());
   const liveFrameRef = useRef<FrameData>({});
@@ -132,6 +152,17 @@ export default function SensorLayer({ map, cursor, stepMs, segments, playing, on
   useEffect(() => {
     onSensorClickRef.current = onSensorClick;
   }, [onSensorClick]);
+
+  // --- zoom tracking (quantized to 0.25 so label toggling is cheap) ---
+  useEffect(() => {
+    if (!map) return;
+    const update = () => setZoomBucket(Math.round(map.getZoom() * 4) / 4);
+    update();
+    map.on("zoom", update);
+    return () => {
+      map.off("zoom", update);
+    };
+  }, [map]);
 
   // --- sensor metadata (once) ---
   useEffect(() => {
@@ -259,14 +290,16 @@ export default function SensorLayer({ map, cursor, stepMs, segments, playing, on
     const prev = lastAppliedRef.current;
     const jumped =
       prev == null || prev === "live" !== isLive || (typeof prev === "number" && !isLive && Math.abs(cursorQ - prev) > stepMs * 1.5);
-    const tween = jumped ? 0 : isLive ? LIVE_TWEEN_MS : PLAYBACK_TWEEN_MS;
+    const tween = jumped ? 0 : isLive ? LIVE_TWEEN_MS : playing ? PLAYBACK_TWEEN_MS : PAUSED_TWEEN_MS;
+    const timing: "linear" | "ease" = isLive || playing ? "linear" : "ease";
     lastAppliedRef.current = cursorQ;
 
+    const labelsOn = zoomBucket >= LABEL_MIN_ZOOM;
     for (const [id, handle] of markersRef.current) {
       const v = frame?.[id];
-      applyValue(handle, v ? v.laeq : null, tween);
+      applyValue(handle, v ? v.laeq : null, tween, labelsOn, timing);
     }
-  }, [cursorQ, stepMs, version]);
+  }, [cursorQ, stepMs, version, zoomBucket, playing]);
 
   return null;
 }

@@ -40,7 +40,6 @@ export default function MapCanvas({
       attributionControl: false,
     });
     map.addControl(new mapboxgl.AttributionControl({ compact: true }), "bottom-right");
-    map.addControl(new mapboxgl.NavigationControl({ showCompass: false }), "top-right");
     map.on("error", (e) => {
       // Bad/expired token etc. — fall back instead of a broken canvas.
       if (!map.isStyleLoaded()) setFailed(true);
