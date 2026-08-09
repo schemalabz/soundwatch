@@ -1,13 +1,10 @@
-// Shared client types for the /api/series response.
+// Shared client types for the /api/series response. The bucket shape IS the
+// server's LevelSummary (type-only import — nothing server-side reaches the
+// client bundle).
 
-export interface SeriesBucketData {
-  laeq: number;
-  l50: number;
-  l10: number;
-  l90: number;
-  lmax: number;
-  n: number;
-}
+import type { LevelSummary } from "@/lib/server/levelBins";
+
+export type SeriesBucketData = LevelSummary;
 
 export interface SeriesPoint extends SeriesBucketData {
   /** Athens wall time encoded as if UTC — format with timeZone: "UTC". */

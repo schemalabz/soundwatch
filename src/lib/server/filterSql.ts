@@ -1,6 +1,11 @@
-// Dashboard filters -> SQL predicates over Athens wall time, shared by every
-// aggregate-style endpoint. All fragments are built ONLY from validated
-// enums/ints — nothing user-typed is ever inlined.
+// DashboardFilters -> SQL predicates, shared by every aggregate-style
+// endpoint. Consumes the DECODED filter struct (parseWireFilters in
+// src/lib/dashboard/filters.ts is the only wire parser), so predicate
+// building and JS-side filtering can never disagree about what a param
+// means. All fragments are built ONLY from validated enums/numbers —
+// nothing user-typed is ever inlined.
+
+import { HOUR_PRESET_RANGES, type DashboardFilters } from "@/lib/dashboard/filters";
 
 /** Athens wall time of a timestamptz column (naive result, wall components). */
 export function athensTimeSql(col: string): string {
@@ -10,38 +15,20 @@ export function athensTimeSql(col: string): string {
 /** Default time column: raw readings. Rollup queries pass the cagg bucket. */
 const DEFAULT_TIME_COL = "r.recorded_at";
 
-// Mirrors HOUR_PRESET_RANGES in src/lib/dashboard/filters.ts (kept separate:
-// this module is server-only and the shapes drift for different reasons).
-const HOUR_RANGES: Record<string, [number, number][]> = {
-  day: [[7, 19]],
-  evening: [[19, 23]],
-  night: [[23, 7]],
-  peak: [
-    [7, 10],
-    [17, 20],
-  ],
-};
-
-/**
- * Parse the wire filter params (days/hours/months as produced by
- * filtersToAggregateQuery) into SQL predicate strings. Unknown values are
- * dropped, months are validated 1-12 ints.
- */
-export function filterPredicates(q: URLSearchParams, timeCol: string = DEFAULT_TIME_COL): string[] {
+/** Day/hour/month predicates over Athens wall time ('' when unrestricted).
+ *  The wire encoder only sends restricted sets, so no "everything selected"
+ *  normalization is needed here. */
+export function filterSql(f: DashboardFilters, timeCol: string = DEFAULT_TIME_COL): string {
   const local = athensTimeSql(timeCol);
-  const days = q.get("days"); // 'weekend' | 'weekday' | null
-  const hours = (q.get("hours") ?? "").split(",").filter((h) => h in HOUR_RANGES);
-  const months = (q.get("months") ?? "")
-    .split(",")
-    .map(Number)
-    .filter((m) => Number.isInteger(m) && m >= 1 && m <= 12);
-
   const predicates: string[] = [];
-  if (days === "weekend") predicates.push(`EXTRACT(dow FROM ${local}) IN (0, 6)`);
-  if (days === "weekday") predicates.push(`EXTRACT(dow FROM ${local}) NOT IN (0, 6)`);
-  if (hours.length > 0) {
-    const hourPreds = hours.flatMap((h) =>
-      HOUR_RANGES[h].map(([start, end]) =>
+
+  if (f.days.size === 1) {
+    const op = f.days.has("weekend") ? "IN" : "NOT IN";
+    predicates.push(`EXTRACT(dow FROM ${local}) ${op} (0, 6)`);
+  }
+  if (f.hours.size > 0) {
+    const hourPreds = [...f.hours].flatMap((h) =>
+      HOUR_PRESET_RANGES[h].map(([start, end]) =>
         start <= end
           ? `(EXTRACT(hour FROM ${local}) >= ${start} AND EXTRACT(hour FROM ${local}) < ${end})`
           : `(EXTRACT(hour FROM ${local}) >= ${start} OR EXTRACT(hour FROM ${local}) < ${end})`
@@ -49,50 +36,31 @@ export function filterPredicates(q: URLSearchParams, timeCol: string = DEFAULT_T
     );
     predicates.push(`(${hourPreds.join(" OR ")})`);
   }
-  if (months.length > 0 && months.length < 12) {
-    predicates.push(`EXTRACT(month FROM ${local}) IN (${months.join(",")})`);
+  if (f.months.size > 0 && f.months.size < 12) {
+    predicates.push(`EXTRACT(month FROM ${local}) IN (${[...f.months].map((m) => m + 1).join(",")})`);
   }
-  return predicates;
-}
-
-/** The predicates joined into an AND-able SQL fragment ('' when unfiltered). */
-export function filterSql(q: URLSearchParams, timeCol: string = DEFAULT_TIME_COL): string {
-  const predicates = filterPredicates(q, timeCol);
   return predicates.length > 0 ? `AND ${predicates.join(" AND ")}` : "";
 }
 
-/**
- * Spatial predicate over the sensors table from the loc= wire param
- * (lng:lat:radiusM CSV). Planar meters approximation, same constants as
- * withinLocations client-side. Values are validated finite numbers —
- * nothing user-typed is inlined. Returns '' when no pins.
- */
-export function locationSql(q: URLSearchParams): string {
-  const pins = (q.get("loc") ?? "")
-    .split(",")
-    .filter(Boolean)
-    .map((s) => s.split(":").map(Number))
-    .filter((a) => a.length === 3 && a.every(Number.isFinite) && a[2] > 0);
-  if (pins.length === 0) return "";
-  const preds = pins.map(([lng, lat, r]) => {
-    const mPerDegLng = (Math.cos((lat * Math.PI) / 180) * 111320).toFixed(3);
-    return `(power((s.longitude - ${lng}) * ${mPerDegLng}, 2) + power((s.latitude - ${lat}) * 110574, 2) <= ${Math.round(r * r)})`;
-  });
+/** Custom date spans, [start, end) — same semantics as the client. */
+export function rangesSql(f: DashboardFilters, timeCol: string = DEFAULT_TIME_COL): string {
+  if (f.ranges.length === 0) return "";
+  const preds = f.ranges.map(
+    (r) =>
+      `(${timeCol} >= '${new Date(r.startMs).toISOString()}'::timestamptz AND ${timeCol} < '${new Date(r.endMs).toISOString()}'::timestamptz)`
+  );
   return `AND (${preds.join(" OR ")})`;
 }
 
-/** Time-span predicate from the ranges= wire param (startMs:endMs CSV,
- *  [start, end) semantics matching the client). Validated numbers only. */
-export function rangesSql(q: URLSearchParams, timeCol: string = DEFAULT_TIME_COL): string {
-  const ranges = (q.get("ranges") ?? "")
-    .split(",")
-    .filter(Boolean)
-    .map((s) => s.split(":").map(Number))
-    .filter((a) => a.length === 2 && a.every((n) => Number.isFinite(n) && n > 0) && a[0] < a[1]);
-  if (ranges.length === 0) return "";
-  const preds = ranges.map(
-    ([s, e]) =>
-      `(${timeCol} >= '${new Date(s).toISOString()}'::timestamptz AND ${timeCol} < '${new Date(e).toISOString()}'::timestamptz)`
-  );
+/**
+ * Spatial predicate over the sensors table. Planar meters approximation,
+ * same constants as withinLocations client-side.
+ */
+export function locationSql(f: DashboardFilters): string {
+  if (f.locations.length === 0) return "";
+  const preds = f.locations.map(({ lng, lat, radiusM }) => {
+    const mPerDegLng = (Math.cos((lat * Math.PI) / 180) * 111320).toFixed(3);
+    return `(power((s.longitude - ${lng}) * ${mPerDegLng}, 2) + power((s.latitude - ${lat}) * 110574, 2) <= ${Math.round(radiusM * radiusM)})`;
+  });
   return `AND (${preds.join(" OR ")})`;
 }

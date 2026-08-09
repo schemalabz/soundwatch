@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { locationSql } from "@/lib/server/filterSql";
 import { BinAccumulator, type LevelSummary } from "@/lib/server/levelBins";
-import { instantMatches, type DashboardFilters, type DayGroup, type HourPreset } from "@/lib/dashboard/filters";
+import { instantMatches, parseWireFilters } from "@/lib/dashboard/filters";
 import { athensWallTime } from "@/lib/dashboard/time";
 
 // Grouped series over the FILTERED time-set, network-wide, for the charts
@@ -32,31 +32,6 @@ interface HourBinSqlRow {
 
 export type SeriesBucket = LevelSummary;
 
-/** Reconstruct DashboardFilters from the wire params (period is already
- *  folded into from= by the client; locations are applied in SQL). */
-function filtersFromQuery(q: URLSearchParams): DashboardFilters {
-  const days = q.get("days");
-  const hours = (q.get("hours") ?? "").split(",").filter(Boolean);
-  const months = (q.get("months") ?? "")
-    .split(",")
-    .map(Number)
-    .filter((m) => Number.isInteger(m) && m >= 1 && m <= 12);
-  const ranges = (q.get("ranges") ?? "")
-    .split(",")
-    .filter(Boolean)
-    .map((s) => s.split(":").map(Number))
-    .filter((a) => a.length === 2 && a.every((n) => Number.isFinite(n) && n > 0) && a[0] < a[1])
-    .map(([startMs, endMs]) => ({ startMs, endMs }));
-  return {
-    ranges,
-    period: null,
-    days: new Set(days === "weekend" || days === "weekday" ? [days as DayGroup] : []),
-    hours: new Set(hours.filter((h): h is HourPreset => ["day", "evening", "night", "peak"].includes(h))),
-    months: new Set(months.map((m) => m - 1)),
-    locations: [], // spatial filtering happens in SQL (locationSql), not here
-  };
-}
-
 export async function GET(req: NextRequest) {
   const q = req.nextUrl.searchParams;
   const fromMs = Number(q.get("from"));
@@ -64,7 +39,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "from= requires epoch ms" }, { status: 400 });
   }
   const bucket = q.get("bucket") === "hour" ? "hour" : "day";
-  const filters = filtersFromQuery(q);
+  const filters = parseWireFilters(q);
 
   // The domain edge is hour-quantized (floor): the partial first hour is
   // included whole — consistent with the real-time tail including the
@@ -81,7 +56,7 @@ export async function GET(req: NextRequest) {
     JOIN sensors s ON s.id = rb.sensor_id
     WHERE s.is_active AND NOT s.is_experimental AND s.latitude IS NOT NULL
       AND rb.bucket >= '${fromHourIso}'::timestamptz
-      ${locationSql(q)}
+      ${locationSql(filters)}
     GROUP BY 1, 2`);
 
   const dims = {

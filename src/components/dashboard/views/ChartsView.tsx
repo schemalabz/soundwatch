@@ -6,7 +6,7 @@
 // make unanswerable (the month wheel inside a 24-hour period) says why
 // instead of drawing something meaningless.
 
-import { useEffect, useMemo, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import { dashboardStrings as tr, LOCALE } from "@/lib/strings/dashboard";
 import {
   dowSelectionMask,
@@ -15,7 +15,7 @@ import {
   type DashboardFilters,
 } from "@/lib/dashboard/filters";
 import { athensWallTime, ATHENS_TZ } from "@/lib/dashboard/time";
-import type { AggKey } from "../Timebar";
+import type { AggKey } from "@/lib/dashboard/metrics";
 import MetricMention from "../MetricMention";
 import RadialChart, { type RadialSlice } from "../charts/RadialChart";
 import TimelineChart from "../charts/TimelineChart";
@@ -56,7 +56,7 @@ function Skeleton({ round }: { round?: boolean }) {
   );
 }
 
-export default function ChartsView({
+function ChartsView({
   aggQuery,
   metric,
   filters,
@@ -119,7 +119,7 @@ export default function ChartsView({
     return present;
   }, [domainStartMs, nowMs]);
 
-  const val = (b: SeriesBucketData | undefined): number | null => (b ? b[metric] : null);
+  const val = useCallback((b: SeriesBucketData | undefined): number | null => (b ? b[metric] : null), [metric]);
 
   const clockSlices: RadialSlice[] = useMemo(
     () =>
@@ -131,7 +131,7 @@ export default function ChartsView({
         muted: !hourMask[h],
         showLabel: h % 6 === 0,
       })),
-    [series, hourMask, metric] // eslint-disable-line react-hooks/exhaustive-deps
+    [series, hourMask, val]
   );
 
   const dowSlices: RadialSlice[] = useMemo(
@@ -143,7 +143,7 @@ export default function ChartsView({
         muted: !dowMask[d],
         showLabel: true,
       })),
-    [series, dowMask, dowLabels, metric] // eslint-disable-line react-hooks/exhaustive-deps
+    [series, dowMask, dowLabels, val]
   );
 
   const monthSlices: RadialSlice[] = useMemo(
@@ -155,7 +155,7 @@ export default function ChartsView({
         muted: !monthMask[m] || !monthsInDomain.has(m),
         showLabel: true,
       })),
-    [series, monthMask, monthLabels, monthsInDomain, metric] // eslint-disable-line react-hooks/exhaustive-deps
+    [series, monthMask, monthLabels, monthsInDomain, val]
   );
 
   // Viability: a chart must be able to CONTRAST something.
@@ -211,3 +211,6 @@ export default function ChartsView({
     </div>
   );
 }
+
+// Re-renders once a minute (nowMs is minute-quantized), not once a second.
+export default memo(ChartsView);

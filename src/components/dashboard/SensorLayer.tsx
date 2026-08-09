@@ -15,7 +15,7 @@
 // - Live mode reuses /api/sensors (latestReading IS the live frame), polled
 //   gently, with a slow "creep" transition instead of the 1s playback tween.
 
-import { useEffect, useMemo, useReducer, useRef, useState } from "react";
+import { memo, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import type mapboxgl from "mapbox-gl";
 import {
   FrameStore,
@@ -153,7 +153,8 @@ function applyValue(
   }
 }
 
-export default function SensorLayer({ map, sensors, cursor, stepMs, segments, playing, metric, onSensorClick, overrideFrame, locations, clickThrough }: SensorLayerProps) {
+function SensorLayer({ map, sensors, cursor, stepMs, segments, playing, metric, onSensorClick, overrideFrame, locations, clickThrough }: SensorLayerProps) {
+  const hasOverride = overrideFrame != null;
   const [version, bumpVersion] = useReducer((v: number) => v + 1, 0);
   const [zoomBucket, setZoomBucket] = useState(0);
   const storeRef = useRef(new FrameStore());
@@ -226,7 +227,7 @@ export default function SensorLayer({ map, sensors, cursor, stepMs, segments, pl
   // Live IS a frame: the trailing 5 minutes at "now", computed with the
   // same metric as playback — one data path for everything.
   useEffect(() => {
-    if (cursor !== "live" || overrideFrame != null) return;
+    if (cursor !== "live" || hasOverride) return;
     let cancelled = false;
     const load = async () => {
       try {
@@ -246,12 +247,12 @@ export default function SensorLayer({ map, sensors, cursor, stepMs, segments, pl
       cancelled = true;
       clearInterval(timer);
     };
-  }, [cursor, metric, overrideFrame != null]);
+  }, [cursor, metric, hasOverride]);
 
   // --- prefetcher: current frame + the playback path ahead, one batch ---
   const cursorQ = cursor === "live" ? "live" : quantizeFrameMs(cursor);
   useEffect(() => {
-    if (cursorQ === "live" || overrideFrame != null) return;
+    if (cursorQ === "live" || hasOverride) return;
     const windowS = frameWindowS(stepMs);
     const ahead = playing ? PREFETCH_AHEAD : 2;
     const times = upcomingFrameTimes(segments, cursorQ, stepMs, ahead)
@@ -273,7 +274,7 @@ export default function SensorLayer({ map, sensors, cursor, stepMs, segments, pl
         for (const t of missing) storeRef.current.clearPending(frameKey(t, windowS, metric));
       });
     return () => controller.abort();
-  }, [cursorQ, stepMs, segments, playing, metric, overrideFrame != null]);
+  }, [cursorQ, stepMs, segments, playing, metric, hasOverride]);
 
   // --- apply the current frame to the marker elements ---
   useEffect(() => {
@@ -318,3 +319,7 @@ export default function SensorLayer({ map, sensors, cursor, stepMs, segments, pl
 
   return null;
 }
+
+// The shell re-renders every second (wall clock); markers only care about
+// real input changes.
+export default memo(SensorLayer);

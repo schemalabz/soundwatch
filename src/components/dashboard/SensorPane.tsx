@@ -4,11 +4,12 @@
 // last-reading age + battery/wifi), the current level big and colored, and a
 // hand-rolled 24h LAeq sparkline — no chart library, one SVG path.
 
-import { useEffect, useMemo, useState } from "react";
-import { MapPin, X } from "lucide-react";
+import { memo, useEffect, useMemo, useState } from "react";
+import { BatteryMedium, MapPin, Wifi, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { levelColor, paletteStops } from "@/lib/dashboard/levels";
+import { fmtDb } from "@/lib/dashboard/format";
 import { dashboardStrings as tr } from "@/lib/strings/dashboard";
 
 interface SensorDetail {
@@ -30,7 +31,7 @@ interface ReadingPoint {
 
 const NO_READINGS: ReadingPoint[] = [];
 
-export default function SensorPane({
+function SensorPane({
   sensorId,
   onClose,
   onGoToMap,
@@ -72,7 +73,8 @@ export default function SensorPane({
 
   const latest = readings.length > 0 ? readings[readings.length - 1] : null;
   const ageS = latest ? Math.max(0, Math.round((nowMs - new Date(latest.recordedAt).getTime()) / 1000)) : null;
-  const liveTone = ageS == null ? "bg-silver" : ageS < 120 ? "bg-sound" : ageS < 3600 ? "bg-slate" : "bg-silver";
+  const liveTone =
+    ageS == null ? "var(--sw-silver)" : ageS < 120 ? "var(--sw-ok)" : ageS < 3600 ? "var(--sw-slate)" : "var(--sw-loud)";
 
   const levels = useMemo(() => readings.map((r) => r.laeq).filter((v): v is number => v != null), [readings]);
   const stats = useMemo(() => {
@@ -81,8 +83,9 @@ export default function SensorPane({
     return { avg: energyAvg, min: Math.min(...levels), max: Math.max(...levels) };
   }, [levels]);
 
-  // Downsample to ~140 columns for a clean path.
-  const path = useMemo(() => {
+  // Downsample to ~140 columns; the line's stroke is a gradient through the
+  // level ramp (same language as the map circles and the timeline chart).
+  const spark = useMemo(() => {
     if (levels.length < 2 || !stats) return null;
     const cols = Math.min(140, levels.length);
     const per = levels.length / cols;
@@ -93,12 +96,14 @@ export default function SensorPane({
     }
     const lo = stats.min - 1;
     const hi = stats.max + 1;
-    const pts = ys.map((y, i) => {
-      const px = (i / (cols - 1)) * 100;
-      const py = 34 - ((y - lo) / Math.max(1, hi - lo)) * 32;
-      return `${px.toFixed(2)},${py.toFixed(2)}`;
-    });
-    return `M${pts.join("L")}`;
+    const px = (i: number) => (i / (cols - 1)) * 100;
+    const py = (y: number) => 34 - ((y - lo) / Math.max(1, hi - lo)) * 30;
+    const pts = ys.map((y, i) => `${px(i).toFixed(2)},${py(y).toFixed(2)}`);
+    return {
+      line: `M${pts.join("L")}`,
+      area: `M${pts.join("L")}L100,36L0,36Z`,
+      stops: ys.map((y, i) => ({ offset: i / (cols - 1), value: y })),
+    };
   }, [levels, stats]);
 
   const ago = (s: number): string => (s < 90 ? `${s}δ` : s < 5400 ? `${Math.round(s / 60)}λ` : `${(s / 3600).toFixed(1)}ω`);
@@ -109,10 +114,7 @@ export default function SensorPane({
       <div className="flex items-start justify-between gap-2 border-b px-4 py-3">
         <div className="min-w-0">
           <div className="truncate text-[15px] font-semibold leading-tight">{detail?.name ?? "…"}</div>
-          <div className="truncate text-[11px] text-muted-foreground">
-            {detail?.deviceId}
-            {detail?.address ? ` · ${detail.address}` : ""}
-          </div>
+          <div className="truncate text-[11px] text-muted-foreground">{detail?.address ?? detail?.deviceId ?? ""}</div>
         </div>
         <div className="-mr-1.5 -mt-1 flex shrink-0 items-center">
           {onGoToMap && (
@@ -135,25 +137,37 @@ export default function SensorPane({
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
-        {/* liveness */}
-        <div className="flex items-center gap-2 text-[12px] text-muted-foreground">
-          <span className={cn("size-2 rounded-full", liveTone, ageS != null && ageS < 120 && "animate-pulse")} />
-          {ageS != null ? tr.pane.lastReading(ago(ageS)) : tr.pane.noData}
-          {latest?.battery != null && <span className="tabular-nums">· {Math.round(latest.battery)}%</span>}
-          {latest?.rssi != null && <span className="tabular-nums">· {Math.round(latest.rssi)} dBm</span>}
-        </div>
-
-        {/* current level */}
+        {/* the level now, with liveness + telemetry on one quiet line */}
         {latest?.laeq != null && (
-          <div className="mt-3 flex items-baseline gap-2">
-            <span className="text-3xl font-bold tabular-nums tracking-tight" style={{ color: levelColor(latest.laeq, stops) }}>
-              {latest.laeq.toFixed(1)}
+          <div className="flex items-baseline gap-2">
+            <span className="text-[34px] font-bold leading-none tabular-nums tracking-tight" style={{ color: levelColor(latest.laeq, stops) }}>
+              {fmtDb(latest.laeq)}
             </span>
             <span className="text-[11px] font-medium text-muted-foreground">dB LAeq</span>
           </div>
         )}
+        <div className="mt-2 flex items-center gap-2 text-[11px] text-muted-foreground">
+          <span
+            className={cn("size-2 rounded-full", ageS != null && ageS < 120 && "animate-pulse")}
+            style={{ backgroundColor: liveTone }}
+          />
+          <span>{ageS != null ? tr.pane.lastReading(ago(ageS)) : tr.pane.noData}</span>
+          <span className="flex-1" />
+          {latest?.battery != null && (
+            <span className="flex items-center gap-0.5 tabular-nums">
+              <BatteryMedium className="size-3.5 opacity-60" />
+              {Math.round(latest.battery)}%
+            </span>
+          )}
+          {latest?.rssi != null && (
+            <span className="flex items-center gap-0.5 tabular-nums">
+              <Wifi className="size-3 opacity-60" />
+              {Math.round(latest.rssi)}
+            </span>
+          )}
+        </div>
 
-        {/* 24h sparkline */}
+        {/* 24h sparkline: gradient line over a soft fill */}
         <div className="mt-4">
           <div className="mb-1 flex items-baseline justify-between">
             <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">{tr.pane.last24h}</span>
@@ -163,10 +177,28 @@ export default function SensorPane({
               </span>
             )}
           </div>
-          {path ? (
-            <svg viewBox="0 0 100 36" preserveAspectRatio="none" className="h-24 w-full">
-              <path d={path} fill="none" stroke="var(--sw-slate)" strokeWidth="0.8" vectorEffect="non-scaling-stroke" />
-            </svg>
+          {spark ? (
+            <>
+              <svg viewBox="0 0 100 36" preserveAspectRatio="none" className="h-24 w-full">
+                <defs>
+                  <linearGradient id="sw-pane-line" x1="0" x2="100" y1="0" y2="0" gradientUnits="userSpaceOnUse">
+                    {spark.stops.map((s, i) => (
+                      <stop key={i} offset={s.offset} stopColor={levelColor(s.value, stops)} />
+                    ))}
+                  </linearGradient>
+                  <linearGradient id="sw-pane-fill" x1="0" x2="0" y1="0" y2="36" gradientUnits="userSpaceOnUse">
+                    <stop offset="0" style={{ stopColor: "var(--sw-silver)", stopOpacity: 0.35 }} />
+                    <stop offset="1" style={{ stopColor: "var(--sw-silver)", stopOpacity: 0.05 }} />
+                  </linearGradient>
+                </defs>
+                <path d={spark.area} fill="url(#sw-pane-fill)" />
+                <path d={spark.line} fill="none" stroke="url(#sw-pane-line)" strokeWidth="1.1" vectorEffect="non-scaling-stroke" />
+              </svg>
+              <div className="flex justify-between text-[9px] uppercase tracking-wide text-muted-foreground/70">
+                <span>{tr.pane.dayAgo}</span>
+                <span>{tr.pane.now}</span>
+              </div>
+            </>
           ) : (
             <div className="grid h-24 place-items-center rounded-md bg-secondary text-[11px] text-muted-foreground">
               {tr.pane.noData}
@@ -174,9 +206,9 @@ export default function SensorPane({
           )}
         </div>
 
-        {/* 24h stats */}
+        {/* 24h stats: one quiet line, no boxes */}
         {stats && (
-          <div className="mt-3 grid grid-cols-3 gap-2 pb-1">
+          <div className="mt-3 flex items-baseline gap-4 border-t pt-2.5 pb-1 text-[11px] text-muted-foreground">
             {(
               [
                 [tr.pane.statAvg, stats.avg],
@@ -184,12 +216,12 @@ export default function SensorPane({
                 [tr.pane.statMax, stats.max],
               ] as const
             ).map(([label, v]) => (
-              <div key={label} className="rounded-md bg-secondary px-2 py-1.5">
-                <div className="text-[9.5px] uppercase tracking-wide text-muted-foreground">{label}</div>
-                <div className="text-[13px] font-semibold tabular-nums" style={{ color: levelColor(v, stops) }}>
-                  {v.toFixed(1)}
-                </div>
-              </div>
+              <span key={label} className="flex items-baseline gap-1">
+                {label.toLowerCase()}
+                <span className="text-[13px] font-semibold tabular-nums" style={{ color: levelColor(v, stops) }}>
+                  {fmtDb(v)}
+                </span>
+              </span>
             ))}
           </div>
         )}
@@ -197,3 +229,6 @@ export default function SensorPane({
     </div>
   );
 }
+
+// Owns its own 5s clock; parent ticks must not re-render it.
+export default memo(SensorPane);

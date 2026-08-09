@@ -12,7 +12,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { levelColor, paletteStops } from "@/lib/dashboard/levels";
 import { fmtDb, fmtInt } from "@/lib/dashboard/format";
 import { LOCALE, dashboardStrings as tr } from "@/lib/strings/dashboard";
-import type { AggKey } from "../Timebar";
+import type { AggKey } from "@/lib/dashboard/metrics";
 import MetricMention from "../MetricMention";
 import type { SeriesPoint } from "./types";
 

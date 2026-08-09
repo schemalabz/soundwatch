@@ -4,14 +4,14 @@
 // During a wind-forward hold it takes the fast-forward mark and grows —
 // the emphasis IS the skip indicator now, replacing any centered stamp.
 
-import { useEffect, useState } from "react";
+import { memo, useEffect, useState } from "react";
 import { FastForward } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ATHENS_TZ } from "@/lib/dashboard/time";
 import { LOCALE } from "@/lib/strings/dashboard";
 import { SKIP_HOLD_MS, type SkipEvent } from "./SkipFlash";
 
-export default function CurrentDate({ cursorMs, skip }: { cursorMs: number; skip: SkipEvent | null }) {
+function CurrentDate({ cursorMs, skip }: { cursorMs: number; skip: SkipEvent | null }) {
   // Same derived-dismiss pattern as SkipFlash: emphasized while the hold runs.
   const [dismissedSeq, setDismissedSeq] = useState(0);
   const emphasized = skip != null && skip.seq !== dismissedSeq;
@@ -55,3 +55,6 @@ export default function CurrentDate({ cursorMs, skip }: { cursorMs: number; skip
     </div>
   );
 }
+
+// cursorMs arrives minute-quantized while live; skip events are rare.
+export default memo(CurrentDate);

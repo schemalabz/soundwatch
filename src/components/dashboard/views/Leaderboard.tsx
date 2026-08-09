@@ -5,15 +5,15 @@
 // quietest and loudest of the list, colored by the same level ramp as the
 // map circles, so the two views read as one system.
 
-import { useMemo } from "react";
+import { memo, useMemo } from "react";
 import { dashboardStrings as tr } from "@/lib/strings/dashboard";
 import { levelColor, paletteStops } from "@/lib/dashboard/levels";
 import { fmtDb, fmtInt } from "@/lib/dashboard/format";
-import type { AggKey } from "../Timebar";
+import type { AggKey } from "@/lib/dashboard/metrics";
 import type { SensorMeta } from "../SensorLayer";
 import MetricMention from "../MetricMention";
 
-export default function Leaderboard({
+function Leaderboard({
   aggData,
   metric,
   sensors,
@@ -112,3 +112,6 @@ export default function Leaderboard({
     </div>
   );
 }
+
+// Re-renders only when aggregate data / metric / fleet change.
+export default memo(Leaderboard);

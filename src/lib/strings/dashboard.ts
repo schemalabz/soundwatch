@@ -43,6 +43,8 @@ export const dashboardStrings = {
     lastReading: (ago: string) => `μέτρηση πριν ${ago}`,
     noData: "Χωρίς δεδομένα",
     last24h: "Τελευταίες 24 ώρες",
+    dayAgo: "πριν 24ω",
+    now: "τώρα",
     statAvg: "Μέσο",
     statMin: "Ελάχ.",
     statMax: "Μέγ.",
@@ -99,6 +101,7 @@ export const dashboardStrings = {
   },
   timebar: {
     live: "Μετάβαση στο τώρα",
+    freshness: (s: number) => (s === 1 ? "Δεδομένα από πριν 1 δευτερόλεπτο" : `Δεδομένα από πριν ${s} δευτερόλεπτα`),
     liveExcluded: "Το «τώρα» δεν περιλαμβάνεται στα επιλεγμένα φίλτρα",
     play: "Αναπαραγωγή",
     pause: "Παύση",

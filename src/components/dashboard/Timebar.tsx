@@ -28,8 +28,6 @@ export const PLAYBACK_SPEEDS = [
 ] as const;
 
 export type BarMode = "instants" | "aggregate";
-export type AggKey = "laeq" | "l50" | "l10" | "l90" | "lmax";
-export const AGG_KEYS: AggKey[] = ["laeq", "l50", "l10", "l90", "lmax"];
 
 export interface TimebarProps {
   rangeStartMs: number;
@@ -86,15 +84,8 @@ function useCursorLabel(p: TimebarProps): string {
 }
 
 /** Observed pixel length of the rail along its axis. */
-function useRailLength(
-  ref: React.RefObject<HTMLDivElement | null>,
-  axis: "x" | "y",
-  remountKey: unknown
-): number {
+function useRailLength(ref: React.RefObject<HTMLDivElement | null>, axis: "x" | "y"): number {
   const [length, setLength] = useState(0);
-  // remountKey re-runs the effect when the rail branch unmounts/remounts
-  // (mode switching) — otherwise the observer keeps watching a dead node
-  // and the graduations never come back.
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
@@ -105,7 +96,7 @@ function useRailLength(
     });
     ro.observe(el);
     return () => ro.disconnect();
-  }, [ref, axis, remountKey]);
+  }, [ref, axis]);
   return length;
 }
 
@@ -233,7 +224,7 @@ function LiveZone({ p, compact }: { p: TimebarProps; compact?: boolean }) {
       onClick={() => p.liveAllowed && p.onCursorChange("live")}
       className={cn(
         "group flex select-none items-center gap-1.5 outline-none transition-opacity",
-        compact ? "flex-col gap-1 py-1" : "px-1",
+        compact ? "py-1" : "px-1",
         !p.liveAllowed && "opacity-40"
       )}
       aria-label={p.liveAllowed ? p.labels.live : p.labels.liveExcluded}
@@ -249,33 +240,30 @@ function LiveZone({ p, compact }: { p: TimebarProps; compact?: boolean }) {
           )}
         />
       </span>
-      <span className={cn("flex", compact ? "flex-col items-center" : "flex-col items-start")}>
-        <span
-          className={cn(
-            "text-[10px] font-semibold leading-none tracking-[0.14em]",
-            isLive && p.liveAllowed ? "text-foreground" : "text-muted-foreground"
-          )}
-        >
-          LIVE
-        </span>
-        {p.freshSecondsAgo != null && p.liveAllowed && (
-          <span className="relative mt-0.5 leading-none">
-            <span className="text-[10px] tabular-nums text-muted-foreground">{p.freshSecondsAgo}s</span>
-            {isLive && (
-              <span className="sw-live-underline absolute -bottom-[3px] left-0 right-0 h-px rounded bg-sound" />
-            )}
-          </span>
+      <span
+        className={cn(
+          "font-semibold leading-none",
+          compact ? "text-[8.5px] tracking-[0.1em]" : "text-[10px] tracking-[0.14em]",
+          isLive && p.liveAllowed ? "text-foreground" : "text-muted-foreground"
         )}
+      >
+        LIVE
       </span>
     </button>
   );
-  if (p.liveAllowed) return zone;
+  // Freshness lives in the tooltip now — the zone itself stays two words.
+  const tip = p.liveAllowed
+    ? p.freshSecondsAgo != null
+      ? tr.timebar.freshness(p.freshSecondsAgo)
+      : null
+    : p.labels.liveExcluded;
+  if (!tip) return zone;
   return (
     <Tooltip>
       <TooltipTrigger asChild>
         <span className="inline-flex">{zone}</span>
       </TooltipTrigger>
-      <TooltipContent side={compact ? "left" : "top"}>{p.labels.liveExcluded}</TooltipContent>
+      <TooltipContent side={compact ? "left" : "top"}>{tip}</TooltipContent>
     </Tooltip>
   );
 }
@@ -346,7 +334,7 @@ function HorizontalTimebar(p: TimebarProps) {
   const cursorLabel = useCursorLabel(p);
   const { railRef, dragging, hoverFraction, onPointerDown, onPointerMove, onPointerUp, onPointerLeave, onKeyDown } =
     usePointerScrub(p, "x");
-  const railLength = useRailLength(railRef, "x", null);
+  const railLength = useRailLength(railRef, "x");
   const graduations = useGraduations(p, railLength);
   const isLive = p.cursor === "live";
   const cursorF = fraction(cursorMs);
@@ -468,7 +456,7 @@ function VerticalTimebar(p: TimebarProps) {
     usePointerScrub(p, "y");
   void dragging;
   void hoverFraction;
-  const railLength = useRailLength(railRef, "y", null);
+  const railLength = useRailLength(railRef, "y");
   const graduations = useGraduations(p, railLength);
   const isLive = p.cursor === "live";
   const cursorF = fraction(cursorMs);

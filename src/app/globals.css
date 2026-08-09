@@ -171,23 +171,4 @@
 }
 
 /* Liveness underline: a quiet breathing line under the live timestamp. */
-@keyframes sw-breathe {
-  0%,
-  100% {
-    opacity: 0.35;
-    transform: scaleX(0.55);
-  }
-  50% {
-    opacity: 1;
-    transform: scaleX(1);
-  }
-}
-.sw-live-underline {
-  animation: sw-breathe 2.4s ease-in-out infinite;
-  transform-origin: center;
-}
-@media (prefers-reduced-motion: reduce) {
-  .sw-live-underline {
-    animation: none;
-  }
-}
+

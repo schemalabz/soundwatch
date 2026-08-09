@@ -32,7 +32,8 @@ import LocationLayer from "./LocationLayer";
 import SensorPane from "./SensorPane";
 import CurrentDate from "./CurrentDate";
 import SkipFlash, { SKIP_HOLD_MS, type SkipEvent } from "./SkipFlash";
-import Timebar, { PLAYBACK_SPEEDS, type AggKey, type BarMode } from "./Timebar";
+import Timebar, { PLAYBACK_SPEEDS, type BarMode } from "./Timebar";
+import { type AggKey } from "@/lib/dashboard/metrics";
 import ViewSwitcher, { type DashboardView } from "./ViewSwitcher";
 import Leaderboard from "./views/Leaderboard";
 import ChartsView from "./views/ChartsView";
@@ -260,6 +261,8 @@ export default function DashboardShell() {
     setFilters((prev) => ({ ...prev, locations: prev.locations.filter((_, i) => i !== index) }));
   }, []);
 
+  const onClosePane = useCallback(() => setSelectedSensorId(null), []);
+
   const onGoToMap = useCallback(
     (lng: number, lat: number) => {
       setView("map");
@@ -317,7 +320,10 @@ export default function DashboardShell() {
     filters,
     segments,
     dataStartMs: rangeStartMs,
-    nowMs,
+    // Minute precision on purpose: with React.memo this caps the rail (50
+    // chips + 21 viability probes) at one re-render per minute, not per
+    // second. Only the Timebar needs the ticking clock.
+    nowMs: nowMinute,
     sensorCount: freshness?.fleet.total ?? 50,
     sensors: sensorList,
     metric: aggKey,
@@ -386,13 +392,13 @@ export default function DashboardShell() {
           {selectedSensorId && (
             <SensorPane
               sensorId={selectedSensorId}
-              onClose={() => setSelectedSensorId(null)}
+              onClose={onClosePane}
               onGoToMap={view !== "map" ? onGoToMap : undefined}
             />
           )}
           {view === "map" && <SkipFlash skip={skip} />}
           {view === "map" && mode === "instants" && (
-            <CurrentDate cursorMs={cursor === "live" ? nowMs : cursor} skip={skip} />
+            <CurrentDate cursorMs={cursor === "live" ? nowMinute : cursor} skip={skip} />
           )}
 
           {/* view switcher: the top-level lens */}

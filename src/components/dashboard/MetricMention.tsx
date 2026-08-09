@@ -7,7 +7,7 @@
 
 import { cn } from "@/lib/utils";
 import { dashboardStrings as tr } from "@/lib/strings/dashboard";
-import type { AggKey } from "./Timebar";
+import type { AggKey } from "@/lib/dashboard/metrics";
 
 export default function MetricMention({
   metric,

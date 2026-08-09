@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { filterSql, locationSql, rangesSql } from "@/lib/server/filterSql";
+import { parseWireFilters } from "@/lib/dashboard/filters";
 import { BinAccumulator } from "@/lib/server/levelBins";
 
 // Aggregates over the FILTERED time-set, per sensor: the acoustic summary
@@ -36,9 +37,10 @@ export async function GET(req: NextRequest) {
   }
 
   const fromHourIso = new Date(Math.floor(fromMs / HOUR_MS) * HOUR_MS).toISOString();
-  const filters = filterSql(q, "rb.bucket");
-  const ranges = rangesSql(q, "rb.bucket");
-  const locations = locationSql(q);
+  const f = parseWireFilters(q);
+  const filters = filterSql(f, "rb.bucket");
+  const ranges = rangesSql(f, "rb.bucket");
+  const locations = locationSql(f);
 
   const rows = await prisma.$queryRawUnsafe<SensorBinRow[]>(`
     SELECT rb.sensor_id,

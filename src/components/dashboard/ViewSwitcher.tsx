@@ -1,5 +1,7 @@
 "use client";
 
+import { memo } from "react";
+
 // Χάρτης / Κατάταξη / Γραφήματα — the top-level lens on the filtered data.
 //
 // The map lens carries a second axis (Στιγμιότυπα / Συγκεντρωτικά) that no
@@ -20,7 +22,7 @@ const SECONDARY: { key: Exclude<DashboardView, "map">; icon: typeof MapIcon }[] 
   { key: "charts", icon: ChartSpline },
 ];
 
-export default function ViewSwitcher({
+function ViewSwitcher({
   view,
   mode,
   compact,
@@ -109,3 +111,6 @@ export default function ViewSwitcher({
     </div>
   );
 }
+
+// Static between view/mode changes.
+export default memo(ViewSwitcher);

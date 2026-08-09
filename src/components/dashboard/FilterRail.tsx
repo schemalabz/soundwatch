@@ -4,10 +4,10 @@
 // a generated sentence states what the filters currently select, with the
 // selected data volume beneath it — the filters' "receipt".
 
-import { useEffect, useMemo, useState } from "react";
+import { memo, useMemo } from "react";
 import { dashboardStrings as tr, LOCALE } from "@/lib/strings/dashboard";
 import Link from "next/link";
-import { CalendarPlus, MapPin, RotateCcw, Search, X } from "lucide-react";
+import { CalendarPlus, MapPin, RotateCcw, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { cn } from "@/lib/utils";
@@ -18,7 +18,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { AGG_KEYS, type AggKey } from "./Timebar";
+import { AGG_KEYS, type AggKey } from "@/lib/dashboard/metrics";
 import {
   hasAnyMatch,
   HOUR_PRESET_RANGES,
@@ -28,15 +28,15 @@ import {
   type DashboardFilters,
   type DateRange,
   type DayGroup,
-  type LocationPin,
   type HourPreset,
   type PeriodId,
   type TimeSegment,
   withinLocations,
 } from "@/lib/dashboard/filters";
-import { ATHENS_TZ, athensDateStartMs, athensWallTime, nextAthensMidnight } from "@/lib/dashboard/time";
-import { searchAddress, type AddressHit } from "@/lib/dashboard/geocode";
+import { ATHENS_TZ } from "@/lib/dashboard/time";
 import { summarySentence } from "@/lib/dashboard/summary";
+import RangePicker from "./rail/RangePicker";
+import AddressSearch from "./rail/AddressSearch";
 import type { SensorMeta } from "./SensorLayer";
 
 export interface FilterRailProps {
@@ -95,205 +95,10 @@ function formatRange(r: DateRange): string {
   return first === last ? first : `${fmt.format(r.startMs).replace(/ \d{4}$/, "")} – ${last}`;
 }
 
-/** The date-span form behind a dashed affordance. Opens prefilled with the
- *  last 7 days (no dead disabled state to stare at), labeled fields, Enter
- *  submits. Whole Athens days, end inclusive. */
-function RangePicker({
-  dataStartMs,
-  nowMs,
-  onAdd,
-}: {
-  dataStartMs: number;
-  nowMs: number;
-  onAdd: (r: DateRange) => void;
-}) {
-  const [open, setOpen] = useState(false);
-  const [from, setFrom] = useState("");
-  const [to, setTo] = useState("");
-
-  const toIso = (ms: number) => {
-    const w = athensWallTime(ms);
-    return `${w.year}-${String(w.month + 1).padStart(2, "0")}-${String(w.day).padStart(2, "0")}`;
-  };
-  const minDate = toIso(dataStartMs);
-  const maxDate = toIso(nowMs);
-
-  const parse = (s: string): [number, number, number] | null => {
-    const m = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-    return m ? [Number(m[1]), Number(m[2]) - 1, Number(m[3])] : null;
-  };
-  const fromParts = parse(from);
-  const toParts = parse(to);
-  const valid =
-    fromParts != null &&
-    toParts != null &&
-    athensDateStartMs(...fromParts) <= athensDateStartMs(...toParts);
-
-  const submit = () => {
-    if (!fromParts || !toParts || !valid) return;
-    onAdd({
-      startMs: athensDateStartMs(...fromParts),
-      endMs: nextAthensMidnight(athensDateStartMs(...toParts)),
-    });
-    setOpen(false);
-  };
-
-  if (!open) {
-    return (
-      <button
-        type="button"
-        onClick={() => {
-          setFrom(toIso(nowMs - 6 * 86_400_000));
-          setTo(toIso(nowMs));
-          setOpen(true);
-        }}
-        className="mt-1.5 w-full rounded-md border border-dashed border-border/80 px-3 py-1.5 text-left text-[11.5px] text-muted-foreground transition-colors hover:border-sound/60 hover:text-foreground"
-      >
-        <CalendarPlus className="mr-1.5 inline size-3.5 align-[-2px]" />
-        {tr.period.addRange}
-      </button>
-    );
-  }
-  return (
-    <form
-      className="mt-1.5 rounded-md border p-2"
-      onSubmit={(e) => {
-        e.preventDefault();
-        submit();
-      }}
-    >
-      <div className="grid grid-cols-2 gap-2">
-        {(
-          [
-            [tr.period.rangeFrom, from, setFrom, minDate, to || maxDate],
-            [tr.period.rangeTo, to, setTo, from || minDate, maxDate],
-          ] as const
-        ).map(([label, value, set, min, max]) => (
-          <label key={label} className="block">
-            <span className="mb-1 block text-[9px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-              {label}
-            </span>
-            <input
-              type="date"
-              value={value}
-              min={min}
-              max={max}
-              onChange={(e) => set(e.target.value)}
-              className="w-full rounded-md border bg-background px-1.5 py-1 text-[11px] tabular-nums outline-none transition-colors focus:border-sound"
-            />
-          </label>
-        ))}
-      </div>
-      <div className="mt-2 flex items-center gap-1.5">
-        <button
-          type="submit"
-          disabled={!valid}
-          className="flex-1 rounded-md border border-sound/40 py-1 text-[11px] font-medium text-sound transition-colors hover:bg-sound/10 disabled:opacity-35"
-        >
-          {tr.period.rangeApply}
-        </button>
-        <button
-          type="button"
-          onClick={() => setOpen(false)}
-          className="px-2 py-1 text-[11px] text-muted-foreground transition-colors hover:text-foreground"
-        >
-          {tr.period.rangeCancel}
-        </button>
-      </div>
-    </form>
-  );
-}
-
-/** Debounced Mapbox address autocomplete; a pick becomes a location pin. */
-function AddressSearch({
-  onPick,
-  placing,
-  onTogglePlacing,
-}: {
-  onPick: (lng: number, lat: number, label: string) => void;
-  placing: boolean;
-  onTogglePlacing: () => void;
-}) {
-  const [query, setQuery] = useState("");
-  // Results are tagged with the query that produced them — anything typed
-  // since simply derives to "no hits" (no state resets inside the effect).
-  const [result, setResult] = useState<{ q: string; hits: AddressHit[] } | null>(null);
-  const q = query.trim();
-  const hits = q.length >= 3 && result?.q === q ? result.hits : [];
-
-  useEffect(() => {
-    if (q.length < 3) return;
-    let cancelled = false;
-    const timer = setTimeout(() => {
-      searchAddress(q).then((results) => {
-        if (!cancelled) setResult({ q, hits: results });
-      });
-    }, 300);
-    return () => {
-      cancelled = true;
-      clearTimeout(timer);
-    };
-  }, [q]);
-
-  return (
-    <div>
-      <div className="flex items-center gap-2 rounded-md border px-2 py-1.5 focus-within:border-sound/60">
-        <Search className="size-3.5 shrink-0 text-muted-foreground" />
-        <input
-          type="text"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder={tr.locations.search}
-          className="min-w-0 flex-1 bg-transparent text-xs outline-none placeholder:text-muted-foreground"
-        />
-        {query && (
-          <button type="button" aria-label={tr.clear} onClick={() => setQuery("")} className="text-muted-foreground hover:text-foreground">
-            <X className="size-3" />
-          </button>
-        )}
-        <span className="h-4 w-px shrink-0 bg-border" />
-        <button
-          type="button"
-          title={placing ? tr.locations.placing : tr.locations.add}
-          aria-pressed={placing}
-          onClick={onTogglePlacing}
-          className={cn(
-            "-my-0.5 -mr-1 shrink-0 rounded p-1 transition-colors",
-            placing ? "bg-sound/15 text-sound" : "text-muted-foreground hover:text-foreground"
-          )}
-        >
-          <MapPin className="size-3.5" />
-        </button>
-      </div>
-      {placing && <p className="mt-1 text-[10px] text-sound">{tr.locations.placing}</p>}
-      {hits.length > 0 && (
-        <ul className="mt-1 overflow-hidden rounded-md border">
-          {hits.map((h, i) => (
-            <li key={`${h.lng}:${h.lat}:${i}`}>
-              <button
-                type="button"
-                onClick={() => {
-                  onPick(h.lng, h.lat, h.label);
-                  setQuery("");
-                }}
-                className="w-full px-2.5 py-1.5 text-left transition-colors hover:bg-sound/8"
-              >
-                <span className="block truncate text-[12px] font-medium">{h.label}</span>
-                {h.context && <span className="block truncate text-[9.5px] text-muted-foreground">{h.context}</span>}
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
-  );
-}
-
-export default function FilterRail(p: FilterRailProps) {
+function FilterRail(p: FilterRailProps) {
   const locale = LOCALE;
   const unfiltered = isUnfiltered(p.filters);
   const nowMin = Math.floor(p.nowMs / 60_000) * 60_000;
-  const effectiveStartMs = periodStartMs(p.filters, p.dataStartMs, nowMin);
 
   // An option is selectable only if turning it ON would still match some
   // instant (e.g. "weekdays" dies inside a last-24h window on a Sunday).
@@ -627,3 +432,6 @@ export default function FilterRail(p: FilterRailProps) {
     </div>
   );
 }
+
+// The shell ticks every second; the rail only needs minute-precision inputs.
+export default memo(FilterRail);

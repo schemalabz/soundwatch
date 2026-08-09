@@ -238,6 +238,41 @@ export function monthSelectionMask(f: DashboardFilters): boolean[] {
   return Array.from({ length: 12 }, (_, m) => months.size === 0 || months.has(m));
 }
 
+/**
+ * The single decoder for the wire format filtersToAggregateQuery emits —
+ * every server consumer (JS instantMatches paths AND SQL predicate
+ * builders) goes through this, so the two can never drift. Unknown or
+ * malformed values are dropped; pin labels don't travel.
+ */
+export function parseWireFilters(q: URLSearchParams): DashboardFilters {
+  const days = q.get("days");
+  const hours = (q.get("hours") ?? "").split(",").filter(Boolean);
+  const months = (q.get("months") ?? "")
+    .split(",")
+    .map(Number)
+    .filter((m) => Number.isInteger(m) && m >= 1 && m <= 12);
+  const ranges = (q.get("ranges") ?? "")
+    .split(",")
+    .filter(Boolean)
+    .map((s) => s.split(":").map(Number))
+    .filter((a) => a.length === 2 && a.every((n) => Number.isFinite(n) && n > 0) && a[0] < a[1])
+    .map(([startMs, endMs]) => ({ startMs, endMs }));
+  const locations = (q.get("loc") ?? "")
+    .split(",")
+    .filter(Boolean)
+    .map((s) => s.split(":").map(Number))
+    .filter((a) => a.length === 3 && a.every(Number.isFinite) && a[2] > 0)
+    .map(([lng, lat, radiusM]) => ({ lng, lat, radiusM, label: null }));
+  return {
+    period: null, // already folded into from= by the encoder
+    days: new Set(days === "weekend" || days === "weekday" ? [days as DayGroup] : []),
+    hours: new Set(hours.filter((h): h is HourPreset => h in HOUR_PRESET_RANGES)),
+    months: new Set(months.map((m) => m - 1)),
+    ranges,
+    locations,
+  };
+}
+
 export interface TimeSegment {
   /** epoch ms, inclusive */
   startMs: number;
