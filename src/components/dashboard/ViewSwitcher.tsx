@@ -42,13 +42,9 @@ export default function ViewSwitcher({
       )}
       role="tablist"
     >
-      {/* the map tab: label + fold-out scope picker under one underline */}
-      <div
-        className={cn(
-          "flex items-center border-b-2 pb-0.5 pt-1 transition-colors",
-          mapActive ? "border-sound" : "border-transparent"
-        )}
-      >
+      {/* the map tab: only the label carries the underline; the fold-out
+          scope picker rides alongside, unmarked */}
+      <div className="flex items-center">
         <button
           type="button"
           role="tab"
@@ -56,9 +52,9 @@ export default function ViewSwitcher({
           aria-label={tr.views.map}
           onClick={() => onViewChange("map")}
           className={cn(
-            "flex items-center gap-1.5 font-medium tracking-tight transition-colors",
+            "flex items-center gap-1.5 border-b-2 pb-0.5 pt-1 font-medium tracking-tight transition-colors",
             compact ? "text-[10px]" : "text-[11.5px]",
-            mapActive ? "text-foreground" : "text-muted-foreground hover:text-foreground"
+            mapActive ? "border-sound text-foreground" : "border-transparent text-muted-foreground hover:text-foreground"
           )}
         >
           <MapIcon className="size-3.5" />
