@@ -6,6 +6,8 @@
 // Every value here is a literal: the fleet must be identical across runs and
 // across processes (backfill vs live) or the data would tear at the seams.
 
+import { hashStr } from "./random";
+
 // Archetype drives the diurnal/weekly shape in model.ts:
 //   nightlife   — bars/entertainment: loud late evenings, louder Fri/Sat
 //   commercial  — shops/offices: midday + early-evening peaks, quiet Sundays
@@ -90,16 +92,6 @@ const SYNTHETIC_SENSORS: FleetSensor[] = [
 ];
 
 export const FLEET: FleetSensor[] = [...REAL_SENSORS, ...SYNTHETIC_SENSORS];
-
-/** Cheap deterministic 32-bit string hash (FNV-1a). */
-export function hashStr(s: string): number {
-  let h = 0x811c9dc5;
-  for (let i = 0; i < s.length; i++) {
-    h ^= s.charCodeAt(i);
-    h = Math.imul(h, 0x01000193);
-  }
-  return h >>> 0;
-}
 
 /**
  * Per-sensor publish phase within an interval, so 50 sensors never fire on

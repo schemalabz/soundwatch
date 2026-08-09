@@ -5,9 +5,11 @@
 // its per-message insert.
 
 import mqtt, { type MqttClient } from "mqtt";
-import { FLEET, hashStr, phaseOffsetS, type FleetSensor } from "./fleet";
+import { FLEET, phaseOffsetS, type FleetSensor } from "./fleet";
 import { generateReading } from "./model";
+import { isOnline } from "./outages";
 import { buildPayload } from "./payload";
+import { hashStr } from "./random";
 
 const MQTT_URL = process.env.SIM_MQTT_URL || process.env.MQTT_BROKER_URL || "mqtt://localhost:1883";
 
@@ -27,6 +29,7 @@ export function runLive(): void {
 
   const clients: MqttClient[] = [];
   let published = 0;
+  let dark = 0;
   let minDb = Infinity;
   let maxDb = -Infinity;
 
@@ -62,20 +65,31 @@ export function runLive(): void {
     const nowS = Date.now() / 1000;
     const nextT = (Math.floor((nowS - phase) / intervalS) + 1) * intervalS + phase;
     setTimeout(() => {
-      const reading = generateReading(sensor, nextT, intervalS);
-      client.publish(`device/sck/${sensor.deviceId}/readings/raw`, buildPayload(reading), { qos: 1 });
-      published++;
-      minDb = Math.min(minDb, reading.targetLaeq);
-      maxDb = Math.max(maxDb, reading.targetLaeq);
+      // During an outage the device is simply silent; the MQTT connection
+      // staying up is fine — data-level darkness (no readings, stale
+      // lastSeenAt) is what the outage model simulates.
+      if (!isOnline(sensor.deviceId, nextT)) {
+        dark++;
+      } else {
+        const reading = generateReading(sensor, nextT, intervalS);
+        client.publish(`device/sck/${sensor.deviceId}/readings/raw`, buildPayload(reading), { qos: 1 });
+        published++;
+        minDb = Math.min(minDb, reading.targetLaeq);
+        maxDb = Math.max(maxDb, reading.targetLaeq);
+      }
       scheduleNext(client, sensor);
     }, Math.max(50, (nextT - nowS) * 1000));
   }
 
   // One digest line per interval instead of 50 lines of noise.
   setInterval(() => {
-    if (published === 0) return;
-    console.log(`${new Date().toISOString()} published ${published} readings, LAeq ${minDb.toFixed(0)}-${maxDb.toFixed(0)} dB`);
+    if (published === 0 && dark === 0) return;
+    const darkNote = dark > 0 ? `, ${dark} dark` : "";
+    console.log(
+      `${new Date().toISOString()} published ${published} readings${darkNote}, LAeq ${minDb.toFixed(0)}-${maxDb.toFixed(0)} dB`
+    );
     published = 0;
+    dark = 0;
     minDb = Infinity;
     maxDb = -Infinity;
   }, intervalS * 1000);

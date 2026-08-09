@@ -15,43 +15,8 @@
 import { FRAMES_PER_SEC_REALTIME } from "../mqtt-ingester/flavor1";
 import { HIST_BINS, HIST_BIN_DB, HIST_MIN_DB, BAND_LABELS } from "../mqtt-ingester/flavor2";
 import type { Archetype, FleetSensor } from "./fleet";
-import { hashStr } from "./fleet";
-
-// ---------------------------------------------------------------------------
-// Deterministic noise primitives
-
-const GLOBAL_SEED = hashStr(process.env.SIM_SEED ?? "soundwatch");
-
-/** splitmix32-style avalanche of a 32-bit int to [0,1). */
-function mix01(x: number): number {
-  let z = (x + 0x9e3779b9) >>> 0;
-  z ^= z >>> 16;
-  z = Math.imul(z, 0x21f0aaad);
-  z ^= z >>> 15;
-  z = Math.imul(z, 0x735a2d97);
-  z ^= z >>> 15;
-  return (z >>> 0) / 4294967296;
-}
-
-/** Deterministic uniform [0,1) from (deviceId, salt, integer index). */
-export function rand01(deviceId: string, salt: string, index: number): number {
-  return mix01((hashStr(deviceId) ^ hashStr(salt) ^ Math.imul(index | 0, 0x9e3779b1) ^ GLOBAL_SEED) >>> 0);
-}
-
-/**
- * 1D value noise: smoothstep interpolation between hash values at lattice
- * points floor(t/periodS). Continuous in t, so consecutive readings wander
- * instead of jumping. Returns [-1, 1].
- */
-export function valueNoise(deviceId: string, salt: string, tSec: number, periodS: number): number {
-  const x = tSec / periodS;
-  const i = Math.floor(x);
-  const f = x - i;
-  const s = f * f * (3 - 2 * f); // smoothstep
-  const a = rand01(deviceId, salt, i);
-  const b = rand01(deviceId, salt, i + 1);
-  return (a + (b - a) * s) * 2 - 1;
-}
+import { rand01, valueNoise } from "./random";
+import { lastOutageEndBefore } from "./outages";
 
 // ---------------------------------------------------------------------------
 // Local time (Athens ≈ UTC+3; fixed offset, no DST — a documented
@@ -316,12 +281,16 @@ export function generateReading(sensor: FleetSensor, tSec: number, intervalS: nu
     });
   }
 
-  // --- diagnostics: reboot every 3-10 days, believable counters ---
+  // --- diagnostics: reboot every 3-10 days, believable counters. A unit
+  // that just recovered from an outage reports uptime since power-back, not
+  // since its scheduled reboot — outages ARE reboots. ---
   const sendDiag = !sendBands;
   let diagString: string | null = null;
   if (sendDiag) {
     const bootPeriodS = Math.round((3 + 7 * rand01(sensor.deviceId, "boot", 0)) * 86400);
-    const uptimeS = t % bootPeriodS;
+    const scheduledBootT = t - (t % bootPeriodS);
+    const outageEndT = lastOutageEndBefore(sensor.deviceId, t);
+    const uptimeS = t - Math.max(scheduledBootT, outageEndT ?? 0);
     const freeHeap = 7000 + Math.round(2000 * rand01(sensor.deviceId, "heap", Math.floor(t / bootPeriodS)));
     const wifiConnects = 1 + Math.floor(uptimeS / 43200);
     const publishFails = Math.floor(uptimeS / 86400);

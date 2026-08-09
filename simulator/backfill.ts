@@ -17,6 +17,7 @@
 import { PrismaClient } from "@prisma/client";
 import { FLEET, phaseOffsetS } from "./fleet";
 import { generateReading } from "./model";
+import { isOnline } from "./outages";
 import { buildPayload } from "./payload";
 import { payloadToRow, type ReadingRow } from "./rowBuilder";
 import { seedFleet } from "./seed";
@@ -161,15 +162,21 @@ export async function backfill(prisma: PrismaClient): Promise<void> {
     let t = k * intervalS + phase;
     if (t < fromT) t += intervalS;
 
-    const expected = t > endT ? 0 : Math.floor((endT - t) / intervalS) + 1;
-    if (expected === 0) {
+    const gridSlots = t > endT ? 0 : Math.floor((endT - t) / intervalS) + 1;
+    if (gridSlots === 0) {
       console.log(`${sensor.deviceId}: up to date`);
       continue;
     }
 
     let generated = 0;
+    let darkSlots = 0;
     let batch: { sensorId: string; row: ReadingRow }[] = [];
     for (; t <= endT; t += intervalS) {
+      // Outage: the device was dark — no reading exists for this slot.
+      if (!isOnline(sensor.deviceId, t)) {
+        darkSlots++;
+        continue;
+      }
       const sim = generateReading(sensor, t, intervalS);
       const row = payloadToRow(buildPayload(sim), sim.recordedAt);
       if (!row) throw new Error(`Simulator payload failed to parse for ${sensor.deviceId} at t=${t}`);
@@ -185,7 +192,8 @@ export async function backfill(prisma: PrismaClient): Promise<void> {
       generated += batch.length;
     }
     const rate = Math.round(totalInserted / Math.max(1, (Date.now() - startedAt) / 1000));
-    console.log(`${sensor.deviceId}: ${generated} rows queued (fleet inserted ${totalInserted}, ${rate} rows/s)`);
+    const darkNote = darkSlots > 0 ? `, ${((darkSlots / gridSlots) * 100).toFixed(1)}% dark` : "";
+    console.log(`${sensor.deviceId}: ${generated} rows queued${darkNote} (fleet inserted ${totalInserted}, ${rate} rows/s)`);
   }
 
   while (inflight.size > 0) {

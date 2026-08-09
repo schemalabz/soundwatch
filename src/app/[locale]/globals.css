@@ -1,14 +1,18 @@
 @import "tailwindcss";
 
+/* Neutral placeholder palette. The old brand theme is gone on purpose: the
+   upcoming dashboard defines its own design system from scratch and must not
+   inherit anything from here. These variables exist only so the operational
+   pages (admin, install) keep rendering; restyle or remove freely. */
 :root {
-  --background: #faf5ef;
-  --foreground: #1c1917;
-  --primary: #c2410c;
-  --primary-dark: #7c2d12;
-  --accent: #fb923c;
-  --light: #fff7ed;
-  --muted: #78716c;
-  --border: #e7e0d5;
+  --background: #ffffff;
+  --foreground: #171717;
+  --primary: #171717;
+  --primary-dark: #000000;
+  --accent: #525252;
+  --light: #fafafa;
+  --muted: #737373;
+  --border: #e5e5e5;
 }
 
 @theme inline {
@@ -20,25 +24,9 @@
   --color-light: var(--light);
   --color-muted: var(--muted);
   --color-border: var(--border);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: var(--font-sans), Arial, Helvetica, sans-serif;
-}
-
-@keyframes slide-up {
-  from {
-    transform: translateY(100%);
-  }
-  to {
-    transform: translateY(0);
-  }
-}
-
-.animate-slide-up {
-  animation: slide-up 0.3s ease-out;
 }
