@@ -59,8 +59,8 @@ function LivenessStrip({ cells }: { cells: string }) {
 function Dot({ on }: { on: boolean }) {
   return (
     <span
-      className={cn("size-2 shrink-0 rounded-full", on ? "bg-sound" : "")}
-      style={on ? undefined : { backgroundColor: "var(--sw-loud)" }}
+      className="size-2 shrink-0 rounded-full"
+      style={{ backgroundColor: on ? "var(--sw-ok)" : "var(--sw-loud)" }}
       title={on ? "Ενεργός την τελευταία ώρα" : "Εκτός λειτουργίας"}
     />
   );
@@ -130,15 +130,7 @@ export default function StatusPage() {
               </span>{" "}
               διαθεσιμότητα {data.windowDays} ημερών
             </span>
-          </div>
-        )}
-
-        {error && <p className="mt-8 text-sm text-destructive">Σφάλμα φόρτωσης — δοκιμάστε ξανά.</p>}
-
-        <div className="mt-6 rounded-xl border bg-card">
-          {/* strip legend */}
-          <div className="flex items-center justify-between border-b px-4 py-2 text-[9.5px] uppercase tracking-wide text-muted-foreground/80">
-            <span className="flex items-center gap-3 normal-case">
+            <span className="flex items-center gap-3 text-[10.5px] text-muted-foreground">
               <span className="flex items-center gap-1">
                 <span className="h-2 w-3 rounded-[2px]" style={{ backgroundColor: "var(--sw-slate)", opacity: 0.7 }} />
                 σε λειτουργία
@@ -148,9 +140,22 @@ export default function StatusPage() {
                 εκτός
               </span>
             </span>
-            <span className="max-md:hidden">
-              {data ? `${data.windowDays} ημέρες πριν` : ""} → τώρα
+          </div>
+        )}
+
+        {error && <p className="mt-8 text-sm text-destructive">Σφάλμα φόρτωσης — δοκιμάστε ξανά.</p>}
+
+        <div className="mt-6 rounded-xl border bg-card">
+          {/* column headers, aligned to the row grid */}
+          <div className="flex items-center gap-3 border-b px-4 py-2 text-[9.5px] font-semibold uppercase tracking-[0.1em] text-muted-foreground/80">
+            <span className="size-2 shrink-0" />
+            <span className="w-40 shrink-0">Αισθητήρας</span>
+            <span className="w-14 shrink-0 text-right">Μέτρηση</span>
+            <span className="flex min-w-0 flex-1 justify-between max-md:hidden">
+              <span>{data ? `${data.windowDays} ημέρες πριν` : ""}</span>
+              <span>τώρα</span>
             </span>
+            <span className="w-12 shrink-0 text-right">Διαθ.</span>
           </div>
 
           <div className="divide-y">
@@ -171,7 +176,7 @@ export default function StatusPage() {
                   </div>
                   <span
                     className="w-12 shrink-0 text-right text-[11px] font-medium tabular-nums"
-                    style={{ color: pct < 0.98 ? "var(--sw-loud)" : "var(--sw-slate)" }}
+                    style={{ color: pct < 0.98 ? "var(--sw-loud)" : "var(--sw-ok)" }}
                   >
                     {fmtDb(pct * 100)}%
                   </span>
