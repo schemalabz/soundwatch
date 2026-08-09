@@ -30,7 +30,10 @@ import SensorLayer from "./SensorLayer";
 import SensorPane from "./SensorPane";
 import CurrentDate from "./CurrentDate";
 import SkipFlash, { SKIP_HOLD_MS, type SkipEvent } from "./SkipFlash";
-import Timebar, { ModePicker, PLAYBACK_SPEEDS, type AggKey, type BarMode } from "./Timebar";
+import Timebar, { PLAYBACK_SPEEDS, type AggKey, type BarMode } from "./Timebar";
+import ViewSwitcher, { type DashboardView } from "./ViewSwitcher";
+import Leaderboard from "./views/Leaderboard";
+import ChartsView from "./views/ChartsView";
 
 const MapCanvas = dynamic(() => import("./MapCanvas"), { ssr: false });
 
@@ -53,6 +56,7 @@ export default function DashboardShell() {
   const [skip, setSkip] = useState<SkipEvent | null>(null);
   const [selectedSensorId, setSelectedSensorId] = useState<string | null>(null);
   const [mode, setMode] = useState<BarMode>("instants");
+  const [view, setView] = useState<DashboardView>("map");
   const [aggKey, setAggKey] = useState<AggKey>("laeq");
   const [aggData, setAggData] = useState<Record<string, Record<AggKey, number> & { n: number }> | null>(null);
   const skipSeq = useRef(0);
@@ -158,11 +162,13 @@ export default function DashboardShell() {
     return () => clearInterval(timer);
   }, [playing, speedIndex]);
 
-  // Aggregate mode: one fetch per (filters, domain) — the response carries
-  // every metric, so flipping between them costs nothing.
+  // Aggregate-over-the-filtered-set data feeds both the aggregate map mode
+  // and the leaderboard: one fetch per (filters, domain) — the response
+  // carries every metric, so flipping between them costs nothing.
   const aggQuery = filtersToAggregateQuery(filters, rangeStartMinute);
+  const needsAgg = mode === "aggregate" || view === "board";
   useEffect(() => {
-    if (mode !== "aggregate") return;
+    if (!needsAgg) return;
     let cancelled = false;
     fetch(`/api/aggregate?${aggQuery}`, { cache: "no-store" })
       .then((r) => r.json())
@@ -173,7 +179,7 @@ export default function DashboardShell() {
     return () => {
       cancelled = true;
     };
-  }, [mode, aggQuery]);
+  }, [needsAgg, aggQuery]);
 
   const overrideFrame: FrameData | null = useMemo(() => {
     if (mode !== "aggregate" || !aggData) return null;
@@ -186,6 +192,19 @@ export default function DashboardShell() {
     setMode(m);
     if (m === "aggregate") setPlaying(false);
   }, []);
+
+  const onViewChange = useCallback((v: DashboardView) => {
+    setView(v);
+    if (v !== "map") setPlaying(false);
+  }, []);
+
+  const onGoToMap = useCallback(
+    (lng: number, lat: number) => {
+      setView("map");
+      mapInstance?.flyTo({ center: [lng, lat], zoom: 13.5, duration: 1400 });
+    },
+    [mapInstance]
+  );
 
   const onPlayToggle = useCallback(() => {
     setPlaying((p) => {
@@ -268,9 +287,40 @@ export default function DashboardShell() {
             onSensorClick={setSelectedSensorId}
             overrideFrame={overrideFrame}
           />
-          {selectedSensorId && <SensorPane sensorId={selectedSensorId} onClose={() => setSelectedSensorId(null)} />}
-          <SkipFlash skip={skip} />
-          {mode === "instants" && <CurrentDate cursorMs={cursor === "live" ? nowMs : cursor} skip={skip} />}
+          {view === "board" && (
+            <Leaderboard aggData={aggData} metric={aggKey} onSensorClick={setSelectedSensorId} />
+          )}
+          {view === "charts" && (
+            <ChartsView
+              aggQuery={aggQuery}
+              metric={aggKey}
+              filters={filters}
+              domainStartMs={rangeStartMinute}
+              nowMs={nowMinute}
+            />
+          )}
+          {selectedSensorId && (
+            <SensorPane
+              sensorId={selectedSensorId}
+              onClose={() => setSelectedSensorId(null)}
+              onGoToMap={view !== "map" ? onGoToMap : undefined}
+            />
+          )}
+          {view === "map" && <SkipFlash skip={skip} />}
+          {view === "map" && mode === "instants" && (
+            <CurrentDate cursorMs={cursor === "live" ? nowMs : cursor} skip={skip} />
+          )}
+
+          {/* view switcher: the top-level lens */}
+          <div className="pointer-events-none absolute left-1/2 top-3 z-10 -translate-x-1/2 md:top-4">
+            <ViewSwitcher
+              view={view}
+              mode={mode}
+              compact={isMobile === true}
+              onViewChange={onViewChange}
+              onModeChange={onModeChange}
+            />
+          </div>
 
           {/* mobile: filter sheet trigger */}
           {isMobile === true && (
@@ -293,18 +343,18 @@ export default function DashboardShell() {
             </Sheet>
           )}
 
-          {/* the timebar */}
-          {isMobile === true ? (
-            <div className="pointer-events-none absolute bottom-24 right-2 top-16 z-10 flex flex-col items-end gap-2">
-              <ModePicker mode={mode} onModeChange={onModeChange} compact />
-              {mode === "instants" && <Timebar {...timebarProps} orientation="vertical" />}
-            </div>
-          ) : (
-            <div className="pointer-events-none absolute inset-x-0 bottom-4 z-10 flex items-stretch gap-2 px-4">
-              <ModePicker mode={mode} onModeChange={onModeChange} />
-              {mode === "instants" && <Timebar {...timebarProps} orientation="horizontal" />}
-            </div>
-          )}
+          {/* the timebar — instants scope on the map lens only */}
+          {view === "map" &&
+            mode === "instants" &&
+            (isMobile === true ? (
+              <div className="pointer-events-none absolute bottom-24 right-2 top-16 z-10 flex">
+                <Timebar {...timebarProps} orientation="vertical" />
+              </div>
+            ) : (
+              <div className="pointer-events-none absolute inset-x-0 bottom-4 z-10 flex px-4">
+                <Timebar {...timebarProps} orientation="horizontal" />
+              </div>
+            ))}
         </div>
       </div>
     </TooltipProvider>

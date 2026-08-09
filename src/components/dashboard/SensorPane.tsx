@@ -5,7 +5,7 @@
 // hand-rolled 24h LAeq sparkline — no chart library, one SVG path.
 
 import { useEffect, useMemo, useState } from "react";
-import { X } from "lucide-react";
+import { MapPin, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { levelColor, paletteStops } from "@/lib/dashboard/levels";
@@ -16,6 +16,8 @@ interface SensorDetail {
   deviceId: string;
   name: string | null;
   address: string | null;
+  latitude: number | null;
+  longitude: number | null;
   lastSeenAt: string | null;
 }
 
@@ -26,10 +28,24 @@ interface ReadingPoint {
   rssi: number | null;
 }
 
-export default function SensorPane({ sensorId, onClose }: { sensorId: string; onClose: () => void }) {
-  const [detail, setDetail] = useState<SensorDetail | null>(null);
-  const [readings, setReadings] = useState<ReadingPoint[]>([]);
+const NO_READINGS: ReadingPoint[] = [];
+
+export default function SensorPane({
+  sensorId,
+  onClose,
+  onGoToMap,
+}: {
+  sensorId: string;
+  onClose: () => void;
+  /** Present outside the map view: jump to the map and fly to this sensor. */
+  onGoToMap?: (lng: number, lat: number) => void;
+}) {
+  // The payload is tagged with the sensor it belongs to; switching sensors
+  // makes it stale by derivation (no state reset inside the effect).
+  const [loaded, setLoaded] = useState<{ id: string; detail: SensorDetail; readings: ReadingPoint[] } | null>(null);
   const [nowMs, setNowMs] = useState(() => Date.now());
+  const detail = loaded?.id === sensorId ? loaded.detail : null;
+  const readings = loaded?.id === sensorId ? loaded.readings : NO_READINGS;
 
   useEffect(() => {
     const t = setInterval(() => setNowMs(Date.now()), 5000);
@@ -38,8 +54,6 @@ export default function SensorPane({ sensorId, onClose }: { sensorId: string; on
 
   useEffect(() => {
     let cancelled = false;
-    setDetail(null);
-    setReadings([]);
     const from = new Date(Date.now() - 24 * 3600_000).toISOString();
     Promise.all([
       fetch(`/api/sensors/${sensorId}`, { cache: "no-store" }).then((r) => r.json()),
@@ -47,8 +61,8 @@ export default function SensorPane({ sensorId, onClose }: { sensorId: string; on
     ])
       .then(([d, r]: [SensorDetail, { readings: ReadingPoint[] }]) => {
         if (cancelled) return;
-        setDetail(d);
-        setReadings((r.readings ?? []).slice().reverse()); // oldest -> newest
+        // oldest -> newest
+        setLoaded({ id: sensorId, detail: d, readings: (r.readings ?? []).slice().reverse() });
       })
       .catch(() => {});
     return () => {
@@ -100,9 +114,24 @@ export default function SensorPane({ sensorId, onClose }: { sensorId: string; on
             {detail?.address ? ` · ${detail.address}` : ""}
           </div>
         </div>
-        <Button variant="ghost" size="icon" className="-mr-1.5 -mt-1 size-7 shrink-0" onClick={onClose} aria-label={tr.pane.close}>
-          <X className="size-3.5" />
-        </Button>
+        <div className="-mr-1.5 -mt-1 flex shrink-0 items-center">
+          {onGoToMap && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="size-7 text-sound hover:text-sound"
+              disabled={detail?.latitude == null || detail?.longitude == null}
+              onClick={() => detail?.latitude != null && detail?.longitude != null && onGoToMap(detail.longitude, detail.latitude)}
+              aria-label={tr.pane.goToMap}
+              title={tr.pane.goToMap}
+            >
+              <MapPin className="size-3.5" />
+            </Button>
+          )}
+          <Button variant="ghost" size="icon" className="size-7" onClick={onClose} aria-label={tr.pane.close}>
+            <X className="size-3.5" />
+          </Button>
+        </div>
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">

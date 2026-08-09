@@ -224,45 +224,6 @@ function gaps(p: TimebarProps): TimeSegment[] {
   return out;
 }
 
-/** The scope picker: its own small card — the timeline bar only exists in
- *  instants mode, so the tabs must live outside it. */
-export function ModePicker({
-  mode,
-  compact,
-  onModeChange,
-}: {
-  mode: BarMode;
-  compact?: boolean;
-  onModeChange: (mode: BarMode) => void;
-}) {
-  return (
-    <div
-      className={cn(
-        "pointer-events-auto flex flex-col justify-center gap-1 rounded-xl border bg-card/95 shadow-[0_2px_16px_-4px_rgb(45_49_66/0.18)] backdrop-blur-sm",
-        compact ? "px-1.5 py-1" : "px-3 py-1.5"
-      )}
-      role="tablist"
-    >
-      {(["instants", "aggregate"] as BarMode[]).map((m) => (
-        <button
-          key={m}
-          type="button"
-          role="tab"
-          aria-selected={mode === m}
-          onClick={() => onModeChange(m)}
-          className={cn(
-            "self-start border-b-2 pb-0.5 font-medium tracking-tight transition-colors",
-            compact ? "text-[8.5px]" : "text-[11px]",
-            mode === m ? "border-sound text-foreground" : "border-transparent text-muted-foreground hover:text-foreground"
-          )}
-        >
-          {tr.modes[m]}
-        </button>
-      ))}
-    </div>
-  );
-}
-
 function LiveZone({ p, compact }: { p: TimebarProps; compact?: boolean }) {
   const isLive = p.cursor === "live";
   const zone = (

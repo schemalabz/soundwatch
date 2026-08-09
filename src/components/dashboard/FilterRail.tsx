@@ -240,14 +240,14 @@ export default function FilterRail(p: FilterRailProps) {
             spacing={1}
             value={[...p.filters.hours]}
             onValueChange={(v: string[]) => set({ hours: new Set(v as HourPreset[]) })}
-            className="w-full"
+            className="grid w-full grid-cols-2 gap-1"
           >
             {HOUR_PRESETS.map((h) => (
               <ToggleGroupItem
                 key={h}
                 value={h}
                 disabled={!p.filters.hours.has(h) && !viability.hours[h]}
-                className="flex-1 flex-col gap-0 py-1.5 data-[state=on]:bg-sound/12 data-[state=on]:text-foreground data-[state=on]:inset-ring data-[state=on]:inset-ring-sound/50 disabled:opacity-35"
+                className="flex-col gap-0 py-1.5 data-[state=on]:bg-sound/12 data-[state=on]:text-foreground data-[state=on]:inset-ring data-[state=on]:inset-ring-sound/50 disabled:opacity-35"
               >
                 <span className="text-[13px] leading-tight">{tr.hours[h]}</span>
                 <span className="text-[9.5px] tabular-nums leading-tight text-muted-foreground">

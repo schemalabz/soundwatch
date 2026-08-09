@@ -27,6 +27,7 @@ export const dashboardStrings = {
   },
   pane: {
     close: "Κλείσιμο",
+    goToMap: "Εμφάνιση στον χάρτη",
     lastReading: (ago: string) => `μέτρηση πριν ${ago}`,
     noData: "Χωρίς δεδομένα",
     last24h: "Τελευταίες 24 ώρες",
@@ -45,6 +46,31 @@ export const dashboardStrings = {
   modes: {
     instants: "Στιγμιότυπα",
     aggregate: "Συγκεντρωτικά",
+  },
+  views: {
+    map: "Χάρτης",
+    board: "Κατάταξη",
+    charts: "Γραφήματα",
+  },
+  board: {
+    title: "Κατάταξη αισθητήρων",
+    subtitle: (metric: string) => `Από τον πιο θορυβώδη στον πιο ήσυχο · ${metric} στα επιλεγμένα φίλτρα`,
+    measurements: (n: string) => `${n} μετρήσεις`,
+    empty: "Χωρίς δεδομένα για τα επιλεγμένα φίλτρα.",
+  },
+  charts: {
+    timeline: "Χρονική εξέλιξη",
+    timelineBand: "εύρος L90–L10",
+    clock: "Το εικοσιτετράωρο",
+    clockCaption: "ανά ώρα της ημέρας",
+    dows: "Η εβδομάδα",
+    dowsCaption: "ανά ημέρα της εβδομάδας",
+    monthsTitle: "Οι μήνες",
+    monthsCaption: "ανά μήνα",
+    loudest: "πιο θορυβώδης",
+    needsDays: "Χρειάζεται εύρος τουλάχιστον δύο ημερών — διάλεξε μεγαλύτερη περίοδο.",
+    needsMonths: "Χρειάζεται εύρος πάνω από έναν μήνα — διάλεξε μεγαλύτερη περίοδο.",
+    noData: "Χωρίς δεδομένα για τα επιλεγμένα φίλτρα.",
   },
   metricLabel: "Μέτρηση με",
   aggregations: {

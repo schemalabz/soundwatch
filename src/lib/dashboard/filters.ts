@@ -148,6 +148,25 @@ export function filtersToAggregateQuery(f: DashboardFilters, effectiveStartMs: n
   return params.toString();
 }
 
+/** Which hours of the day (0-23) the filters admit — for muting chart
+ *  sectors in sync with the data the API will actually return. */
+export function hourSelectionMask(f: DashboardFilters): boolean[] {
+  const hours = effectiveHours(f);
+  return Array.from({ length: 24 }, (_, h) => hourMatches(h, hours));
+}
+
+/** Which days of the week (0 = Sunday) the filters admit. */
+export function dowSelectionMask(f: DashboardFilters): boolean[] {
+  const days = effectiveDays(f);
+  return Array.from({ length: 7 }, (_, d) => dayMatches(d, days));
+}
+
+/** Which months (0 = January) the filters admit. */
+export function monthSelectionMask(f: DashboardFilters): boolean[] {
+  const months = effectiveMonths(f);
+  return Array.from({ length: 12 }, (_, m) => months.size === 0 || months.has(m));
+}
+
 export interface TimeSegment {
   /** epoch ms, inclusive */
   startMs: number;
