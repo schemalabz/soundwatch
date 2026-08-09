@@ -9,22 +9,18 @@
     "lint": "eslint",
     "test": "vitest run",
     "test:watch": "vitest",
-    "ingester": "tsx mqtt-ingester/index.ts",
-    "simulate": "tsx scripts/simulate-sensor.ts",
-    "seed": "tsx scripts/seed-sensors.ts",
-    "test:connection": "tsx scripts/test-connection.ts"
+    "ingester": "tsx --env-file-if-exists=.env mqtt-ingester/index.ts",
+    "seed": "tsx --env-file-if-exists=.env scripts/seed-sensors.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",
-    "date-fns": "^4.1.0",
     "mapbox-gl": "^3.23.1",
     "mqtt": "^5.15.1",
     "next": "16.2.6",
     "next-intl": "^4.12.0",
     "qrcode": "^1.5.4",
     "react": "19.2.4",
-    "react-dom": "19.2.4",
-    "recharts": "^3.8.1"
+    "react-dom": "19.2.4"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
