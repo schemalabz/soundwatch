@@ -29,7 +29,7 @@ export const dashboardStrings = {
   months: { label: "Μήνες" },
   locations: {
     label: "Τοποθεσίες",
-    add: "Σημείο στον χάρτη",
+    add: "Επιλογή σημείου στον χάρτη",
     placing: "Κάνε κλικ στον χάρτη…",
     resolving: "Εντοπισμός…",
     remove: "Αφαίρεση",
