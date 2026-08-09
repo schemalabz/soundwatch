@@ -11,14 +11,20 @@ import { athensWallTime, nextAthensMidnight } from "./time";
 export type DayGroup = "weekend" | "weekday";
 
 // Hour presets anchor to the EU Environmental Noise Directive periods, so
-// filtered numbers stay comparable to official Lden/Lnight reporting.
-export type HourPreset = "day" | "evening" | "night";
+// filtered numbers stay comparable to official Lden/Lnight reporting — plus
+// "peak", the two traffic rush windows, which a preset can only express as
+// multiple ranges (hence the list shape).
+export type HourPreset = "day" | "evening" | "night" | "peak";
 
-/** [startHour, endHour) in Athens wall time; night wraps midnight. */
-export const HOUR_PRESET_RANGES: Record<HourPreset, [number, number]> = {
-  day: [7, 19],
-  evening: [19, 23],
-  night: [23, 7],
+/** [startHour, endHour) pairs in Athens wall time; night wraps midnight. */
+export const HOUR_PRESET_RANGES: Record<HourPreset, [number, number][]> = {
+  day: [[7, 19]],
+  evening: [[19, 23]],
+  night: [[23, 7]],
+  peak: [
+    [7, 10],
+    [17, 20],
+  ],
 };
 
 // "Period" is one-of (unlike the combinable chips): it narrows the whole
@@ -62,7 +68,10 @@ function effectiveDays(f: DashboardFilters): ReadonlySet<DayGroup> {
   return f.days.size >= 2 ? new Set() : f.days;
 }
 function effectiveHours(f: DashboardFilters): ReadonlySet<HourPreset> {
-  return f.hours.size >= 3 ? new Set() : f.hours;
+  // day+evening+night covers all 24h (peak is a subset of day∪evening, so
+  // it can never change coverage) — that combination means no restriction.
+  const covered = (["day", "evening", "night"] as const).every((h) => f.hours.has(h));
+  return covered ? new Set() : f.hours;
 }
 function effectiveMonths(f: DashboardFilters): ReadonlySet<number> {
   return f.months.size >= 12 ? new Set() : f.months;
@@ -77,8 +86,9 @@ function dayMatches(dow: number, days: ReadonlySet<DayGroup>): boolean {
 function hourMatches(hour: number, hours: ReadonlySet<HourPreset>): boolean {
   if (hours.size === 0) return true;
   for (const preset of hours) {
-    const [start, end] = HOUR_PRESET_RANGES[preset];
-    if (start <= end ? hour >= start && hour < end : hour >= start || hour < end) return true;
+    for (const [start, end] of HOUR_PRESET_RANGES[preset]) {
+      if (start <= end ? hour >= start && hour < end : hour >= start || hour < end) return true;
+    }
   }
   return false;
 }
@@ -132,7 +142,7 @@ export function filtersToAggregateQuery(f: DashboardFilters, effectiveStartMs: n
   const days = effectiveDays(f);
   if (days.size === 1) params.set("days", [...days][0]);
   const hours = effectiveHours(f);
-  if (hours.size > 0 && hours.size < 3) params.set("hours", [...hours].join(","));
+  if (hours.size > 0) params.set("hours", [...hours].join(","));
   const months = effectiveMonths(f);
   if (months.size > 0 && months.size < 12) params.set("months", [...months].map((m) => m + 1).join(","));
   return params.toString();

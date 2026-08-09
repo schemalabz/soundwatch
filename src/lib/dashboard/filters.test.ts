@@ -104,6 +104,21 @@ describe("instantMatches (the LIVE gate)", () => {
     expect(instantMatches(f, MON_JUNE_15_MIDNIGHT_ATHENS + 2 * HOUR)).toBe(true);
     expect(instantMatches(f, MON_JUNE_15_MIDNIGHT_ATHENS + 12 * HOUR)).toBe(false);
   });
+
+  it("peak filter admits both rush windows and rejects the midday lull", () => {
+    const f = filters({ hours: new Set(["peak"]) });
+    expect(instantMatches(f, MON_JUNE_15_MIDNIGHT_ATHENS + 8 * HOUR)).toBe(true); // morning rush
+    expect(instantMatches(f, MON_JUNE_15_MIDNIGHT_ATHENS + 18 * HOUR)).toBe(true); // evening rush
+    expect(instantMatches(f, MON_JUNE_15_MIDNIGHT_ATHENS + 13 * HOUR)).toBe(false); // between
+    expect(instantMatches(f, MON_JUNE_15_MIDNIGHT_ATHENS + 2 * HOUR)).toBe(false); // night
+  });
+
+  it("hour restriction lifts only when day+evening+night are all on — not on any 3 presets", () => {
+    const covered = filters({ hours: new Set(["day", "evening", "night"]) });
+    expect(instantMatches(covered, MON_JUNE_15_MIDNIGHT_ATHENS + 2 * HOUR)).toBe(true);
+    const notCovered = filters({ hours: new Set(["day", "evening", "peak"]) });
+    expect(instantMatches(notCovered, MON_JUNE_15_MIDNIGHT_ATHENS + 2 * HOUR)).toBe(false); // 02:00 still excluded
+  });
 });
 
 describe("hasAnyMatch (option viability)", () => {

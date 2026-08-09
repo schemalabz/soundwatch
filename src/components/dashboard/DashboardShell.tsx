@@ -55,7 +55,6 @@ export default function DashboardShell() {
   const [mode, setMode] = useState<BarMode>("instants");
   const [aggKey, setAggKey] = useState<AggKey>("laeq");
   const [aggData, setAggData] = useState<Record<string, Record<AggKey, number> & { n: number }> | null>(null);
-  const [aggLoading, setAggLoading] = useState(false);
   const skipSeq = useRef(0);
   const skipHoldUntilRef = useRef(0);
   // Stable identity: MapCanvas keys its (create/destroy!) effect on the
@@ -165,17 +164,12 @@ export default function DashboardShell() {
   useEffect(() => {
     if (mode !== "aggregate") return;
     let cancelled = false;
-    setAggLoading(true);
     fetch(`/api/aggregate?${aggQuery}`, { cache: "no-store" })
       .then((r) => r.json())
       .then((body: { sensors: Record<string, Record<AggKey, number> & { n: number }> }) => {
-        if (cancelled) return;
-        setAggData(body.sensors);
-        setAggLoading(false);
+        if (!cancelled) setAggData(body.sensors);
       })
-      .catch(() => {
-        if (!cancelled) setAggLoading(false);
-      });
+      .catch(() => {});
     return () => {
       cancelled = true;
     };
@@ -302,12 +296,12 @@ export default function DashboardShell() {
           {/* the timebar */}
           {isMobile === true ? (
             <div className="pointer-events-none absolute bottom-24 right-2 top-16 z-10 flex flex-col items-end gap-2">
+              <ModePicker mode={mode} onModeChange={onModeChange} compact />
               {mode === "instants" && <Timebar {...timebarProps} orientation="vertical" />}
-              <ModePicker mode={mode} aggLoading={aggLoading} onModeChange={onModeChange} compact />
             </div>
           ) : (
             <div className="pointer-events-none absolute inset-x-0 bottom-4 z-10 flex items-stretch gap-2 px-4">
-              <ModePicker mode={mode} aggLoading={aggLoading} onModeChange={onModeChange} />
+              <ModePicker mode={mode} onModeChange={onModeChange} />
               {mode === "instants" && <Timebar {...timebarProps} orientation="horizontal" />}
             </div>
           )}

@@ -48,7 +48,7 @@ export interface FilterRailProps {
 
 const PERIODS: PeriodId[] = ["24h", "7d", "30d"];
 const DAY_GROUPS: DayGroup[] = ["weekend", "weekday"];
-const HOUR_PRESETS: HourPreset[] = ["day", "evening", "night"];
+const HOUR_PRESETS: HourPreset[] = ["day", "evening", "night", "peak"];
 
 function SectionLabel({ children, onClear }: { children: React.ReactNode; onClear?: (() => void) | null }) {
   return (
@@ -88,7 +88,7 @@ export default function FilterRail(p: FilterRailProps) {
         (["weekend", "weekday"] as DayGroup[]).map((g) => [g, test({ ...f, days: new Set([...f.days, g]) })])
       ) as Record<DayGroup, boolean>,
       hours: Object.fromEntries(
-        (["day", "evening", "night"] as HourPreset[]).map((h) => [h, test({ ...f, hours: new Set([...f.hours, h]) })])
+        HOUR_PRESETS.map((h) => [h, test({ ...f, hours: new Set([...f.hours, h]) })])
       ) as Record<HourPreset, boolean>,
       months: Array.from({ length: 12 }, (_, m) => test({ ...f, months: new Set([...f.months, m]) })),
     };
@@ -109,7 +109,7 @@ export default function FilterRail(p: FilterRailProps) {
     if (p.filters.days.size === 1) {
       parts.push(tr.summary[[...p.filters.days][0]]);
     }
-    if (p.filters.hours.size > 0 && p.filters.hours.size < 3) {
+    if (p.filters.hours.size > 0 && !(["day", "evening", "night"] as const).every((h) => p.filters.hours.has(h))) {
       parts.push([...p.filters.hours].map((h) => tr.hours[h].toLowerCase()).join(" + "));
     }
     if (p.filters.months.size > 0 && p.filters.months.size < 12) {
@@ -251,7 +251,9 @@ export default function FilterRail(p: FilterRailProps) {
               >
                 <span className="text-[13px] leading-tight">{tr.hours[h]}</span>
                 <span className="text-[9.5px] tabular-nums leading-tight text-muted-foreground">
-                  {String(HOUR_PRESET_RANGES[h][0]).padStart(2, "0")}–{String(HOUR_PRESET_RANGES[h][1]).padStart(2, "0")}
+                  {HOUR_PRESET_RANGES[h]
+                    .map(([s, e]) => `${String(s).padStart(2, "0")}–${String(e).padStart(2, "0")}`)
+                    .join(" · ")}
                 </span>
               </ToggleGroupItem>
             ))}

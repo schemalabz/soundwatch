@@ -228,12 +228,10 @@ function gaps(p: TimebarProps): TimeSegment[] {
  *  instants mode, so the tabs must live outside it. */
 export function ModePicker({
   mode,
-  aggLoading,
   compact,
   onModeChange,
 }: {
   mode: BarMode;
-  aggLoading: boolean;
   compact?: boolean;
   onModeChange: (mode: BarMode) => void;
 }) {
@@ -261,9 +259,6 @@ export function ModePicker({
           {tr.modes[m]}
         </button>
       ))}
-      {mode === "aggregate" && aggLoading && (
-        <span className={cn("text-muted-foreground", compact ? "text-[7.5px]" : "text-[9.5px]")}>Υπολογισμός…</span>
-      )}
     </div>
   );
 }

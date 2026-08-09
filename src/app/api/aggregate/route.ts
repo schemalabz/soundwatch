@@ -13,10 +13,14 @@ import { prisma } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
 
-const HOUR_RANGES: Record<string, [number, number]> = {
-  day: [7, 19],
-  evening: [19, 23],
-  night: [23, 7],
+const HOUR_RANGES: Record<string, [number, number][]> = {
+  day: [[7, 19]],
+  evening: [[19, 23]],
+  night: [[23, 7]],
+  peak: [
+    [7, 10],
+    [17, 20],
+  ],
 };
 
 interface AggRow {
@@ -49,13 +53,14 @@ export async function GET(req: NextRequest) {
   const predicates: string[] = [];
   if (days === "weekend") predicates.push(`EXTRACT(dow FROM ${local}) IN (0, 6)`);
   if (days === "weekday") predicates.push(`EXTRACT(dow FROM ${local}) NOT IN (0, 6)`);
-  if (hours.length > 0 && hours.length < 3) {
-    const hourPreds = hours.map((h) => {
-      const [start, end] = HOUR_RANGES[h];
-      return start <= end
-        ? `(EXTRACT(hour FROM ${local}) >= ${start} AND EXTRACT(hour FROM ${local}) < ${end})`
-        : `(EXTRACT(hour FROM ${local}) >= ${start} OR EXTRACT(hour FROM ${local}) < ${end})`;
-    });
+  if (hours.length > 0) {
+    const hourPreds = hours.flatMap((h) =>
+      HOUR_RANGES[h].map(([start, end]) =>
+        start <= end
+          ? `(EXTRACT(hour FROM ${local}) >= ${start} AND EXTRACT(hour FROM ${local}) < ${end})`
+          : `(EXTRACT(hour FROM ${local}) >= ${start} OR EXTRACT(hour FROM ${local}) < ${end})`
+      )
+    );
     predicates.push(`(${hourPreds.join(" OR ")})`);
   }
   if (months.length > 0 && months.length < 12) {

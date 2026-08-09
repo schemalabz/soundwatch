@@ -19,7 +19,7 @@ export const dashboardStrings = {
     summary: { "24h": "τελευταίες 24 ώρες", "7d": "τελευταία εβδομάδα", "30d": "τελευταίος μήνας" },
   },
   days: { label: "Μέρες", weekend: "ΣΚ", weekday: "Καθημερινές" },
-  hours: { label: "Ώρες", day: "Ημέρα", evening: "Βράδυ", night: "Νύχτα" },
+  hours: { label: "Ώρες", day: "Ημέρα", evening: "Βράδυ", night: "Νύχτα", peak: "Αιχμής" },
   months: { label: "Μήνες" },
   locations: {
     label: "Τοποθεσίες",
