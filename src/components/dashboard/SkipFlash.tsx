@@ -85,23 +85,28 @@ export default function SkipFlash({
   skip: SkipEvent | null;
   getMapCanvas: () => HTMLCanvasElement | null;
 }) {
-  const [active, setActive] = useState<SkipEvent | null>(null);
-  const [hasStill, setHasStill] = useState(false);
+  // `active` is DERIVED (skip minus dismissals) — no state copies in effects;
+  // the timer only ever marks the current seq as dismissed, asynchronously.
+  const [dismissedSeq, setDismissedSeq] = useState(0);
+  const active = skip && skip.seq !== dismissedSeq ? skip : null;
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const washRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!skip) return;
-    setActive(skip);
-    const timer = setTimeout(() => setActive(null), FLASH_MS);
+    const timer = setTimeout(() => setDismissedSeq(skip.seq), FLASH_MS);
     return () => clearTimeout(timer);
   }, [skip]);
 
-  // Snapshot + dither synchronously on activation, before the next map frame.
+  // Snapshot + dither on activation. Whether the still succeeded toggles
+  // canvas/wash visibility imperatively — style writes, not state.
   useEffect(() => {
     if (!active || !canvasRef.current) return;
     const source = getMapCanvas();
     const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    setHasStill(!reduced && source != null && ditherInto(canvasRef.current, source));
+    const ok = !reduced && source != null && ditherInto(canvasRef.current, source);
+    canvasRef.current.style.display = ok ? "" : "none";
+    if (washRef.current) washRef.current.style.display = ok ? "none" : "";
   }, [active, getMapCanvas]);
 
   const label = active
@@ -123,8 +128,8 @@ export default function SkipFlash({
       }`}
     >
       {/* frozen dithered still (or a quiet wash when no snapshot is possible) */}
-      <canvas ref={canvasRef} className={`absolute inset-0 h-full w-full ${active && hasStill ? "" : "hidden"}`} />
-      {!hasStill && active && <div className="absolute inset-0 bg-ink/20" />}
+      <canvas ref={canvasRef} className="absolute inset-0 h-full w-full" style={{ display: "none" }} />
+      <div ref={washRef} className="absolute inset-0 bg-ink/20" style={{ display: "none" }} />
       {/* the stamp: fast-forward + landing date */}
       {active && (
         <div

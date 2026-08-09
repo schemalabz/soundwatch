@@ -18,6 +18,9 @@
   --sw-silver: #bfc0c0; /* hairlines, rails, disabled */
   --sw-paper: #ffffff; /* base surface (always tinted in use) */
   --sw-sound: #ef8354; /* sound levels · selection · live */
+  /* data-viz level ramp endpoints (circles on the map) */
+  --sw-quiet: var(--sw-slate);
+  --sw-loud: #b3362a;
 }
 
 /* ----- semantic tokens (shadcn contract), derived from the palette ----- */

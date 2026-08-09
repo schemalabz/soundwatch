@@ -12,10 +12,10 @@ const ATHENS_CENTER: [number, number] = [23.7315, 37.9755];
 const TOKEN = process.env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN;
 
 export default function MapCanvas({
-  onCanvasReady,
+  onReady,
 }: {
-  /** Hands the parent a way to read the live map canvas (for skip stills). */
-  onCanvasReady?: (getCanvas: () => HTMLCanvasElement | null) => void;
+  /** Fires with the live map instance (marker layers, canvas snapshots). */
+  onReady?: (map: mapboxgl.Map | null) => void;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
@@ -47,13 +47,14 @@ export default function MapCanvas({
       console.warn("Map error:", e.error?.message);
     });
     mapRef.current = map;
-    onCanvasReady?.(() => mapRef.current?.getCanvas() ?? null);
+    onReady?.(map);
 
     return () => {
+      onReady?.(null);
       map.remove();
       mapRef.current = null;
     };
-  }, [onCanvasReady]);
+  }, [onReady]);
 
   if (!TOKEN || failed) {
     return (

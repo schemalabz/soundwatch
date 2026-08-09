@@ -24,6 +24,7 @@ import {
 } from "@/lib/dashboard/filters";
 import type { FreshnessResponse } from "@/types/freshness";
 import FilterRail from "./FilterRail";
+import SensorLayer from "./SensorLayer";
 import SkipFlash, { type SkipEvent } from "./SkipFlash";
 import Timebar, { PLAYBACK_SPEEDS } from "./Timebar";
 
@@ -47,14 +48,16 @@ export default function DashboardShell() {
   const [freshness, setFreshness] = useState<FreshnessResponse | null>(null);
   const [skip, setSkip] = useState<SkipEvent | null>(null);
   const skipSeq = useRef(0);
-  const mapCanvasGetter = useRef<() => HTMLCanvasElement | null>(() => null);
-  // Stable identities: MapCanvas keys its (create/destroy!) effect on this
-  // callback, and the shell re-renders every second — an inline arrow here
-  // would tear the map down each tick.
-  const handleCanvasReady = useCallback((get: () => HTMLCanvasElement | null) => {
-    mapCanvasGetter.current = get;
+  // Stable identities: MapCanvas keys its (create/destroy!) effect on the
+  // onReady callback, and the shell re-renders every second — an inline
+  // arrow here would tear the map down each tick. setState is stable.
+  const [mapInstance, setMapInstance] = useState<import("mapbox-gl").Map | null>(null);
+  const mapRefForCanvas = useRef<import("mapbox-gl").Map | null>(null);
+  const getMapCanvas = useCallback(() => mapRefForCanvas.current?.getCanvas() ?? null, []);
+  const handleMapReady = useCallback((m: import("mapbox-gl").Map | null) => {
+    mapRefForCanvas.current = m;
+    setMapInstance(m);
   }, []);
-  const getMapCanvas = useCallback(() => mapCanvasGetter.current(), []);
 
   // Wall clock: the live edge of the rail creeps forward once a second.
   useEffect(() => {
@@ -209,7 +212,14 @@ export default function DashboardShell() {
 
         {/* map + overlays */}
         <div className="relative min-w-0 flex-1">
-          <MapCanvas onCanvasReady={handleCanvasReady} />
+          <MapCanvas onReady={handleMapReady} />
+          <SensorLayer
+            map={mapInstance}
+            cursor={cursor}
+            stepMs={PLAYBACK_SPEEDS[speedIndex].simSecondsPerRealSecond * 1000}
+            segments={segments}
+            playing={playing}
+          />
           <SkipFlash skip={skip} getMapCanvas={getMapCanvas} />
 
           {/* mobile: filter sheet trigger */}

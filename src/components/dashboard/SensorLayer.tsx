@@ -1,0 +1,231 @@
+"use client";
+
+// The animated sensor circles. Design notes, because the constraints matter:
+//
+// - Markers are DOM elements (mapboxgl.Marker) styled imperatively. CSS
+//   transitions do the animation: the browser composites color/scale tweens
+//   for 50 elements with zero per-frame JavaScript and zero React renders.
+// - Frame data lives in a FrameStore inside a ref. The ONLY React state is a
+//   version counter (bumped when a fetch lands) and the sensor list. Cursor
+//   changes flow in as props; an effect applies the current frame's values
+//   to the marker elements directly.
+// - The prefetcher batches the next frames along the (gap-skipping) playback
+//   path into one request, marks them pending to dedupe, and evicts old
+//   frames beyond a cap — memory stays flat over long sessions.
+// - Live mode reuses /api/sensors (latestReading IS the live frame), polled
+//   gently, with a slow "creep" transition instead of the 1s playback tween.
+
+import { useEffect, useReducer, useRef, useState } from "react";
+import type mapboxgl from "mapbox-gl";
+import {
+  FrameStore,
+  frameKey,
+  frameWindowS,
+  quantizeFrameMs,
+  upcomingFrameTimes,
+  type FrameData,
+} from "@/lib/dashboard/frames";
+import { levelColor, levelScale, paletteStops } from "@/lib/dashboard/levels";
+import type { TimeSegment } from "@/lib/dashboard/filters";
+
+interface SensorMeta {
+  id: string;
+  name: string | null;
+  latitude: number;
+  longitude: number;
+}
+
+export interface SensorLayerProps {
+  map: mapboxgl.Map | null;
+  cursor: number | "live";
+  stepMs: number;
+  segments: TimeSegment[];
+  playing: boolean;
+}
+
+const MARKER_PX = 30;
+const PREFETCH_AHEAD = 6;
+const LIVE_POLL_MS = 5000;
+const LIVE_STALE_MS = 3 * 60_000;
+const PLAYBACK_TWEEN_MS = 950;
+const LIVE_TWEEN_MS = 4000;
+
+interface MarkerHandle {
+  marker: mapboxgl.Marker;
+  circle: HTMLSpanElement;
+}
+
+function makeMarkerElement(): { root: HTMLDivElement; circle: HTMLSpanElement } {
+  const root = document.createElement("div");
+  root.style.cssText = `width:${MARKER_PX}px;height:${MARKER_PX}px;display:grid;place-items:center;pointer-events:none;`;
+  const circle = document.createElement("span");
+  circle.style.cssText = [
+    `width:${MARKER_PX}px`,
+    `height:${MARKER_PX}px`,
+    "border-radius:9999px",
+    "border:2.5px solid rgba(191,192,192,0.55)", // silver — the no-data state
+    "transform:scale(0.35)",
+    "opacity:0.6",
+    "will-change:transform,opacity",
+    `transition:transform ${PLAYBACK_TWEEN_MS}ms cubic-bezier(0.33,0,0.2,1),border-color ${PLAYBACK_TWEEN_MS}ms linear,opacity 400ms linear`,
+  ].join(";");
+  root.appendChild(circle);
+  return { root, circle };
+}
+
+/** Apply one sensor's frame value to its circle. null = no data (gray). */
+function applyValue(circle: HTMLSpanElement, laeq: number | null, tweenMs: number): void {
+  circle.style.transitionDuration = `${tweenMs}ms,${tweenMs}ms,400ms`;
+  if (laeq == null) {
+    circle.style.borderColor = "rgba(191,192,192,0.55)";
+    circle.style.transform = "scale(0.35)";
+    circle.style.opacity = "0.6";
+  } else {
+    const stops = paletteStops();
+    circle.style.borderColor = levelColor(laeq, stops);
+    circle.style.transform = `scale(${levelScale(laeq, stops).toFixed(3)})`;
+    circle.style.opacity = "1";
+  }
+}
+
+export default function SensorLayer({ map, cursor, stepMs, segments, playing }: SensorLayerProps) {
+  const [sensors, setSensors] = useState<SensorMeta[]>([]);
+  const [version, bumpVersion] = useReducer((v: number) => v + 1, 0);
+  const storeRef = useRef(new FrameStore());
+  const markersRef = useRef(new Map<string, MarkerHandle>());
+  const liveFrameRef = useRef<FrameData>({});
+  const lastAppliedRef = useRef<number | "live" | null>(null);
+
+  // --- sensor metadata (once) ---
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/sensors", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((list: { id: string; name: string | null; latitude: number | null; longitude: number | null }[]) => {
+        if (cancelled) return;
+        setSensors(
+          list
+            .filter((s) => s.latitude != null && s.longitude != null)
+            .map((s) => ({ id: s.id, name: s.name, latitude: s.latitude!, longitude: s.longitude! }))
+        );
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // --- markers lifecycle ---
+  useEffect(() => {
+    if (!map || sensors.length === 0) return;
+    const markers = markersRef.current;
+    let disposed = false;
+    let handles: MarkerHandle[] = [];
+    // mapbox-gl is loaded dynamically alongside MapCanvas; import for Marker.
+    import("mapbox-gl").then(({ default: gl }) => {
+      if (disposed) return;
+      for (const s of sensors) {
+        const { root, circle } = makeMarkerElement();
+        const marker = new gl.Marker({ element: root, anchor: "center" })
+          .setLngLat([s.longitude, s.latitude])
+          .addTo(map);
+        const handle = { marker, circle };
+        markers.set(s.id, handle);
+        handles.push(handle);
+      }
+      lastAppliedRef.current = null; // force a fresh apply
+      bumpVersion();
+    });
+    return () => {
+      disposed = true;
+      for (const h of handles) h.marker.remove();
+      markers.clear();
+      handles = [];
+    };
+  }, [map, sensors]);
+
+  // --- live frame polling (only while the playhead is live) ---
+  useEffect(() => {
+    if (cursor !== "live") return;
+    let cancelled = false;
+    const load = async () => {
+      try {
+        const res = await fetch("/api/sensors", { cache: "no-store" });
+        const list: {
+          id: string;
+          latestReading: { recordedAt: string; noiseDba: number | null } | null;
+        }[] = await res.json();
+        if (cancelled) return;
+        const frame: FrameData = {};
+        const staleBefore = Date.now() - LIVE_STALE_MS;
+        for (const s of list) {
+          const r = s.latestReading;
+          if (r?.noiseDba != null && new Date(r.recordedAt).getTime() > staleBefore) {
+            frame[s.id] = { laeq: r.noiseDba, n: 1 };
+          }
+        }
+        liveFrameRef.current = frame;
+        bumpVersion();
+      } catch {
+        // transient — keep the previous live frame
+      }
+    };
+    load();
+    const timer = setInterval(load, LIVE_POLL_MS);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [cursor]);
+
+  // --- prefetcher: current frame + the playback path ahead, one batch ---
+  const cursorQ = cursor === "live" ? "live" : quantizeFrameMs(cursor);
+  useEffect(() => {
+    if (cursorQ === "live") return;
+    const windowS = frameWindowS(stepMs);
+    const ahead = playing ? PREFETCH_AHEAD : 2;
+    const times = upcomingFrameTimes(segments, cursorQ, stepMs, ahead)
+      .map(quantizeFrameMs)
+      .filter((t, i, arr) => arr.indexOf(t) === i);
+    const missing = times.filter((t) => !storeRef.current.has(frameKey(t, windowS)));
+    if (missing.length === 0) return;
+    for (const t of missing) storeRef.current.markPending(frameKey(t, windowS));
+    const controller = new AbortController();
+    fetch(`/api/frames?at=${missing.join(",")}&window=${windowS}`, { signal: controller.signal })
+      .then((r) => r.json())
+      .then((body: { frames: Record<string, FrameData> }) => {
+        for (const t of missing) {
+          storeRef.current.set(frameKey(t, windowS), body.frames[String(t)] ?? {});
+        }
+        bumpVersion();
+      })
+      .catch(() => {
+        for (const t of missing) storeRef.current.clearPending(frameKey(t, windowS));
+      });
+    return () => controller.abort();
+  }, [cursorQ, stepMs, segments, playing]);
+
+  // --- apply the current frame to the marker elements ---
+  useEffect(() => {
+    void version; // re-apply whenever new data lands
+    if (markersRef.current.size === 0) return;
+    const isLive = cursorQ === "live";
+    const frame = isLive ? liveFrameRef.current : storeRef.current.get(frameKey(cursorQ, frameWindowS(stepMs)));
+    if (!isLive && frame === undefined) return; // not loaded yet: keep last shown state
+
+    // A jump larger than ~1.5 steps (skip/scrub) snaps instead of tweening —
+    // a 950ms tween across a week-long jump would read as fake data motion.
+    const prev = lastAppliedRef.current;
+    const jumped =
+      prev == null || prev === "live" !== isLive || (typeof prev === "number" && !isLive && Math.abs(cursorQ - prev) > stepMs * 1.5);
+    const tween = jumped ? 0 : isLive ? LIVE_TWEEN_MS : PLAYBACK_TWEEN_MS;
+    lastAppliedRef.current = cursorQ;
+
+    for (const [id, handle] of markersRef.current) {
+      const v = frame?.[id];
+      applyValue(handle.circle, v ? v.laeq : null, tween);
+    }
+  }, [cursorQ, stepMs, version]);
+
+  return null;
+}
