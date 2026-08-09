@@ -8,7 +8,7 @@
 // Filter gaps are honest: buckets that aren't adjacent in time break the
 // line and the band, exactly like the muted washes on the timebar.
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { levelColor, paletteStops } from "@/lib/dashboard/levels";
 import { fmtDb, fmtInt } from "@/lib/dashboard/format";
 import { LOCALE, dashboardStrings as tr } from "@/lib/strings/dashboard";
@@ -16,11 +16,7 @@ import type { AggKey } from "@/lib/dashboard/metrics";
 import MetricMention from "../MetricMention";
 import type { SeriesPoint } from "./types";
 
-const H = 200;
-const PAD_L = 30;
-const PAD_R = 10;
-const PAD_T = 12;
-const PAD_B = 22;
+const DEFAULT_H = 200;
 
 function useMeasuredWidth(): [React.RefObject<HTMLDivElement | null>, number] {
   const ref = useRef<HTMLDivElement | null>(null);
@@ -40,12 +36,26 @@ export default function TimelineChart({
   metric,
   bucket,
   onMetricRefHover,
+  height,
+  compact,
 }: {
   points: SeriesPoint[];
   metric: AggKey;
   bucket: "hour" | "day";
   onMetricRefHover?: (on: boolean) => void;
+  /** Chart height in px (defaults to the charts-page size). */
+  height?: number;
+  /** Tighter paddings + fewer ticks — the sensor-pane variant. */
+  compact?: boolean;
 }) {
+  const H = height ?? DEFAULT_H;
+  const PAD_L = compact ? 24 : 30;
+  const PAD_R = compact ? 4 : 10;
+  const PAD_T = compact ? 8 : 12;
+  const PAD_B = compact ? 18 : 22;
+  // Two instances can mount at once (pane over the charts view) — gradient
+  // ids must not collide.
+  const uid = useId();
   const [ref, width] = useMeasuredWidth();
   const [hovered, setHovered] = useState<number | null>(null);
   const stops = useMemo(() => paletteStops(), []);
@@ -152,14 +162,15 @@ export default function TimelineChart({
     }
 
     // ~6 x-axis ticks aligned to run starts where possible.
-    const tickEvery = Math.max(1, Math.round(points.length / 6));
+    const tickEvery = Math.max(1, Math.round(points.length / (compact ? 4 : 6)));
     const ticks = points.map((_, i) => i).filter((i) => i % tickEvery === 0);
 
     const gridLevels: number[] = [];
     for (let g = lo; g <= hi; g += 10) if (g % 10 === 0) gridLevels.push(g);
 
     return { x, y, lo, hi, runs, lineRuns, gaps, ticks, gridLevels, innerW };
-  }, [points, width, metric, bucket]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- PAD_*/H derive from compact/height
+  }, [points, width, metric, bucket, compact, height]);
 
   if (points.length === 0) {
     return <div className="py-10 text-center text-[12px] text-muted-foreground">{tr.charts.noData}</div>;
@@ -236,19 +247,19 @@ export default function TimelineChart({
 
             <defs>
               {/* the envelope: warm at the loud edge, silver at the floor */}
-              <linearGradient id="sw-tl-band" x1="0" y1={PAD_T} x2="0" y2={H - PAD_B} gradientUnits="userSpaceOnUse">
+              <linearGradient id={`${uid}-band`} x1="0" y1={PAD_T} x2="0" y2={H - PAD_B} gradientUnits="userSpaceOnUse">
                 <stop offset="0" style={{ stopColor: "var(--sw-sound)", stopOpacity: 0.14 }} />
                 <stop offset="1" style={{ stopColor: "var(--sw-silver)", stopOpacity: 0.3 }} />
               </linearGradient>
               {/* excluded-period hatch, the timebar's muting language */}
-              <pattern id="sw-tl-hatch" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+              <pattern id={`${uid}-hatch`} width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
                 <line x1="0" y1="0" x2="0" y2="6" style={{ stroke: "var(--sw-silver)", strokeOpacity: 0.55 }} strokeWidth="1.2" />
               </pattern>
               {/* per-run stroke gradients through the level color ramp */}
               {geom.lineRuns.map((r, i) => (
                 <linearGradient
                   key={`g${i}`}
-                  id={`sw-tl-line-${i}`}
+                  id={`${uid}-line-${i}`}
                   x1={r.x0}
                   x2={Math.max(r.x1, r.x0 + 1)}
                   y1="0"
@@ -270,18 +281,18 @@ export default function TimelineChart({
                 width={g.gx1 - g.gx0}
                 height={H - PAD_T - PAD_B}
                 rx={3}
-                fill="url(#sw-tl-hatch)"
+                fill={`url(#${uid}-hatch)`}
               />
             ))}
             {geom.lineRuns.map((r, i) =>
-              r.band ? <path key={`b${i}`} d={r.band} fill="url(#sw-tl-band)" /> : null
+              r.band ? <path key={`b${i}`} d={r.band} fill={`url(#${uid}-band)`} /> : null
             )}
             {geom.lineRuns.map((r, i) => (
               <path
                 key={`l${i}`}
                 d={r.path}
                 fill="none"
-                stroke={`url(#sw-tl-line-${i})`}
+                stroke={`url(#${uid}-line-${i})`}
                 strokeWidth={2}
                 strokeLinejoin="round"
                 strokeLinecap="round"

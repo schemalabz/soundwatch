@@ -40,6 +40,13 @@ export async function GET(req: NextRequest) {
   }
   const bucket = q.get("bucket") === "hour" ? "hour" : "day";
   const filters = parseWireFilters(q);
+  // Optional single-sensor scope (the sensor pane's 24h chart) — validated
+  // uuid, safe to inline.
+  const sensorParam = q.get("sensor");
+  const sensorSql =
+    sensorParam && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(sensorParam)
+      ? `AND rb.sensor_id = '${sensorParam}'`
+      : "";
 
   // The domain edge is hour-quantized (floor): the partial first hour is
   // included whole — consistent with the real-time tail including the
@@ -57,6 +64,7 @@ export async function GET(req: NextRequest) {
     WHERE s.is_active AND NOT s.is_experimental AND s.latitude IS NOT NULL
       AND rb.bucket >= '${fromHourIso}'::timestamptz
       ${locationSql(filters)}
+      ${sensorSql}
     GROUP BY 1, 2`);
 
   const dims = {

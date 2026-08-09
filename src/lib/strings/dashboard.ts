@@ -42,6 +42,7 @@ export const dashboardStrings = {
     goToMap: "Εμφάνιση στον χάρτη",
     lastReading: (ago: string) => `μέτρηση πριν ${ago}`,
     noData: "Χωρίς δεδομένα",
+    liveWindow: "τελευταίων 5 λεπτών",
     last24h: "Τελευταίες 24 ώρες",
     dayAgo: "πριν 24ω",
     now: "τώρα",
