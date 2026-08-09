@@ -18,6 +18,7 @@ import { cn } from "@/lib/utils";
 import { snapToSegments, type TimeSegment } from "@/lib/dashboard/filters";
 import { computeGraduations } from "@/lib/dashboard/graduations";
 import { ATHENS_TZ } from "@/lib/dashboard/time";
+import { dashboardStrings as tr } from "@/lib/strings/dashboard";
 
 export const PLAYBACK_SPEEDS = [
   { label: "1λ/δ", labelEn: "1m/s", simSecondsPerRealSecond: 60 },
@@ -25,6 +26,10 @@ export const PLAYBACK_SPEEDS = [
   { label: "1ω/δ", labelEn: "1h/s", simSecondsPerRealSecond: 3600 },
   { label: "6ω/δ", labelEn: "6h/s", simSecondsPerRealSecond: 21600 },
 ] as const;
+
+export type BarMode = "instants" | "aggregate";
+export type AggKey = "laeq" | "l50" | "l10" | "l90" | "lmax";
+export const AGG_KEYS: AggKey[] = ["laeq", "l50", "l10", "l90", "lmax"];
 
 export interface TimebarProps {
   rangeStartMs: number;
@@ -40,6 +45,11 @@ export interface TimebarProps {
   orientation: "horizontal" | "vertical";
   locale: string;
   labels: { live: string; liveExcluded: string; play: string; pause: string; speed: string };
+  mode: BarMode;
+  aggKey: AggKey;
+  aggLoading: boolean;
+  onModeChange: (mode: BarMode) => void;
+  onAggChange: (key: AggKey) => void;
   onCursorChange: (cursor: number | "live") => void;
   onPlayToggle: () => void;
   onSpeedSelect: (index: number) => void;
@@ -212,6 +222,69 @@ function gaps(p: TimebarProps): TimeSegment[] {
   return out;
 }
 
+/** The mode tabs: underlined, active underline in the sound accent. */
+function ModeTabs({ p, compact }: { p: TimebarProps; compact?: boolean }) {
+  return (
+    <div className={cn("flex", compact ? "flex-col gap-0.5 px-1" : "gap-4 px-1")} role="tablist">
+      {(["instants", "aggregate"] as BarMode[]).map((m) => (
+        <button
+          key={m}
+          type="button"
+          role="tab"
+          aria-selected={p.mode === m}
+          onClick={() => p.onModeChange(m)}
+          className={cn(
+            "border-b-2 pb-0.5 font-medium tracking-tight transition-colors",
+            compact ? "text-[8.5px]" : "text-[11px]",
+            p.mode === m
+              ? "border-sound text-foreground"
+              : "border-transparent text-muted-foreground hover:text-foreground"
+          )}
+        >
+          {tr.modes[m]}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/** Aggregation options — shown instead of the timeline in aggregate mode. */
+function AggregatePanel({ p, compact }: { p: TimebarProps; compact?: boolean }) {
+  return (
+    <div className={cn("flex flex-1 items-center", compact ? "flex-col gap-1 py-1" : "gap-1.5 px-1")}>
+      {AGG_KEYS.map((k) => {
+        const active = p.aggKey === k;
+        return (
+          <Tooltip key={k}>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                aria-pressed={active}
+                onClick={() => p.onAggChange(k)}
+                className={cn(
+                  "rounded-md border font-medium transition-colors",
+                  compact ? "w-full px-1 py-1 text-[8.5px]" : "px-2.5 py-1 text-[11.5px]",
+                  active
+                    ? "border-sound/50 bg-sound/12 text-foreground"
+                    : "border-transparent bg-secondary text-muted-foreground hover:text-foreground"
+                )}
+              >
+                {tr.aggregations[k].label}
+              </button>
+            </TooltipTrigger>
+            <TooltipContent side={compact ? "left" : "top"}>{tr.aggregations[k].hint}</TooltipContent>
+          </Tooltip>
+        );
+      })}
+      {!compact && (
+        <span className="ml-auto pr-1 text-[10.5px] text-muted-foreground">
+          {p.aggLoading ? "Υπολογισμός…" : tr.aggregations[p.aggKey].hint}
+        </span>
+      )}
+    </div>
+  );
+}
+
 function LiveZone({ p, compact }: { p: TimebarProps; compact?: boolean }) {
   const isLive = p.cursor === "live";
   const zone = (
@@ -340,7 +413,14 @@ function HorizontalTimebar(p: TimebarProps) {
   const cursorF = fraction(cursorMs);
 
   return (
-    <div className="pointer-events-auto flex h-[4.75rem] items-stretch gap-2.5 rounded-xl border bg-card/95 pl-2 pr-3 shadow-[0_2px_16px_-4px_rgb(45_49_66/0.18)] backdrop-blur-sm">
+    <div className="pointer-events-auto flex h-[6rem] flex-col rounded-xl border bg-card/95 pl-2 pr-3 shadow-[0_2px_16px_-4px_rgb(45_49_66/0.18)] backdrop-blur-sm">
+      <div className="flex items-center pl-1 pt-1.5">
+        <ModeTabs p={p} />
+      </div>
+      {p.mode === "aggregate" ? (
+        <AggregatePanel p={p} />
+      ) : (
+      <div className="flex flex-1 items-stretch gap-2.5">
       <div className="flex items-center">
         <PlayControls p={p} />
       </div>
@@ -438,6 +518,8 @@ function HorizontalTimebar(p: TimebarProps) {
       <div className="flex items-center">
         <LiveZone p={p} />
       </div>
+      </div>
+      )}
     </div>
   );
 }
@@ -461,6 +543,12 @@ function VerticalTimebar(p: TimebarProps) {
 
   return (
     <div className="pointer-events-auto flex w-12 flex-col items-stretch gap-1.5 rounded-xl border bg-card/95 py-2 shadow-[0_2px_16px_-4px_rgb(45_49_66/0.18)] backdrop-blur-sm">
+      <ModeTabs p={p} compact />
+      <div className="mx-3 h-px bg-border" />
+      {p.mode === "aggregate" ? (
+        <AggregatePanel p={p} compact />
+      ) : (
+      <>
       <div className="flex justify-center">
         <LiveZone p={p} compact />
       </div>
@@ -554,6 +642,8 @@ function VerticalTimebar(p: TimebarProps) {
       <div className="flex justify-center">
         <PlayControls p={p} vertical />
       </div>
+      </>
+      )}
     </div>
   );
 }

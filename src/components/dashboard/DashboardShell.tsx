@@ -16,19 +16,21 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import {
   advanceCursor,
   EMPTY_FILTERS,
+  filtersToAggregateQuery,
   instantMatches,
   isUnfiltered,
   periodStartMs,
   selectedSegments,
   type DashboardFilters,
 } from "@/lib/dashboard/filters";
+import type { FrameData } from "@/lib/dashboard/frames";
 import type { FreshnessResponse } from "@/types/freshness";
 import FilterRail from "./FilterRail";
 import SensorLayer from "./SensorLayer";
 import SensorPane from "./SensorPane";
 import CurrentDate from "./CurrentDate";
 import SkipFlash, { SKIP_HOLD_MS, type SkipEvent } from "./SkipFlash";
-import Timebar, { PLAYBACK_SPEEDS } from "./Timebar";
+import Timebar, { PLAYBACK_SPEEDS, type AggKey, type BarMode } from "./Timebar";
 
 const MapCanvas = dynamic(() => import("./MapCanvas"), { ssr: false });
 
@@ -50,6 +52,10 @@ export default function DashboardShell() {
   const [freshness, setFreshness] = useState<FreshnessResponse | null>(null);
   const [skip, setSkip] = useState<SkipEvent | null>(null);
   const [selectedSensorId, setSelectedSensorId] = useState<string | null>(null);
+  const [mode, setMode] = useState<BarMode>("instants");
+  const [aggKey, setAggKey] = useState<AggKey>("laeq");
+  const [aggData, setAggData] = useState<Record<string, Record<AggKey, number> & { n: number }> | null>(null);
+  const [aggLoading, setAggLoading] = useState(false);
   const skipSeq = useRef(0);
   const skipHoldUntilRef = useRef(0);
   // Stable identity: MapCanvas keys its (create/destroy!) effect on the
@@ -153,6 +159,40 @@ export default function DashboardShell() {
     return () => clearInterval(timer);
   }, [playing, speedIndex]);
 
+  // Aggregate mode: one fetch per (filters, domain) — the response carries
+  // every metric, so flipping between them costs nothing.
+  const aggQuery = filtersToAggregateQuery(filters, rangeStartMinute);
+  useEffect(() => {
+    if (mode !== "aggregate") return;
+    let cancelled = false;
+    setAggLoading(true);
+    fetch(`/api/aggregate?${aggQuery}`, { cache: "no-store" })
+      .then((r) => r.json())
+      .then((body: { sensors: Record<string, Record<AggKey, number> & { n: number }> }) => {
+        if (cancelled) return;
+        setAggData(body.sensors);
+        setAggLoading(false);
+      })
+      .catch(() => {
+        if (!cancelled) setAggLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [mode, aggQuery]);
+
+  const overrideFrame: FrameData | null = useMemo(() => {
+    if (mode !== "aggregate" || !aggData) return null;
+    const out: FrameData = {};
+    for (const [id, v] of Object.entries(aggData)) out[id] = { laeq: v[aggKey], n: v.n };
+    return out;
+  }, [mode, aggData, aggKey]);
+
+  const onModeChange = useCallback((m: BarMode) => {
+    setMode(m);
+    if (m === "aggregate") setPlaying(false);
+  }, []);
+
   const onPlayToggle = useCallback(() => {
     setPlaying((p) => {
       if (!p) {
@@ -191,6 +231,11 @@ export default function DashboardShell() {
     freshSecondsAgo: freshness?.fleet.newestSecondsAgo ?? null,
     locale,
     labels: tr.timebar,
+    mode,
+    aggKey,
+    aggLoading,
+    onModeChange,
+    onAggChange: setAggKey,
     onCursorChange,
     onPlayToggle,
     onSpeedSelect: (i: number) => setSpeedIndex(Math.max(0, Math.min(PLAYBACK_SPEEDS.length - 1, i))),
@@ -222,10 +267,11 @@ export default function DashboardShell() {
             segments={segments}
             playing={playing}
             onSensorClick={setSelectedSensorId}
+            overrideFrame={overrideFrame}
           />
           {selectedSensorId && <SensorPane sensorId={selectedSensorId} onClose={() => setSelectedSensorId(null)} />}
           <SkipFlash skip={skip} />
-          <CurrentDate cursorMs={cursor === "live" ? nowMs : cursor} skip={skip} />
+          {mode === "instants" && <CurrentDate cursorMs={cursor === "live" ? nowMs : cursor} skip={skip} />}
 
           {/* mobile: filter sheet trigger */}
           {isMobile === true && (

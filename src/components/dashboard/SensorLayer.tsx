@@ -42,6 +42,8 @@ export interface SensorLayerProps {
   segments: TimeSegment[];
   playing: boolean;
   onSensorClick?: (sensorId: string) => void;
+  /** When set (aggregate mode), shown instead of frame/live data. */
+  overrideFrame?: FrameData | null;
 }
 
 const MARKER_PX = 30;
@@ -143,7 +145,7 @@ function applyValue(
   }
 }
 
-export default function SensorLayer({ map, cursor, stepMs, segments, playing, onSensorClick }: SensorLayerProps) {
+export default function SensorLayer({ map, cursor, stepMs, segments, playing, onSensorClick, overrideFrame }: SensorLayerProps) {
   const [sensors, setSensors] = useState<SensorMeta[]>([]);
   const [version, bumpVersion] = useReducer((v: number) => v + 1, 0);
   const [zoomBucket, setZoomBucket] = useState(0);
@@ -221,7 +223,7 @@ export default function SensorLayer({ map, cursor, stepMs, segments, playing, on
 
   // --- live frame polling (only while the playhead is live) ---
   useEffect(() => {
-    if (cursor !== "live") return;
+    if (cursor !== "live" || overrideFrame != null) return;
     let cancelled = false;
     const load = async () => {
       try {
@@ -251,12 +253,12 @@ export default function SensorLayer({ map, cursor, stepMs, segments, playing, on
       cancelled = true;
       clearInterval(timer);
     };
-  }, [cursor]);
+  }, [cursor, overrideFrame != null]);
 
   // --- prefetcher: current frame + the playback path ahead, one batch ---
   const cursorQ = cursor === "live" ? "live" : quantizeFrameMs(cursor);
   useEffect(() => {
-    if (cursorQ === "live") return;
+    if (cursorQ === "live" || overrideFrame != null) return;
     const windowS = frameWindowS(stepMs);
     const ahead = playing ? PREFETCH_AHEAD : 2;
     const times = upcomingFrameTimes(segments, cursorQ, stepMs, ahead)
@@ -278,12 +280,21 @@ export default function SensorLayer({ map, cursor, stepMs, segments, playing, on
         for (const t of missing) storeRef.current.clearPending(frameKey(t, windowS));
       });
     return () => controller.abort();
-  }, [cursorQ, stepMs, segments, playing]);
+  }, [cursorQ, stepMs, segments, playing, overrideFrame != null]);
 
   // --- apply the current frame to the marker elements ---
   useEffect(() => {
     void version; // re-apply whenever new data lands
     if (markersRef.current.size === 0) return;
+    // Aggregate mode: the override IS the frame; settle onto it directly.
+    if (overrideFrame != null) {
+      lastAppliedRef.current = null;
+      for (const [id, handle] of markersRef.current) {
+        const v = overrideFrame[id];
+        applyValue(handle, v ? v.laeq : null, 500, zoomBucket >= LABEL_MIN_ZOOM, "ease");
+      }
+      return;
+    }
     const isLive = cursorQ === "live";
     const frame = isLive ? liveFrameRef.current : storeRef.current.get(frameKey(cursorQ, frameWindowS(stepMs)));
     if (!isLive && frame === undefined) return; // not loaded yet: keep last shown state
@@ -310,7 +321,7 @@ export default function SensorLayer({ map, cursor, stepMs, segments, playing, on
       const v = frame?.[id];
       applyValue(handle, v ? v.laeq : null, tween, labelsOn, timing);
     }
-  }, [cursorQ, stepMs, version, zoomBucket, playing]);
+  }, [cursorQ, stepMs, version, zoomBucket, playing, overrideFrame]);
 
   return null;
 }

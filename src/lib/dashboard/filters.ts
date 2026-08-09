@@ -123,6 +123,21 @@ export function hasAnyMatch(f: DashboardFilters, startMs: number, endMs: number)
   return false;
 }
 
+/** Query params for /api/aggregate from the current filters (effective
+ *  sets: "everything selected" serializes as no restriction). Months are
+ *  1-based on the wire to match SQL EXTRACT(month). */
+export function filtersToAggregateQuery(f: DashboardFilters, effectiveStartMs: number): string {
+  const params = new URLSearchParams();
+  params.set("from", String(Math.floor(effectiveStartMs)));
+  const days = effectiveDays(f);
+  if (days.size === 1) params.set("days", [...days][0]);
+  const hours = effectiveHours(f);
+  if (hours.size > 0 && hours.size < 3) params.set("hours", [...hours].join(","));
+  const months = effectiveMonths(f);
+  if (months.size > 0 && months.size < 12) params.set("months", [...months].map((m) => m + 1).join(","));
+  return params.toString();
+}
+
 export interface TimeSegment {
   /** epoch ms, inclusive */
   startMs: number;
