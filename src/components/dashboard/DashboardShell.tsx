@@ -254,7 +254,7 @@ export default function DashboardShell() {
               <Timebar {...timebarProps} orientation="vertical" />
             </div>
           ) : (
-            <div className="pointer-events-none absolute inset-x-0 top-4 z-10 px-4">
+            <div className="pointer-events-none absolute inset-x-0 bottom-4 z-10 px-4">
               <Timebar {...timebarProps} orientation="horizontal" />
             </div>
           )}

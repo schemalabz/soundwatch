@@ -39,7 +39,7 @@ export default function CurrentDate({ cursorMs, skip }: { cursorMs: number; skip
   return (
     <div
       className={cn(
-        "pointer-events-none absolute bottom-3 left-3 z-10 flex items-center gap-2 rounded-lg border bg-card/95 shadow-sm backdrop-blur-sm transition-all duration-300",
+        "pointer-events-none absolute bottom-[6.25rem] right-4 z-10 flex items-center gap-2 rounded-lg border bg-card/95 shadow-sm backdrop-blur-sm transition-all duration-300 max-md:bottom-3 max-md:left-3 max-md:right-auto",
         emphasized ? "px-4 py-2.5" : "px-3 py-1.5"
       )}
     >
