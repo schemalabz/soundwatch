@@ -266,6 +266,7 @@ export default function DashboardShell() {
             stepMs={PLAYBACK_SPEEDS[speedIndex].simSecondsPerRealSecond * 1000}
             segments={segments}
             playing={playing}
+            metric={aggKey}
             onSensorClick={setSelectedSensorId}
             overrideFrame={overrideFrame}
           />

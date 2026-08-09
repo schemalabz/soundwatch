@@ -13,6 +13,16 @@ import { prisma } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
 
+// The frame value is computed with a caller-chosen metric — the same
+// acoustic summary set as /api/aggregate, applied per frame window.
+const METRIC_SQL: Record<string, string> = {
+  laeq: "10 * log(avg(power(10, r.laeq / 10)))",
+  l50: "percentile_cont(0.5) WITHIN GROUP (ORDER BY r.laeq)",
+  l10: "percentile_cont(0.9) WITHIN GROUP (ORDER BY r.laeq)",
+  l90: "percentile_cont(0.1) WITHIN GROUP (ORDER BY r.laeq)",
+  lmax: "COALESCE(max(r.lmax_est), max(r.laeq))",
+};
+
 const MAX_FRAMES = 16;
 const MIN_WINDOW_S = 60;
 const MAX_WINDOW_S = 6 * 3600;
@@ -30,6 +40,8 @@ export async function GET(req: NextRequest) {
     MAX_WINDOW_S,
     Math.max(MIN_WINDOW_S, Number(req.nextUrl.searchParams.get("window")) || 600)
   );
+  const metric = req.nextUrl.searchParams.get("metric") ?? "laeq";
+  const metricSql = METRIC_SQL[metric] ?? METRIC_SQL.laeq;
   const times = atParam
     .split(",")
     .map(Number)
@@ -51,7 +63,7 @@ export async function GET(req: NextRequest) {
     FROM sensors s
     CROSS JOIN unnest(${arrayLiteral}) AS f(t)
     JOIN LATERAL (
-      SELECT 10 * log(avg(power(10, r.laeq / 10))) AS laeq, count(*) AS n
+      SELECT ${metricSql} AS laeq, count(*) AS n
       FROM readings r
       WHERE r.sensor_id = s.id
         AND r.recorded_at > f.t - make_interval(secs => ${Math.floor(windowS)})

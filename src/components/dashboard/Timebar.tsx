@@ -248,10 +248,11 @@ function ModeTabs({ p, compact }: { p: TimebarProps; compact?: boolean }) {
   );
 }
 
-/** Aggregation options — shown instead of the timeline in aggregate mode. */
-function AggregatePanel({ p, compact }: { p: TimebarProps; compact?: boolean }) {
+/** The shared metric picker: every frame window AND every aggregate is
+ *  computed with this — common to both modes. */
+function MetricChips({ p, compact }: { p: TimebarProps; compact?: boolean }) {
   return (
-    <div className={cn("flex flex-1 items-center", compact ? "flex-col gap-1 py-1" : "gap-1.5 px-1")}>
+    <div className={cn("flex items-center", compact ? "flex-col gap-1 px-1" : "gap-1")}>
       {AGG_KEYS.map((k) => {
         const active = p.aggKey === k;
         return (
@@ -263,7 +264,7 @@ function AggregatePanel({ p, compact }: { p: TimebarProps; compact?: boolean }) 
                 onClick={() => p.onAggChange(k)}
                 className={cn(
                   "rounded-md border font-medium transition-colors",
-                  compact ? "w-full px-1 py-1 text-[8.5px]" : "px-2.5 py-1 text-[11.5px]",
+                  compact ? "w-full px-1 py-0.5 text-[8px]" : "px-2 py-0.5 text-[10.5px]",
                   active
                     ? "border-sound/50 bg-sound/12 text-foreground"
                     : "border-transparent bg-secondary text-muted-foreground hover:text-foreground"
@@ -272,15 +273,26 @@ function AggregatePanel({ p, compact }: { p: TimebarProps; compact?: boolean }) 
                 {tr.aggregations[k].label}
               </button>
             </TooltipTrigger>
-            <TooltipContent side={compact ? "left" : "top"}>{tr.aggregations[k].hint}</TooltipContent>
+            <TooltipContent side={compact ? "left" : "bottom"}>{tr.aggregations[k].hint}</TooltipContent>
           </Tooltip>
         );
       })}
-      {!compact && (
-        <span className="ml-auto pr-1 text-[10.5px] text-muted-foreground">
-          {p.aggLoading ? "Υπολογισμός…" : tr.aggregations[p.aggKey].hint}
-        </span>
-      )}
+    </div>
+  );
+}
+
+/** Aggregate mode's content row: just the explanation + compute state. */
+function AggregatePanel({ p, compact }: { p: TimebarProps; compact?: boolean }) {
+  if (compact) {
+    return (
+      <div className="flex flex-1 items-center justify-center px-1 text-center text-[8px] leading-tight text-muted-foreground">
+        {p.aggLoading ? "…" : tr.aggregations[p.aggKey].label}
+      </div>
+    );
+  }
+  return (
+    <div className="flex flex-1 items-center px-2 text-[11px] text-muted-foreground">
+      {p.aggLoading ? "Υπολογισμός…" : tr.aggregations[p.aggKey].hint}
     </div>
   );
 }
@@ -414,8 +426,9 @@ function HorizontalTimebar(p: TimebarProps) {
 
   return (
     <div className="pointer-events-auto flex h-[6rem] flex-col rounded-xl border bg-card/95 pl-2 pr-3 shadow-[0_2px_16px_-4px_rgb(45_49_66/0.18)] backdrop-blur-sm">
-      <div className="flex items-center pl-1 pt-1.5">
+      <div className="flex items-center justify-between pl-1 pr-1 pt-1.5">
         <ModeTabs p={p} />
+        <MetricChips p={p} />
       </div>
       {p.mode === "aggregate" ? (
         <AggregatePanel p={p} />
@@ -544,6 +557,7 @@ function VerticalTimebar(p: TimebarProps) {
   return (
     <div className="pointer-events-auto flex w-12 flex-col items-stretch gap-1.5 rounded-xl border bg-card/95 py-2 shadow-[0_2px_16px_-4px_rgb(45_49_66/0.18)] backdrop-blur-sm">
       <ModeTabs p={p} compact />
+      <MetricChips p={p} compact />
       <div className="mx-3 h-px bg-border" />
       {p.mode === "aggregate" ? (
         <AggregatePanel p={p} compact />

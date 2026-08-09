@@ -41,6 +41,8 @@ export interface SensorLayerProps {
   stepMs: number;
   segments: TimeSegment[];
   playing: boolean;
+  /** The aggregation metric applied to every frame window (and live). */
+  metric: string;
   onSensorClick?: (sensorId: string) => void;
   /** When set (aggregate mode), shown instead of frame/live data. */
   overrideFrame?: FrameData | null;
@@ -49,7 +51,6 @@ export interface SensorLayerProps {
 const MARKER_PX = 30;
 const PREFETCH_AHEAD = 6;
 const LIVE_POLL_MS = 5000;
-const LIVE_STALE_MS = 3 * 60_000;
 // Playback tweens run LINEAR over the full frame second: motion is uniform
 // through the frame and chains continuously into the next one. A paused
 // apply just settles quickly onto the correct value. A time-jump during
@@ -145,7 +146,7 @@ function applyValue(
   }
 }
 
-export default function SensorLayer({ map, cursor, stepMs, segments, playing, onSensorClick, overrideFrame }: SensorLayerProps) {
+export default function SensorLayer({ map, cursor, stepMs, segments, playing, metric, onSensorClick, overrideFrame }: SensorLayerProps) {
   const [sensors, setSensors] = useState<SensorMeta[]>([]);
   const [version, bumpVersion] = useReducer((v: number) => v + 1, 0);
   const [zoomBucket, setZoomBucket] = useState(0);
@@ -222,26 +223,18 @@ export default function SensorLayer({ map, cursor, stepMs, segments, playing, on
   }, [map, sensors]);
 
   // --- live frame polling (only while the playhead is live) ---
+  // Live IS a frame: the trailing 5 minutes at "now", computed with the
+  // same metric as playback — one data path for everything.
   useEffect(() => {
     if (cursor !== "live" || overrideFrame != null) return;
     let cancelled = false;
     const load = async () => {
       try {
-        const res = await fetch("/api/sensors", { cache: "no-store" });
-        const list: {
-          id: string;
-          latestReading: { recordedAt: string; noiseDba: number | null } | null;
-        }[] = await res.json();
+        const at = quantizeFrameMs(Date.now());
+        const res = await fetch(`/api/frames?at=${at}&window=300&metric=${metric}`, { cache: "no-store" });
+        const body: { frames: Record<string, FrameData> } = await res.json();
         if (cancelled) return;
-        const frame: FrameData = {};
-        const staleBefore = Date.now() - LIVE_STALE_MS;
-        for (const s of list) {
-          const r = s.latestReading;
-          if (r?.noiseDba != null && new Date(r.recordedAt).getTime() > staleBefore) {
-            frame[s.id] = { laeq: r.noiseDba, n: 1 };
-          }
-        }
-        liveFrameRef.current = frame;
+        liveFrameRef.current = body.frames[String(at)] ?? {};
         bumpVersion();
       } catch {
         // transient — keep the previous live frame
@@ -253,7 +246,7 @@ export default function SensorLayer({ map, cursor, stepMs, segments, playing, on
       cancelled = true;
       clearInterval(timer);
     };
-  }, [cursor, overrideFrame != null]);
+  }, [cursor, metric, overrideFrame != null]);
 
   // --- prefetcher: current frame + the playback path ahead, one batch ---
   const cursorQ = cursor === "live" ? "live" : quantizeFrameMs(cursor);
@@ -264,23 +257,23 @@ export default function SensorLayer({ map, cursor, stepMs, segments, playing, on
     const times = upcomingFrameTimes(segments, cursorQ, stepMs, ahead)
       .map(quantizeFrameMs)
       .filter((t, i, arr) => arr.indexOf(t) === i);
-    const missing = times.filter((t) => !storeRef.current.has(frameKey(t, windowS)));
+    const missing = times.filter((t) => !storeRef.current.has(frameKey(t, windowS, metric)));
     if (missing.length === 0) return;
-    for (const t of missing) storeRef.current.markPending(frameKey(t, windowS));
+    for (const t of missing) storeRef.current.markPending(frameKey(t, windowS, metric));
     const controller = new AbortController();
-    fetch(`/api/frames?at=${missing.join(",")}&window=${windowS}`, { signal: controller.signal })
+    fetch(`/api/frames?at=${missing.join(",")}&window=${windowS}&metric=${metric}`, { signal: controller.signal })
       .then((r) => r.json())
       .then((body: { frames: Record<string, FrameData> }) => {
         for (const t of missing) {
-          storeRef.current.set(frameKey(t, windowS), body.frames[String(t)] ?? {});
+          storeRef.current.set(frameKey(t, windowS, metric), body.frames[String(t)] ?? {});
         }
         bumpVersion();
       })
       .catch(() => {
-        for (const t of missing) storeRef.current.clearPending(frameKey(t, windowS));
+        for (const t of missing) storeRef.current.clearPending(frameKey(t, windowS, metric));
       });
     return () => controller.abort();
-  }, [cursorQ, stepMs, segments, playing, overrideFrame != null]);
+  }, [cursorQ, stepMs, segments, playing, metric, overrideFrame != null]);
 
   // --- apply the current frame to the marker elements ---
   useEffect(() => {
@@ -296,7 +289,7 @@ export default function SensorLayer({ map, cursor, stepMs, segments, playing, on
       return;
     }
     const isLive = cursorQ === "live";
-    const frame = isLive ? liveFrameRef.current : storeRef.current.get(frameKey(cursorQ, frameWindowS(stepMs)));
+    const frame = isLive ? liveFrameRef.current : storeRef.current.get(frameKey(cursorQ, frameWindowS(stepMs), metric));
     if (!isLive && frame === undefined) return; // not loaded yet: keep last shown state
 
     // A jump larger than ~1.5 steps (skip/scrub) snaps instead of tweening —
@@ -321,7 +314,7 @@ export default function SensorLayer({ map, cursor, stepMs, segments, playing, on
       const v = frame?.[id];
       applyValue(handle, v ? v.laeq : null, tween, labelsOn, timing);
     }
-  }, [cursorQ, stepMs, version, zoomBucket, playing, overrideFrame]);
+  }, [cursorQ, stepMs, version, zoomBucket, playing, metric, overrideFrame]);
 
   return null;
 }

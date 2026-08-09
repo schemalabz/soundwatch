@@ -6,7 +6,8 @@ const HOUR = 3_600_000;
 
 describe("frame keys and windows", () => {
   it("quantizes to the minute so playback and prefetch agree", () => {
-    expect(frameKey(1_786_000_000_123, 600)).toBe(frameKey(1_786_000_000_999, 600));
+    expect(frameKey(1_786_000_000_123, 600, "laeq")).toBe(frameKey(1_786_000_000_999, 600, "laeq"));
+    expect(frameKey(1_786_000_000_123, 600, "laeq")).not.toBe(frameKey(1_786_000_000_123, 600, "l10"));
     expect(quantizeFrameMs(1_786_000_059_999)).toBe(1_786_000_020_000);
   });
 

@@ -22,8 +22,8 @@ export function frameWindowS(stepMs: number): number {
 export function quantizeFrameMs(tMs: number): number {
   return Math.floor(tMs / 60_000) * 60_000;
 }
-export function frameKey(tMs: number, windowS: number): string {
-  return `${quantizeFrameMs(tMs)}:${windowS}`;
+export function frameKey(tMs: number, windowS: number, metric: string): string {
+  return `${quantizeFrameMs(tMs)}:${windowS}:${metric}`;
 }
 
 /**
