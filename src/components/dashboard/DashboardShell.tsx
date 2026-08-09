@@ -24,6 +24,7 @@ import {
 } from "@/lib/dashboard/filters";
 import type { FreshnessResponse } from "@/types/freshness";
 import FilterRail from "./FilterRail";
+import SkipFlash, { type SkipEvent } from "./SkipFlash";
 import Timebar, { PLAYBACK_SPEEDS } from "./Timebar";
 
 const MapCanvas = dynamic(() => import("./MapCanvas"), { ssr: false });
@@ -44,6 +45,16 @@ export default function DashboardShell() {
   const [speedIndex, setSpeedIndex] = useState(1);
   const [nowMs, setNowMs] = useState(() => Date.now());
   const [freshness, setFreshness] = useState<FreshnessResponse | null>(null);
+  const [skip, setSkip] = useState<SkipEvent | null>(null);
+  const skipSeq = useRef(0);
+  const mapCanvasGetter = useRef<() => HTMLCanvasElement | null>(() => null);
+  // Stable identities: MapCanvas keys its (create/destroy!) effect on this
+  // callback, and the shell re-renders every second — an inline arrow here
+  // would tear the map down each tick.
+  const handleCanvasReady = useCallback((get: () => HTMLCanvasElement | null) => {
+    mapCanvasGetter.current = get;
+  }, []);
+  const getMapCanvas = useCallback(() => mapCanvasGetter.current(), []);
 
   // Wall clock: the live edge of the rail creeps forward once a second.
   useEffect(() => {
@@ -126,6 +137,11 @@ export default function DashboardShell() {
           setPlaying(false);
           return allowed ? "live" : prev;
         }
+        // Landing further than one step away means a gap was skipped: flash
+        // the jump cut so the discontinuity reads as intentional.
+        if (next - from > stepMs + 1) {
+          setSkip({ seq: ++skipSeq.current, targetMs: next });
+        }
         return next;
       });
     }, 1000);
@@ -193,7 +209,8 @@ export default function DashboardShell() {
 
         {/* map + overlays */}
         <div className="relative min-w-0 flex-1">
-          <MapCanvas />
+          <MapCanvas onCanvasReady={handleCanvasReady} />
+          <SkipFlash skip={skip} getMapCanvas={getMapCanvas} />
 
           {/* mobile: filter sheet trigger */}
           {isMobile === true && (

@@ -11,7 +11,12 @@ import "mapbox-gl/dist/mapbox-gl.css";
 const ATHENS_CENTER: [number, number] = [23.7315, 37.9755];
 const TOKEN = process.env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN;
 
-export default function MapCanvas() {
+export default function MapCanvas({
+  onCanvasReady,
+}: {
+  /** Hands the parent a way to read the live map canvas (for skip stills). */
+  onCanvasReady?: (getCanvas: () => HTMLCanvasElement | null) => void;
+}) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
   const [failed, setFailed] = useState(false);
@@ -28,6 +33,8 @@ export default function MapCanvas() {
       minZoom: 9,
       maxZoom: 17,
       dragRotate: false,
+      // Lets SkipFlash snapshot the canvas outside a render frame.
+      preserveDrawingBuffer: true,
       pitchWithRotate: false,
       touchPitch: false,
       attributionControl: false,
@@ -40,12 +47,13 @@ export default function MapCanvas() {
       console.warn("Map error:", e.error?.message);
     });
     mapRef.current = map;
+    onCanvasReady?.(() => mapRef.current?.getCanvas() ?? null);
 
     return () => {
       map.remove();
       mapRef.current = null;
     };
-  }, []);
+  }, [onCanvasReady]);
 
   if (!TOKEN || failed) {
     return (
