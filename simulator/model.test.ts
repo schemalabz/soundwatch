@@ -9,9 +9,9 @@ import { payloadToRow } from "./rowBuilder";
 const TUESDAY_UTC = Date.UTC(2026, 5, 16, 0, 0, 0) / 1000;
 const DAY = 86400;
 
-const exarchia = FLEET.find((s) => s.deviceId === "sck-exarchia")!;
-const kifisia = FLEET.find((s) => s.deviceId === "sck-kifisia")!;
-const melissia = FLEET.find((s) => s.deviceId === "sim-athens-32")!;
+const exarchia = FLEET.find((s) => s.deviceId === "sim-exarchia")!;
+const kifisia = FLEET.find((s) => s.deviceId === "sim-kifisia")!;
+const melissia = FLEET.find((s) => s.deviceId === "sim-melissia")!;
 
 /** Local Athens hour h on the day that starts at dayStartUtc (UTC+3 fixed). */
 function atLocalHour(dayStartUtc: number, hour: number): number {
