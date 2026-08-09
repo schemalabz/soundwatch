@@ -27,12 +27,14 @@ services:
       context: .
       dockerfile: Dockerfile
     ports:
-      - "${APP_PORT:-3000}:3000"
+      # 3005 by default: dev machines tend to have another next dev server
+      # squatting on 3000, and a half-bound port (IPv4 vs IPv6) is confusing.
+      - "${APP_PORT:-3005}:3000"
     environment:
       - DATABASE_URL=postgresql://soundwatch:soundwatch@postgres:5432/soundwatch
       - MQTT_BROKER_URL=mqtt://mosquitto:1884
       - NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN=${NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN:-}
-      - NEXT_PUBLIC_BASE_URL=${NEXT_PUBLIC_BASE_URL:-http://localhost:3000}
+      - NEXT_PUBLIC_BASE_URL=${NEXT_PUBLIC_BASE_URL:-http://localhost:3005}
       - ADMIN_TOKEN=${ADMIN_TOKEN:-admin-local}
     depends_on:
       postgres:

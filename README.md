@@ -20,8 +20,8 @@ First run builds images and backfills ~6M readings (~5-6 min; the command
 streams backfill progress and exits when it completes — the stack keeps
 running). Then:
 
-- http://localhost:3000 — pipeline freshness dashboard
-- http://localhost:3000/admin — admin (token `admin-local`)
+- http://localhost:3005 — pipeline freshness dashboard
+- http://localhost:3005/admin — admin (token `admin-local`)
 - `psql postgresql://soundwatch:soundwatch@localhost:5432/soundwatch`
 
 Re-running `local:up` is cheap: the backfill is idempotent and only tops up
