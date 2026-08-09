@@ -91,7 +91,7 @@ export default function SensorPane({ sensorId, onClose }: { sensorId: string; on
   const stops = typeof window !== "undefined" ? paletteStops() : undefined;
 
   return (
-    <div className="pointer-events-auto absolute right-3 top-3 z-10 flex max-h-[calc(100%-8.5rem)] w-[18.5rem] flex-col rounded-xl border bg-card/95 shadow-[0_2px_16px_-4px_rgb(45_49_66/0.18)] backdrop-blur-sm max-md:inset-x-2 max-md:right-2 max-md:top-auto max-md:bottom-24 max-md:max-h-[48%] max-md:w-auto">
+    <div className="pointer-events-auto absolute right-3 top-[6.5rem] z-10 flex max-h-[calc(100%-9.5rem)] w-[18.5rem] flex-col rounded-xl border bg-card/95 shadow-[0_2px_16px_-4px_rgb(45_49_66/0.18)] backdrop-blur-sm max-md:inset-x-2 max-md:right-2 max-md:top-auto max-md:bottom-24 max-md:max-h-[48%] max-md:w-auto">
       <div className="flex items-start justify-between gap-2 border-b px-4 py-3">
         <div className="min-w-0">
           <div className="truncate text-[15px] font-semibold leading-tight">{detail?.name ?? "…"}</div>

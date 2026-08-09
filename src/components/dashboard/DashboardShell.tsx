@@ -26,6 +26,7 @@ import type { FreshnessResponse } from "@/types/freshness";
 import FilterRail from "./FilterRail";
 import SensorLayer from "./SensorLayer";
 import SensorPane from "./SensorPane";
+import CurrentDate from "./CurrentDate";
 import SkipFlash, { SKIP_HOLD_MS, type SkipEvent } from "./SkipFlash";
 import Timebar, { PLAYBACK_SPEEDS } from "./Timebar";
 
@@ -51,16 +52,10 @@ export default function DashboardShell() {
   const [selectedSensorId, setSelectedSensorId] = useState<string | null>(null);
   const skipSeq = useRef(0);
   const skipHoldUntilRef = useRef(0);
-  // Stable identities: MapCanvas keys its (create/destroy!) effect on the
+  // Stable identity: MapCanvas keys its (create/destroy!) effect on the
   // onReady callback, and the shell re-renders every second — an inline
   // arrow here would tear the map down each tick. setState is stable.
   const [mapInstance, setMapInstance] = useState<import("mapbox-gl").Map | null>(null);
-  const mapRefForCanvas = useRef<import("mapbox-gl").Map | null>(null);
-  const getMapCanvas = useCallback(() => mapRefForCanvas.current?.getCanvas() ?? null, []);
-  const handleMapReady = useCallback((m: import("mapbox-gl").Map | null) => {
-    mapRefForCanvas.current = m;
-    setMapInstance(m);
-  }, []);
 
   // Wall clock: the live edge of the rail creeps forward once a second.
   useEffect(() => {
@@ -219,7 +214,7 @@ export default function DashboardShell() {
 
         {/* map + overlays */}
         <div className="relative min-w-0 flex-1">
-          <MapCanvas onReady={handleMapReady} />
+          <MapCanvas onReady={setMapInstance} />
           <SensorLayer
             map={mapInstance}
             cursor={cursor}
@@ -229,7 +224,8 @@ export default function DashboardShell() {
             onSensorClick={setSelectedSensorId}
           />
           {selectedSensorId && <SensorPane sensorId={selectedSensorId} onClose={() => setSelectedSensorId(null)} />}
-          <SkipFlash skip={skip} getMapCanvas={getMapCanvas} />
+          <SkipFlash skip={skip} />
+          <CurrentDate cursorMs={cursor === "live" ? nowMs : cursor} skip={skip} />
 
           {/* mobile: filter sheet trigger */}
           {isMobile === true && (
@@ -258,7 +254,7 @@ export default function DashboardShell() {
               <Timebar {...timebarProps} orientation="vertical" />
             </div>
           ) : (
-            <div className="pointer-events-none absolute inset-x-0 bottom-4 z-10 px-4">
+            <div className="pointer-events-none absolute inset-x-0 top-4 z-10 px-4">
               <Timebar {...timebarProps} orientation="horizontal" />
             </div>
           )}

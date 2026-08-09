@@ -50,9 +50,12 @@ const LIVE_POLL_MS = 5000;
 const LIVE_STALE_MS = 3 * 60_000;
 // Playback tweens run LINEAR over the full frame second: motion is uniform
 // through the frame and chains continuously into the next one. A paused
-// apply just settles quickly onto the correct value.
+// apply just settles quickly onto the correct value. A time-jump during
+// playback animates across the 3s hold (see SkipFlash.SKIP_HOLD_MS) so the
+// circles visibly travel to the landing frame under the VHS pass.
 const PLAYBACK_TWEEN_MS = 1000;
 const PAUSED_TWEEN_MS = 180;
+const SKIP_TWEEN_MS = 2600;
 const LIVE_TWEEN_MS = 4000;
 
 interface MarkerHandle {
@@ -290,8 +293,16 @@ export default function SensorLayer({ map, cursor, stepMs, segments, playing, on
     const prev = lastAppliedRef.current;
     const jumped =
       prev == null || prev === "live" !== isLive || (typeof prev === "number" && !isLive && Math.abs(cursorQ - prev) > stepMs * 1.5);
-    const tween = jumped ? 0 : isLive ? LIVE_TWEEN_MS : playing ? PLAYBACK_TWEEN_MS : PAUSED_TWEEN_MS;
-    const timing: "linear" | "ease" = isLive || playing ? "linear" : "ease";
+    const tween = jumped
+      ? playing
+        ? SKIP_TWEEN_MS // the held jump: travel to the landing frame
+        : 0 // scrub: land instantly
+      : isLive
+        ? LIVE_TWEEN_MS
+        : playing
+          ? PLAYBACK_TWEEN_MS
+          : PAUSED_TWEEN_MS;
+    const timing: "linear" | "ease" = jumped && playing ? "ease" : isLive || playing ? "linear" : "ease";
     lastAppliedRef.current = cursorQ;
 
     const labelsOn = zoomBucket >= LABEL_MIN_ZOOM;

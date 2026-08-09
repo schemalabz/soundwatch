@@ -33,8 +33,6 @@ export default function MapCanvas({
       minZoom: 9,
       maxZoom: 17,
       dragRotate: false,
-      // Lets SkipFlash snapshot the canvas outside a render frame.
-      preserveDrawingBuffer: true,
       pitchWithRotate: false,
       touchPitch: false,
       attributionControl: false,

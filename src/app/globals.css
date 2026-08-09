@@ -120,6 +120,46 @@
   }
 }
 
+/* VHS dressing for the time-jump hold: rolling tracking band + jitter. */
+@keyframes sw-vhs-roll {
+  0% {
+    top: -18%;
+  }
+  100% {
+    top: 108%;
+  }
+}
+@keyframes sw-vhs-jitter {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  92% {
+    transform: translateX(0);
+  }
+  94% {
+    transform: translateX(2px);
+  }
+  96% {
+    transform: translateX(-1.5px);
+  }
+  98% {
+    transform: translateX(1px);
+  }
+}
+.sw-vhs-band {
+  animation: sw-vhs-roll 1.6s linear infinite;
+}
+.sw-vhs-jitter {
+  animation: sw-vhs-jitter 900ms steps(1) infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .sw-vhs-band,
+  .sw-vhs-jitter {
+    animation: none;
+  }
+}
+
 /* Liveness underline: a quiet breathing line under the live timestamp. */
 @keyframes sw-breathe {
   0%,
