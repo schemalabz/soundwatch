@@ -51,12 +51,12 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "at= requires epoch-ms times" }, { status: 400 });
   }
 
-  // Naive-UTC columns: times travel as UTC ISO strings cast ::timestamp.
-  // Inlined as literals, NOT bind parameters: the inputs are validated
-  // numbers (injection-impossible via toISOString), and the literal array
-  // lets the planner pick the nested-loop index plan — the parameterized
-  // form was observed to fall into a seconds-long generic plan.
-  const arrayLiteral = `ARRAY[${times.map((t) => `'${new Date(t).toISOString()}'`).join(",")}]::timestamp[]`;
+  // Times travel as UTC ISO strings cast ::timestamptz. Inlined as
+  // literals, NOT bind parameters: the inputs are validated numbers
+  // (injection-impossible via toISOString), and the literal array lets the
+  // planner pick the nested-loop index plan — the parameterized form was
+  // observed to fall into a seconds-long generic plan.
+  const arrayLiteral = `ARRAY[${times.map((t) => `'${new Date(t).toISOString()}'`).join(",")}]::timestamptz[]`;
 
   const rows = await prisma.$queryRawUnsafe<FrameSqlRow[]>(`
     SELECT f.t, s.id AS sensor_id, agg.laeq, agg.n

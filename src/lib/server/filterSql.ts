@@ -2,8 +2,13 @@
 // aggregate-style endpoint. All fragments are built ONLY from validated
 // enums/ints — nothing user-typed is ever inlined.
 
-/** The Athens wall-time expression for the naive-UTC recorded_at column. */
-export const LOCAL_TIME_SQL = "(r.recorded_at AT TIME ZONE 'UTC' AT TIME ZONE 'Europe/Athens')";
+/** Athens wall time of a timestamptz column (naive result, wall components). */
+export function athensTimeSql(col: string): string {
+  return `timezone('Europe/Athens', ${col})`;
+}
+
+/** Default time column: raw readings. Rollup queries pass the cagg bucket. */
+const DEFAULT_TIME_COL = "r.recorded_at";
 
 // Mirrors HOUR_PRESET_RANGES in src/lib/dashboard/filters.ts (kept separate:
 // this module is server-only and the shapes drift for different reasons).
@@ -22,8 +27,8 @@ const HOUR_RANGES: Record<string, [number, number][]> = {
  * filtersToAggregateQuery) into SQL predicate strings. Unknown values are
  * dropped, months are validated 1-12 ints.
  */
-export function filterPredicates(q: URLSearchParams): string[] {
-  const local = LOCAL_TIME_SQL;
+export function filterPredicates(q: URLSearchParams, timeCol: string = DEFAULT_TIME_COL): string[] {
+  const local = athensTimeSql(timeCol);
   const days = q.get("days"); // 'weekend' | 'weekday' | null
   const hours = (q.get("hours") ?? "").split(",").filter((h) => h in HOUR_RANGES);
   const months = (q.get("months") ?? "")
@@ -51,8 +56,8 @@ export function filterPredicates(q: URLSearchParams): string[] {
 }
 
 /** The predicates joined into an AND-able SQL fragment ('' when unfiltered). */
-export function filterSql(q: URLSearchParams): string {
-  const predicates = filterPredicates(q);
+export function filterSql(q: URLSearchParams, timeCol: string = DEFAULT_TIME_COL): string {
+  const predicates = filterPredicates(q, timeCol);
   return predicates.length > 0 ? `AND ${predicates.join(" AND ")}` : "";
 }
 
@@ -78,7 +83,7 @@ export function locationSql(q: URLSearchParams): string {
 
 /** Time-span predicate from the ranges= wire param (startMs:endMs CSV,
  *  [start, end) semantics matching the client). Validated numbers only. */
-export function rangesSql(q: URLSearchParams): string {
+export function rangesSql(q: URLSearchParams, timeCol: string = DEFAULT_TIME_COL): string {
   const ranges = (q.get("ranges") ?? "")
     .split(",")
     .filter(Boolean)
@@ -87,7 +92,7 @@ export function rangesSql(q: URLSearchParams): string {
   if (ranges.length === 0) return "";
   const preds = ranges.map(
     ([s, e]) =>
-      `(r.recorded_at >= '${new Date(s).toISOString()}'::timestamp AND r.recorded_at < '${new Date(e).toISOString()}'::timestamp)`
+      `(${timeCol} >= '${new Date(s).toISOString()}'::timestamptz AND ${timeCol} < '${new Date(e).toISOString()}'::timestamptz)`
   );
   return `AND (${preds.join(" OR ")})`;
 }

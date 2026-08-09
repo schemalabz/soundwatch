@@ -16,7 +16,8 @@
     "local:up": "docker compose -f docker-compose.local.yml up --build -d && docker compose -f docker-compose.local.yml logs -f sim-backfill",
     "local:logs": "docker compose -f docker-compose.local.yml logs -f",
     "local:down": "docker compose -f docker-compose.local.yml down",
-    "local:nuke": "docker compose -f docker-compose.local.yml down -v"
+    "local:nuke": "docker compose -f docker-compose.local.yml down -v",
+    "db:timescale": "tsx --env-file-if-exists=.env scripts/timescale-objects.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",

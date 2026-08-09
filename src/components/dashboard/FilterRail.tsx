@@ -267,13 +267,17 @@ export default function FilterRail(p: FilterRailProps) {
       period: Object.fromEntries(
         (["24h", "7d", "30d"] as PeriodId[]).map((id) => [id, test({ ...f, period: id, ranges: [] })])
       ) as Record<PeriodId, boolean>,
+      // Same-dimension chips are OR-semantics, so a candidate must be probed
+      // ALONE (against the other dimensions): unioned with the current
+      // selection, the existing matches would make ANY addition look viable
+      // (select May -> every dataless month lights up).
       days: Object.fromEntries(
-        (["weekend", "weekday"] as DayGroup[]).map((g) => [g, test({ ...f, days: new Set([...f.days, g]) })])
+        (["weekend", "weekday"] as DayGroup[]).map((g) => [g, test({ ...f, days: new Set([g]) })])
       ) as Record<DayGroup, boolean>,
       hours: Object.fromEntries(
-        HOUR_PRESETS.map((h) => [h, test({ ...f, hours: new Set([...f.hours, h]) })])
+        HOUR_PRESETS.map((h) => [h, test({ ...f, hours: new Set([h]) })])
       ) as Record<HourPreset, boolean>,
-      months: Array.from({ length: 12 }, (_, m) => test({ ...f, months: new Set([...f.months, m]) })),
+      months: Array.from({ length: 12 }, (_, m) => test({ ...f, months: new Set([m]) })),
     };
   }, [p.filters, p.dataStartMs, nowMin]);
 

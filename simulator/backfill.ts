@@ -29,14 +29,13 @@ const BATCH_ROWS = 10_000;
 const INSERT_CONCURRENCY = 4;
 
 // Column spec: SQL column name, ReadingRow field, and the unnest element type.
-// Timestamps travel as UTC ISO strings cast ::timestamp — the columns are
-// timestamp(3) WITHOUT time zone holding UTC wall time, and a string cast is
-// immune to the session/container timezone (a Date param would not be).
-type SqlType = "text" | "timestamp" | "float8" | "int4" | "jsonb";
+// Timestamps travel as UTC ISO strings (with Z) cast ::timestamptz — an
+// absolute instant regardless of the session/container timezone.
+type SqlType = "text" | "timestamptz" | "float8" | "int4" | "jsonb";
 export const COLUMNS = [
   { col: "sensor_id", field: "sensorId", type: "text" },
-  { col: "recorded_at", field: "recordedAt", type: "timestamp" },
-  { col: "received_at", field: "receivedAt", type: "timestamp" },
+  { col: "recorded_at", field: "recordedAt", type: "timestamptz" },
+  { col: "received_at", field: "receivedAt", type: "timestamptz" },
   { col: "noise_dba", field: "noiseDba", type: "float8" },
   { col: "temperature", field: "temperature", type: "float8" },
   { col: "humidity", field: "humidity", type: "float8" },
@@ -112,7 +111,7 @@ function toBatchObject(sensorId: string, row: ReadingRow): Record<string, unknow
   const obj: Record<string, unknown> = {};
   for (const c of COLUMNS) {
     const value = c.field === "sensorId" ? sensorId : row[c.field];
-    // Dates -> UTC ISO strings; json_to_recordset casts them ::timestamp,
+    // Dates -> UTC ISO strings; json_to_recordset casts them ::timestamptz,
     // which ignores the Z and keeps UTC wall time regardless of session TZ.
     obj[c.col] = value instanceof Date ? value.toISOString() : value;
   }

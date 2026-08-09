@@ -94,7 +94,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.simulator
-    command: ["sh", "-c", "npx prisma migrate deploy && exec npx tsx simulator/index.ts backfill"]
+    command: ["sh", "-c", "npx prisma migrate deploy && npx tsx scripts/timescale-objects.ts && exec npx tsx simulator/index.ts backfill"]
     environment:
       - DATABASE_URL=postgresql://soundwatch:soundwatch@postgres:5432/soundwatch
       - SIM_BACKFILL_DAYS=${SIM_BACKFILL_DAYS:-90}

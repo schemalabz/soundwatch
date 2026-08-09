@@ -3,8 +3,8 @@ import { prisma } from "@/lib/db";
 
 // Network status: per public sensor, the age of its newest reading plus a
 // 30-day liveness map in 6-hour buckets (120 cells). The bucket query is one
-// grouped range scan over the last 30 days per the (sensor_id, recorded_at)
-// index; distinct 6h buckets keep the payload tiny (≤120 ints per sensor).
+// grouped read of the readings_hour_bins rollup; distinct 6h buckets keep
+// the payload tiny (≤120 ints per sensor).
 
 export const dynamic = "force-dynamic";
 
@@ -34,12 +34,15 @@ export async function GET() {
       ) last ON true
       WHERE s.is_active AND NOT s.is_experimental AND s.latitude IS NOT NULL
       ORDER BY s.name NULLS LAST`,
+    // Liveness cells come from the hourly rollup — 6h cells are unions of
+    // hour buckets, so summing the cagg is exact (and ~100x less data than
+    // the raw scan this used to be).
     prisma.$queryRaw<BucketRow[]>`
-      SELECT r.sensor_id, floor(extract(epoch FROM r.recorded_at) / ${BUCKET_S})::bigint AS b
-      FROM readings r
-      JOIN sensors s ON s.id = r.sensor_id
+      SELECT rb.sensor_id, floor(extract(epoch FROM rb.bucket) / ${BUCKET_S})::bigint AS b
+      FROM readings_hour_bins rb
+      JOIN sensors s ON s.id = rb.sensor_id
       WHERE s.is_active AND NOT s.is_experimental AND s.latitude IS NOT NULL
-        AND r.recorded_at > (now() AT TIME ZONE 'utc') - make_interval(days => ${WINDOW_DAYS}::int)
+        AND rb.bucket > now() - make_interval(days => ${WINDOW_DAYS}::int)
       GROUP BY 1, 2`,
   ]);
 

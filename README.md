@@ -52,6 +52,27 @@ npm run dev            # terminal 4 -> localhost:3000
 
 `.env` is loaded by all tsx scripts if present (see `.env.example`).
 
+## TimescaleDB
+
+`readings` is a Timescale hypertable (7-day chunks), and the dashboard's
+heavy endpoints read `readings_hour_bins` — a continuous aggregate of
+per-(sensor, hour, 1-dB bin) counts/energy/Lmax that serves `/api/series`,
+`/api/aggregate` and `/api/status` in milliseconds where raw scans took
+seconds. Split in two because Prisma wraps migrations in a transaction and
+cagg DDL refuses to run in one:
+
+- `prisma/migrations/..._0016_timescale_hypertable` — extension, composite
+  PK `(sensor_id, recorded_at)`, `timestamptz` conversion, hypertable.
+- `scripts/timescale-objects.ts` — the cagg + refresh policy (Timescale's
+  own job scheduler; no external cron). Idempotent; runs automatically
+  after `prisma migrate deploy` in the ingester and sim-backfill startup
+  commands, or by hand: `npm run db:timescale`.
+
+The database image must ship the extension (`timescale/timescaledb`, as in
+all compose files). Raw readings are kept indefinitely (no retention or
+compression policy yet): at ~1 row/sensor-minute raw is small, and playback
+frames + the sensor pane read it at arbitrary depths.
+
 ## Tests
 
 ```bash
