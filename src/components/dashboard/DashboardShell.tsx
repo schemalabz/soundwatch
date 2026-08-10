@@ -23,7 +23,7 @@ import {
   selectedSegments,
   type DashboardFilters,
 } from "@/lib/dashboard/filters";
-import type { FrameData } from "@/lib/dashboard/frames";
+import { frameWindowS, type FrameData } from "@/lib/dashboard/frames";
 import type { FreshnessResponse } from "@/types/freshness";
 import { reverseGeocode } from "@/lib/dashboard/geocode";
 import FilterRail from "./FilterRail";
@@ -409,7 +409,11 @@ export default function DashboardShell() {  devRenderCount("DashboardShell");
           )}
           {view === "map" && <SkipFlash skip={skip} />}
           {view === "map" && mode === "instants" && (
-            <CurrentDate cursorMs={cursor === "live" ? nowMinute : cursor} skip={skip} />
+            <CurrentDate
+              cursorMs={cursor === "live" ? nowMinute : cursor}
+              windowS={frameWindowS(PLAYBACK_SPEEDS[speedIndex].simSecondsPerRealSecond * 1000)}
+              skip={skip}
+            />
           )}
 
           {/* view switcher: the top-level lens */}

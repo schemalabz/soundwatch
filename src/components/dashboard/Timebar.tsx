@@ -16,6 +16,7 @@ import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { snapToSegments, type TimeSegment } from "@/lib/dashboard/filters";
+import { frameWindowS } from "@/lib/dashboard/frames";
 import { computeGraduations } from "@/lib/dashboard/graduations";
 import { ATHENS_TZ } from "@/lib/dashboard/time";
 import { dashboardStrings as tr } from "@/lib/strings/dashboard";
@@ -330,6 +331,7 @@ function PlayControls({ p, vertical }: { p: TimebarProps; vertical?: boolean }) 
 /* ------------------------------------------------------------------ */
 
 function HorizontalTimebar(p: TimebarProps) {
+  const stepMs = PLAYBACK_SPEEDS[p.speedIndex].simSecondsPerRealSecond * 1000;
   devRenderCount("Timebar");
   const fraction = useFraction(p);
   const cursorMs = useCursorMs(p);
@@ -415,7 +417,17 @@ function HorizontalTimebar(p: TimebarProps) {
             style={{ left: `${hoverFraction * 100}%` }}
           />
         )}
-        {/* needle */}
+        {/* the aggregation window: the frame is a TRAILING mean, so the
+            "needle" is really a range — a band ending at the cursor, as wide
+            as the interval being averaged (speed-dependent), with the strong
+            edge at the frame's instant. */}
+        <div
+          className="pointer-events-none absolute inset-y-0 rounded-l-sm bg-ink/10"
+          style={{
+            right: `${(1 - cursorF) * 100}%`,
+            width: `max(${(frameWindowS(stepMs) * 1000 * 100) / Math.max(1, p.nowMs - p.rangeStartMs)}%, 3px)`,
+          }}
+        />
         <div
           className={cn(
             "pointer-events-none absolute inset-y-0 -translate-x-1/2 transition-transform",
@@ -451,6 +463,7 @@ function HorizontalTimebar(p: TimebarProps) {
 /* ------------------------------------------------------------------ */
 
 function VerticalTimebar(p: TimebarProps) {
+  const stepMs = PLAYBACK_SPEEDS[p.speedIndex].simSecondsPerRealSecond * 1000;
   const fraction = useFraction(p);
   const cursorMs = useCursorMs(p);
   const cursorLabel = useCursorLabel(p);
@@ -535,7 +548,14 @@ function VerticalTimebar(p: TimebarProps) {
               {g.cellLabel}
             </div>
           ))}
-        {/* needle */}
+        {/* trailing aggregation band (older is downward) + needle */}
+        <div
+          className="pointer-events-none absolute inset-x-0 rounded-b-sm bg-ink/10"
+          style={{
+            top: `${(1 - cursorF) * 100}%`,
+            height: `max(${(frameWindowS(stepMs) * 1000 * 100) / Math.max(1, p.nowMs - p.rangeStartMs)}%, 3px)`,
+          }}
+        />
         <div
           className="pointer-events-none absolute inset-x-0 -translate-y-1/2"
           style={{ top: `${(1 - cursorF) * 100}%` }}

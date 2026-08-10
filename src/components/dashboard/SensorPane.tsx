@@ -188,7 +188,7 @@ function SensorPane({
 
         {/* 24h stats: one quiet line, no boxes */}
         {stats && (
-          <div className="mt-2 flex items-baseline gap-4 border-t pt-2.5 text-[11px] text-muted-foreground">
+          <div className="flex items-baseline gap-4 text-[11px] text-muted-foreground">
             {(
               [
                 [tr.pane.statAvg, stats.avg],

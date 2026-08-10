@@ -7,11 +7,20 @@
 import { memo, useEffect, useState } from "react";
 import { FastForward } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { ATHENS_TZ } from "@/lib/dashboard/time";
+import { ATHENS_TZ, athensWallTime } from "@/lib/dashboard/time";
 import { LOCALE } from "@/lib/strings/dashboard";
 import { SKIP_HOLD_MS, type SkipEvent } from "./SkipFlash";
 
-function CurrentDate({ cursorMs, skip }: { cursorMs: number; skip: SkipEvent | null }) {
+function CurrentDate({
+  cursorMs,
+  windowS,
+  skip,
+}: {
+  cursorMs: number;
+  /** The trailing aggregation window of the shown frame (speed-dependent). */
+  windowS: number;
+  skip: SkipEvent | null;
+}) {
   // Same derived-dismiss pattern as SkipFlash: emphasized while the hold runs.
   const [dismissedSeq, setDismissedSeq] = useState(0);
   const emphasized = skip != null && skip.seq !== dismissedSeq;
@@ -36,6 +45,15 @@ function CurrentDate({ cursorMs, skip }: { cursorMs: number; skip: SkipEvent | n
     .join("")
     .replace(/^[\s,]+/, "");
 
+  // The frame is a TRAILING window ending at the cursor — show the whole
+  // span being averaged, not just its end. When the span crosses midnight
+  // (6-hour frames do), the start gets its weekday.
+  const startMs = cursorMs - windowS * 1000;
+  const timeFmt = new Intl.DateTimeFormat(LOCALE, { timeZone: ATHENS_TZ, hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
+  const crossesDay = athensWallTime(startMs).day !== athensWallTime(cursorMs).day;
+  const dayFmt = new Intl.DateTimeFormat(LOCALE, { timeZone: ATHENS_TZ, weekday: "short" });
+  const range = `${crossesDay ? `${dayFmt.format(startMs)} ` : ""}${timeFmt.format(startMs)}–${timeFmt.format(cursorMs)}`;
+
   return (
     <div
       className={cn(
@@ -51,6 +69,9 @@ function CurrentDate({ cursorMs, skip }: { cursorMs: number; skip: SkipEvent | n
         )}
       >
         {weekday}, {rest}
+        <span className={cn("ml-1.5 font-normal", emphasized ? "text-foreground/80" : "text-muted-foreground/80")}>
+          · {range}
+        </span>
       </span>
     </div>
   );

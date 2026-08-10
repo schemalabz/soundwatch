@@ -65,7 +65,7 @@ export default function TimelineChart({
       new Intl.DateTimeFormat(
         LOCALE,
         bucket === "hour"
-          ? { timeZone: "UTC", weekday: "short", hour: "2-digit", minute: "2-digit" }
+          ? { timeZone: "UTC", weekday: "short", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }
           : { timeZone: "UTC", day: "numeric", month: "short" }
       ),
     [bucket]
@@ -75,7 +75,7 @@ export default function TimelineChart({
       new Intl.DateTimeFormat(
         LOCALE,
         bucket === "hour"
-          ? { timeZone: "UTC", weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }
+          ? { timeZone: "UTC", weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }
           : { timeZone: "UTC", weekday: "long", day: "numeric", month: "long" }
       ),
     [bucket]
@@ -162,7 +162,7 @@ export default function TimelineChart({
     }
 
     // ~6 x-axis ticks aligned to run starts where possible.
-    const tickEvery = Math.max(1, Math.round(points.length / (compact ? 4 : 6)));
+    const tickEvery = Math.max(1, Math.round(points.length / (compact ? 3 : 6)));
     const ticks = points.map((_, i) => i).filter((i) => i % tickEvery === 0);
 
     const gridLevels: number[] = [];
@@ -354,7 +354,7 @@ export default function TimelineChart({
             </span>
             <span className="tabular-nums">{tr.board.measurements(fmtInt(hoveredPoint.n))}</span>
           </>
-        ) : (
+        ) : compact ? null : (
           <span>
             — <MetricMention metric={metric} onHover={onMetricRefHover} /> · {tr.charts.timelineBand}
           </span>
