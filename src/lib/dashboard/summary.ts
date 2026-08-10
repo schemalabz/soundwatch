@@ -70,9 +70,10 @@ function locationPhrase(locations: readonly LocationPin[]): string {
   if (locations.length === 0) return "στην Αθήνα";
   if (locations.length > 2) return "σε διάφορες τοποθεσίες της Αθήνας";
   const name = (p: LocationPin) => p.label ?? "επιλεγμένο σημείο";
+  // Pins are radii, not exact addresses — the phrase says so.
   return locations.length === 1
-    ? `στην ${name(locations[0])}`
-    : `στην ${name(locations[0])} και στην ${name(locations[1])}`;
+    ? `κοντά στην ${name(locations[0])}`
+    : `κοντά στην ${name(locations[0])} και στην ${name(locations[1])}`;
 }
 
 /** The trailing-window phrase when nothing narrows the period: read the

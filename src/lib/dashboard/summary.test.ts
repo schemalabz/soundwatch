@@ -46,11 +46,11 @@ describe("summarySentence", () => {
   it("locations: one, two, several", () => {
     const pin = (label: string) => ({ lng: 23.7, lat: 37.98, radiusM: 500, label });
     expect(summarySentence(filters({ locations: [pin("Πυθαγόρα 4")] }), DATA_START_90D, NOW).title).toBe(
-      "Ο θόρυβος στην Πυθαγόρα 4"
+      "Ο θόρυβος κοντά στην Πυθαγόρα 4"
     );
     expect(
       summarySentence(filters({ locations: [pin("Πυθαγόρα 4"), pin("Αλεξάνδρας 12")] }), DATA_START_90D, NOW).title
-    ).toBe("Ο θόρυβος στην Πυθαγόρα 4 και στην Αλεξάνδρας 12");
+    ).toBe("Ο θόρυβος κοντά στην Πυθαγόρα 4 και στην Αλεξάνδρας 12");
     expect(
       summarySentence(filters({ locations: [pin("α"), pin("β"), pin("γ")] }), DATA_START_90D, NOW).title
     ).toBe("Ο θόρυβος σε διάφορες τοποθεσίες της Αθήνας");
