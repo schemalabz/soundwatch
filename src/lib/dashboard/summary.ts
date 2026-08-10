@@ -15,7 +15,9 @@ import { ATHENS_TZ, athensWallTime } from "./time";
 import type { DashboardFilters, DateRange, HourPreset, LocationPin } from "./filters";
 
 export interface SummarySentence {
-  /** "Ο θόρυβος στην Αθήνα" */
+  /** Snapshot mode: the small lead-in line ("στιγμιότυπο από"). */
+  kicker?: string;
+  /** "Ο θόρυβος στην Αθήνα" — or, under a kicker, "τον θόρυβο στην Αθήνα". */
   title: string;
   /** "τον τελευταίο μήνα, μόνο Σαββατοκύριακα" */
   qualifiers: string;
@@ -140,9 +142,8 @@ export function summarySentence(
   }
 
   return {
-    title: snapshot
-      ? `Στιγμιότυπο από τον θόρυβο ${locationPhrase(f.locations)}`
-      : `Ο θόρυβος ${locationPhrase(f.locations)}`,
+    kicker: snapshot ? "στιγμιότυπο από" : undefined,
+    title: snapshot ? `τον θόρυβο ${locationPhrase(f.locations)}` : `Ο θόρυβος ${locationPhrase(f.locations)}`,
     qualifiers: parts.join(", "),
   };
 }

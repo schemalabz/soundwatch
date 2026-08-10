@@ -187,7 +187,7 @@ function FilterRail(p: FilterRailProps) {  devRenderCount("FilterRail");
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
             {p.snapshotStartMs != null && p.snapshotEndMs != null && (
-              <div className="mb-1 flex items-center gap-1.5 text-[10.5px] font-semibold text-sound">
+              <div className="mb-0.5 flex items-center gap-1.5 text-[10.5px] font-medium text-muted-foreground">
                 {p.snapshotLive && (
                   <span className="relative flex size-1.5 shrink-0">
                     <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-sound opacity-60" />
@@ -199,6 +199,9 @@ function FilterRail(p: FilterRailProps) {  devRenderCount("FilterRail");
                   {snapshotTimeFmt.format(p.snapshotEndMs)}
                 </span>
               </div>
+            )}
+            {sentence.kicker && (
+              <p className="text-[11px] leading-tight text-muted-foreground">{sentence.kicker}</p>
             )}
             <p className="text-[15px] font-semibold leading-snug tracking-tight text-foreground">{sentence.title}</p>
             <p className="mt-0.5 text-[12px] leading-snug text-foreground/75">{sentence.qualifiers}</p>

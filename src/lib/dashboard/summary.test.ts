@@ -71,9 +71,10 @@ describe("summarySentence", () => {
     expect(s.qualifiers).toBe("τον Μάιο και τον Ιούνιο");
   });
 
-  it("snapshot mode reads as one sentence", () => {
+  it("snapshot mode splits into kicker + accusative title", () => {
     const s = summarySentence(EMPTY_FILTERS, DATA_START_90D, NOW, true);
-    expect(s.title).toBe("Στιγμιότυπο από τον θόρυβο στην Αθήνα");
+    expect(s.kicker).toBe("στιγμιότυπο από");
+    expect(s.title).toBe("τον θόρυβο στην Αθήνα");
   });
 
   it("day+evening+night covers the clock — no hour clause", () => {
