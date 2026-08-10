@@ -60,7 +60,25 @@ export interface FilterRailProps {
   onAddPin: (lng: number, lat: number, label: string) => void;
   /** A metric mention elsewhere in the app is hovered — light the picker. */
   metricGlow?: boolean;
+  /** The frame span on display (map + instants only): the super-title. */
+  snapshotLive?: boolean;
+  snapshotStartMs?: number | null;
+  snapshotEndMs?: number | null;
 }
+
+const snapshotTimeFmt = new Intl.DateTimeFormat(LOCALE, {
+  timeZone: ATHENS_TZ,
+  hour: "2-digit",
+  minute: "2-digit",
+  hourCycle: "h23",
+});
+const snapshotDateFmt = new Intl.DateTimeFormat(LOCALE, {
+  timeZone: ATHENS_TZ,
+  weekday: "long",
+  day: "numeric",
+  month: "long",
+  year: "numeric",
+});
 
 const PERIODS: PeriodId[] = ["24h", "7d", "30d"];
 const DAY_GROUPS: DayGroup[] = ["weekend", "weekday"];
@@ -133,9 +151,10 @@ function FilterRail(p: FilterRailProps) {  devRenderCount("FilterRail");
     [monthFmt]
   );
 
+  const isSnapshot = p.snapshotStartMs != null && p.snapshotEndMs != null;
   const sentence = useMemo(
-    () => summarySentence(p.filters, p.dataStartMs, nowMin),
-    [p.filters, p.dataStartMs, nowMin]
+    () => summarySentence(p.filters, p.dataStartMs, nowMin, isSnapshot),
+    [p.filters, p.dataStartMs, nowMin, isSnapshot]
   );
 
   // ~1 reading per sensor-minute over the sensors the location pins keep:
@@ -167,6 +186,20 @@ function FilterRail(p: FilterRailProps) {  devRenderCount("FilterRail");
       <div className="border-y bg-card px-5 py-4">
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
+            {p.snapshotStartMs != null && p.snapshotEndMs != null && (
+              <div className="mb-1 flex items-center gap-1.5 text-[10.5px] font-semibold text-sound">
+                {p.snapshotLive && (
+                  <span className="relative flex size-1.5 shrink-0">
+                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-sound opacity-60" />
+                    <span className="relative inline-flex size-1.5 rounded-full bg-sound" />
+                  </span>
+                )}
+                <span className="truncate tabular-nums">
+                  {snapshotDateFmt.format(p.snapshotEndMs)} · {snapshotTimeFmt.format(p.snapshotStartMs)}–
+                  {snapshotTimeFmt.format(p.snapshotEndMs)}
+                </span>
+              </div>
+            )}
             <p className="text-[15px] font-semibold leading-snug tracking-tight text-foreground">{sentence.title}</p>
             <p className="mt-0.5 text-[12px] leading-snug text-foreground/75">{sentence.qualifiers}</p>
           </div>

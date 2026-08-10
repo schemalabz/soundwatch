@@ -96,7 +96,13 @@ function joinGreek(items: string[]): string {
   return `${items.slice(0, -1).join(", ")} και ${items[items.length - 1]}`;
 }
 
-export function summarySentence(f: DashboardFilters, dataStartMs: number, nowMs: number): SummarySentence {
+export function summarySentence(
+  f: DashboardFilters,
+  dataStartMs: number,
+  nowMs: number,
+  /** Viewing a single frame (map + instants): the title reads as one. */
+  snapshot = false
+): SummarySentence {
   const parts: string[] = [];
 
   // 1. The period: custom ranges > trailing preset > selected months > the
@@ -134,7 +140,9 @@ export function summarySentence(f: DashboardFilters, dataStartMs: number, nowMs:
   }
 
   return {
-    title: `Ο θόρυβος ${locationPhrase(f.locations)}`,
+    title: snapshot
+      ? `Στιγμιότυπο από τον θόρυβο ${locationPhrase(f.locations)}`
+      : `Ο θόρυβος ${locationPhrase(f.locations)}`,
     qualifiers: parts.join(", "),
   };
 }

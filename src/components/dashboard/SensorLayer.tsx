@@ -236,10 +236,14 @@ function SensorLayer({ map, sensors, cursor, stepMs, segments, playing, metric, 
   useEffect(() => {
     if (cursor !== "live" || hasOverride) return;
     let cancelled = false;
+    // Live IS a frame, and the frame window follows the playback speed —
+    // switching speeds while live changes what "now" aggregates over, and
+    // the circles refetch immediately (stepMs is a dependency).
+    const windowS = frameWindowS(stepMs);
     const load = async () => {
       try {
         const at = quantizeFrameMs(Date.now());
-        const res = await fetch(`/api/frames?at=${at}&window=300&metric=${metric}`, { cache: "no-store" });
+        const res = await fetch(`/api/frames?at=${at}&window=${windowS}&metric=${metric}`, { cache: "no-store" });
         const body: { frames: Record<string, FrameData> } = await res.json();
         if (cancelled) return;
         liveFrameRef.current = body.frames[String(at)] ?? {};
@@ -254,7 +258,7 @@ function SensorLayer({ map, sensors, cursor, stepMs, segments, playing, metric, 
       cancelled = true;
       clearInterval(timer);
     };
-  }, [cursor, metric, hasOverride]);
+  }, [cursor, metric, stepMs, hasOverride]);
 
   // --- prefetcher: current frame + the playback path ahead, one batch ---
   const cursorQ = cursor === "live" ? "live" : quantizeFrameMs(cursor);

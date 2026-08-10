@@ -23,7 +23,7 @@ import {
   selectedSegments,
   type DashboardFilters,
 } from "@/lib/dashboard/filters";
-import { frameWindowS, type FrameData } from "@/lib/dashboard/frames";
+import { frameWindowS, quantizeFrameMs, type FrameData } from "@/lib/dashboard/frames";
 import type { FreshnessResponse } from "@/types/freshness";
 import { reverseGeocode } from "@/lib/dashboard/geocode";
 import FilterRail from "./FilterRail";
@@ -327,6 +327,12 @@ export default function DashboardShell() {  devRenderCount("DashboardShell");
 
   const activeFilterCount =
     (filters.period ? 1 : 0) + filters.days.size + filters.hours.size + filters.months.size;
+  // The rail's snapshot super-title: the exact frame span on display, as
+  // primitives so the rail's memo only fires when the frame really moves.
+  const showSnapshot = view === "map" && mode === "instants";
+  const snapshotWindowS = frameWindowS(PLAYBACK_SPEEDS[speedIndex].simSecondsPerRealSecond * 1000);
+  const snapshotEndMs = showSnapshot ? quantizeFrameMs(cursor === "live" ? nowMinute : cursor) : null;
+
   const railProps = {
     filters,
     segments,
@@ -344,6 +350,9 @@ export default function DashboardShell() {  devRenderCount("DashboardShell");
     onTogglePlacing,
     onAddPin,
     metricGlow,
+    snapshotLive: showSnapshot && cursor === "live",
+    snapshotStartMs: snapshotEndMs == null ? null : snapshotEndMs - snapshotWindowS * 1000,
+    snapshotEndMs,
   };
 
   if (!mounted) return <div className="h-full bg-background" />;
@@ -403,6 +412,7 @@ export default function DashboardShell() {  devRenderCount("DashboardShell");
           {selectedSensorId && (
             <SensorPane
               sensorId={selectedSensorId}
+              windowS={frameWindowS(PLAYBACK_SPEEDS[speedIndex].simSecondsPerRealSecond * 1000)}
               onClose={onClosePane}
               onGoToMap={view !== "map" ? onGoToMap : undefined}
             />

@@ -421,13 +421,26 @@ function HorizontalTimebar(p: TimebarProps) {
             "needle" is really a range — a band ending at the cursor, as wide
             as the interval being averaged (speed-dependent), with the strong
             edge at the frame's instant. */}
-        <div
-          className="pointer-events-none absolute inset-y-0 rounded-l-sm bg-ink/10"
-          style={{
-            right: `${(1 - cursorF) * 100}%`,
-            width: `max(${(frameWindowS(stepMs) * 1000 * 100) / Math.max(1, p.nowMs - p.rangeStartMs)}%, 3px)`,
-          }}
-        />
+        {(() => {
+          // The trailing window, CLAMPED to the domain: anchored on its
+          // clamped start and sized to the cursor, so it can never spill
+          // past the rail's left edge (a 6h window near the domain start
+          // used to flood the whole card).
+          const domain = Math.max(1, p.nowMs - p.rangeStartMs);
+          const bandStartF = Math.max(0, (cursorMs - frameWindowS(stepMs) * 1000 - p.rangeStartMs) / domain);
+          const bandPct = Math.max(0, cursorF - bandStartF) * 100;
+          return (
+            <div
+              className="pointer-events-none absolute inset-y-0 rounded-l-sm"
+              style={{
+                left: `${bandStartF * 100}%`,
+                width: `max(${bandPct}%, 2px)`,
+                background:
+                  "linear-gradient(to right, color-mix(in srgb, var(--sw-sound) 5%, transparent), color-mix(in srgb, var(--sw-sound) 26%, transparent))",
+              }}
+            />
+          );
+        })()}
         <div
           className={cn(
             "pointer-events-none absolute inset-y-0 -translate-x-1/2 transition-transform",
@@ -436,7 +449,7 @@ function HorizontalTimebar(p: TimebarProps) {
           style={{ left: `${cursorF * 100}%` }}
         >
           <div className="mx-auto h-full w-[1.5px] bg-ink" />
-          <div className="absolute left-1/2 top-1/2 size-[7px] -translate-x-1/2 -translate-y-1/2 rounded-full border-[1.5px] border-ink bg-card" />
+          <div className="absolute left-1/2 top-1/2 size-[9px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-sound shadow-sm ring-2 ring-card" />
         </div>
         {/* cursor time chip */}
         {!isLive && (
@@ -549,19 +562,28 @@ function VerticalTimebar(p: TimebarProps) {
             </div>
           ))}
         {/* trailing aggregation band (older is downward) + needle */}
-        <div
-          className="pointer-events-none absolute inset-x-0 rounded-b-sm bg-ink/10"
-          style={{
-            top: `${(1 - cursorF) * 100}%`,
-            height: `max(${(frameWindowS(stepMs) * 1000 * 100) / Math.max(1, p.nowMs - p.rangeStartMs)}%, 3px)`,
-          }}
-        />
+        {(() => {
+          const domain = Math.max(1, p.nowMs - p.rangeStartMs);
+          const bandStartF = Math.max(0, (cursorMs - frameWindowS(stepMs) * 1000 - p.rangeStartMs) / domain);
+          const bandPct = Math.max(0, cursorF - bandStartF) * 100;
+          return (
+            <div
+              className="pointer-events-none absolute inset-x-0 rounded-b-sm"
+              style={{
+                top: `${(1 - cursorF) * 100}%`,
+                height: `max(${bandPct}%, 2px)`,
+                background:
+                  "linear-gradient(to bottom, color-mix(in srgb, var(--sw-sound) 26%, transparent), color-mix(in srgb, var(--sw-sound) 5%, transparent))",
+              }}
+            />
+          );
+        })()}
         <div
           className="pointer-events-none absolute inset-x-0 -translate-y-1/2"
           style={{ top: `${(1 - cursorF) * 100}%` }}
         >
           <div className="h-[1.5px] w-full bg-ink" />
-          <div className="absolute left-1/2 top-1/2 size-[7px] -translate-x-1/2 -translate-y-1/2 rounded-full border-[1.5px] border-ink bg-card" />
+          <div className="absolute left-1/2 top-1/2 size-[9px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-sound shadow-sm ring-2 ring-card" />
         </div>
         {/* cursor chip: floats left of the rail */}
         {!isLive && (

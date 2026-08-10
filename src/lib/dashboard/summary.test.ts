@@ -71,6 +71,11 @@ describe("summarySentence", () => {
     expect(s.qualifiers).toBe("τον Μάιο και τον Ιούνιο");
   });
 
+  it("snapshot mode reads as one sentence", () => {
+    const s = summarySentence(EMPTY_FILTERS, DATA_START_90D, NOW, true);
+    expect(s.title).toBe("Στιγμιότυπο από τον θόρυβο στην Αθήνα");
+  });
+
   it("day+evening+night covers the clock — no hour clause", () => {
     const s = summarySentence(filters({ hours: new Set(["day", "evening", "night"]) }), DATA_START_90D, NOW);
     expect(s.qualifiers).toBe("τους τελευταίους 3 μήνες");

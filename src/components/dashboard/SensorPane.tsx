@@ -43,10 +43,13 @@ const DAY_MS = 24 * 3600_000;
 
 function SensorPane({
   sensorId,
+  windowS,
   onClose,
   onGoToMap,
 }: {
   sensorId: string;
+  /** The live frame window (speed-dependent) — the hero must equal the circle. */
+  windowS: number;
   onClose: () => void;
   /** Present outside the map view: jump to the map and fly to this sensor. */
   onGoToMap?: (lng: number, lat: number) => void;
@@ -79,7 +82,7 @@ function SensorPane({
         r.json()
       ),
       // The same 5-minute live frame the map circles render.
-      fetch(`/api/frames?at=${frameAt}&window=300&metric=laeq`, { cache: "no-store" }).then((r) => r.json()),
+      fetch(`/api/frames?at=${frameAt}&window=${windowS}&metric=laeq`, { cache: "no-store" }).then((r) => r.json()),
     ])
       .then(([d, s, f]: [SensorDetail, SeriesResponse, { frames: Record<string, FrameData> }]) => {
         if (cancelled) return;
@@ -90,7 +93,7 @@ function SensorPane({
     return () => {
       cancelled = true;
     };
-  }, [sensorId]);
+  }, [sensorId, windowS]);
 
   const latest = detail?.latestReading ?? null;
   const ageS = latest ? Math.max(0, Math.round((nowMs - new Date(latest.recordedAt).getTime()) / 1000)) : null;
@@ -140,7 +143,7 @@ function SensorPane({
             <span className="text-[11px] font-medium leading-tight text-muted-foreground">
               dB LAeq
               <br />
-              {tr.pane.liveWindow}
+              {tr.pane.liveWindow(windowS)}
             </span>
           </div>
         )}
