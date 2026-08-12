@@ -5,9 +5,10 @@
 // script only paces). Device bursts are bounded, so pacing lives here.
 //
 // Run where the broker is reachable without the device ACL — i.e. the internal
-// listener. On the droplet:
+// listener. Ships inside the ingester image, so on the droplet:
 //   docker run --rm --network <net> -e MQTT_BROKER_URL=mqtt://mosquitto:1884 \
-//     <ingester-image> npx tsx scripts/fetch-framelog.ts bench5 [startOff] [maxBytes]
+//     <ingester-image> npx tsx scripts/fetch-framelog.ts <token> <YYMMDD> [off] [maxBytes]
+// Normally invoked by scripts/framelog-pull.sh from cron, not by hand.
 import mqtt from "mqtt";
 
 // What a received payload means for the pull, given the namespace we asked for.
@@ -19,11 +20,25 @@ const QUIET_MS = 500;           // chunks land ~73 ms apart; this is a real gap
 const BACKOFF_MS = 500;         // first retry after an empty round
 const BACKOFF_MAX_MS = 4000;
 const STALL_MS = 30000;         // no progress at all for this long = give up
+const PROGRESS_MS = 30000;      // heartbeat: a 64-minute pull must not be silent
 
 export type WireEvent =
   | { kind: "chunk"; end: number }
   | { kind: "eof"; size: number }
   | { kind: "legacy-ignored" };
+
+// A full day is ~64 minutes. Without a heartbeat that is an hour of silence,
+// and a wedged pull is indistinguishable from a working one.
+export function progressLine(s: {
+  nextOff: number; startOff: number; eofSize: number | null; elapsedMs: number;
+}): string {
+  const at = `  @ ${s.nextOff}${s.eofSize !== null ? `/${s.eofSize}` : ""}`;
+  const secs = Math.round(s.elapsedMs / 1000);
+  const bytes = s.nextOff - s.startOff;
+  if (bytes === 0) return `${at} — no progress in ${secs}s`;
+  if (secs === 0) return `${at} — ${bytes} B in 0s`;
+  return `${at} — ${bytes} B in ${secs}s (${Math.round(bytes / secs)} B/s)`;
+}
 
 export type PacerDecision =
   | { kind: "done"; bytes: number }
@@ -59,9 +74,10 @@ export function decide(s: {
   return { kind: "request", off: s.nextOff, delayMs };
 }
 
-// Mirrors isDay in mqtt-ingester/framelog.ts. Duplicated rather than imported
-// because the droplet's cron mounts THIS FILE ALONE into the ingester
-// container, so it has to stand by itself.
+// Mirrors isDay in mqtt-ingester/framelog.ts. Deliberately duplicated: this
+// runs as a one-shot container and the ingester as a long-lived one, and a
+// shared import would make a parser change silently reshape both at once.
+// Keep the two in step by hand — the tests on each side pin the same contract.
 function isDay(s: string): boolean {
   if (!/^\d{6}$/.test(s)) return false;
   const month = Number(s.slice(2, 4));
@@ -138,6 +154,10 @@ let expectedEnd = 0;            // where the in-flight burst should reach
 let quietTimer: NodeJS.Timeout | undefined;
 let finished = false;
 const began = Date.now();
+const heartbeat = setInterval(
+  () => console.log(progressLine({ nextOff, startOff, eofSize, elapsedMs: Date.now() - began })),
+  PROGRESS_MS,
+);
 
 let offAtRequest = -1;
 function request(): void {
@@ -166,6 +186,7 @@ function step(burstComplete: boolean): void {
   });
   if (d.kind === "done" || d.kind === "give-up") {
     finished = true;
+    clearInterval(heartbeat);
     const secs = (Date.now() - began) / 1000;
     const bytes = nextOff - startOff;
     if (d.kind === "done") {

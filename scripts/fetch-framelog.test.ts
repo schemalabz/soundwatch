@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { interpret, decide, BURST, CHUNK } from "./fetch-framelog";
+import { interpret, decide, progressLine, BURST, CHUNK } from "./fetch-framelog";
 
 // Pacing decisions. The device answers a burst in ~73 ms/chunk regardless of
 // burst size, so a 16-chunk burst lands in ~1.2 s; the old fixed 4 s tick then
@@ -47,6 +47,30 @@ describe("decide", () => {
 
   it("prefers done over give-up when both could apply", () => {
     expect(decide({ ...base, nextOff: 300000, msSinceProgress: 99999 }).kind).toBe("done");
+  });
+});
+
+// A full day takes ~64 min. Without a heartbeat that is an hour of silence in
+// the log, and a stalled pull looks exactly like a working one.
+describe("progressLine", () => {
+  it("reports offset, bytes moved and rate", () => {
+    expect(progressLine({ nextOff: 120000, startOff: 20000, eofSize: null, elapsedMs: 60000 }))
+      .toBe("  @ 120000 — 100000 B in 60s (1667 B/s)");
+  });
+
+  it("includes the file size once EOF has been seen", () => {
+    expect(progressLine({ nextOff: 120000, startOff: 20000, eofSize: 6546672, elapsedMs: 60000 }))
+      .toBe("  @ 120000/6546672 — 100000 B in 60s (1667 B/s)");
+  });
+
+  it("says so plainly when nothing has moved", () => {
+    expect(progressLine({ nextOff: 20000, startOff: 20000, eofSize: null, elapsedMs: 30000 }))
+      .toBe("  @ 20000 — no progress in 30s");
+  });
+
+  it("does not divide by zero on the first tick", () => {
+    expect(progressLine({ nextOff: 21000, startOff: 20000, eofSize: null, elapsedMs: 0 }))
+      .toBe("  @ 21000 — 1000 B in 0s");
   });
 });
 
