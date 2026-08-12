@@ -168,7 +168,8 @@ Firmware-side issues live in the firmware repo's `HANDOFF.md`; these are the ser
 **Frame log** (`frame_log_chunks`, nightly pull via `scripts/framelog-pull.sh`)
 
 - **Retention is unsolved.** Nothing expires chunks; at 50 units this grows ~13.6 GB/month against 38 GB free.
-- **Chunks are delivered at QoS 0** and the pacer advances on the highest offset seen, so a lost chunk leaves a silent hole that `string_agg` welds over. Measured: 3 gaps in one complete day file, ~0.2 % of intervals damaged. `readings.frame_count` is a definitive integrity check that nothing currently uses.
+- **Chunks are delivered at QoS 0** and the pacer advances on the highest offset seen, so a lost chunk leaves a silent hole that `string_agg` welds over. `readings.frame_count` is a definitive integrity check that nothing currently uses.
+- **The pull cannot backfill.** The resume watermark is `max(offset + length(data))`, so a pull only ever moves the high-water mark *forward* — any hole below it is permanent unless something explicitly re-requests that byte range. Measured on 2026-08-11: abc123 8,280 bytes missing across 4 gaps and bench4 28,080 across 2 (ordinary chunk loss), but **bench3 2,643,480 across 3, the largest a single 2.34 MB span** — a day that was only ever partially collected under the old hourly regime, which the nightly then resumed straight past. Gap detection exists (see the query in the measurement contract) but nothing acts on it; a backfill mode that re-requests known holes is not built.
 - The schema is **transport-shaped** (one row per 360-byte wire slice) while the data is used per-interval, which is why reading it is a multi-step recipe and integrity cannot be checked cheaply.
 
 **Operational**
