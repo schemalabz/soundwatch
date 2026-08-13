@@ -122,7 +122,7 @@ const CAGG_STAMP = stampFor(CAGG_SQL);
  * over the materialized hypertable — COMMENT ON MATERIALIZED VIEW errors with
  * "is not a materialized view".
  */
-const STAMP_STATEMENT = {
+const STAMP_STATEMENT: { label: string; sql: string; call?: boolean } = {
   label: "definition stamp",
   sql: `COMMENT ON VIEW readings_hour_bins IS '${CAGG_STAMP}'`,
 };
@@ -143,24 +143,51 @@ const STAMP_STATEMENT = {
  * Safe to drop: raw readings are retained (no retention policy), so the
  * refresh rebuilds all history exactly.
  */
-async function dropIfDefinitionDrifted(prisma: PrismaClient): Promise<void> {
+async function dropIfDefinitionDrifted(prisma: PrismaClient): Promise<boolean> {
   const rows = await prisma.$queryRawUnsafe<{ stamp: string | null }[]>(
     `SELECT obj_description(c.oid, 'pg_class') AS stamp
      FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
      WHERE c.relname = 'readings_hour_bins' AND n.nspname = 'public'`
   );
-  if (rows.length === 0) return; // nothing to drift from
-  if (rows[0].stamp === CAGG_STAMP) return;
+  if (rows.length === 0) return false; // nothing to drift from
+  if (rows[0].stamp === CAGG_STAMP) return false;
   console.log(
     `[timescale-objects] definition changed (${rows[0].stamp ?? "unstamped"} -> ${CAGG_STAMP}) — rebuilding`
   );
   await prisma.$executeRawUnsafe(`DROP MATERIALIZED VIEW IF EXISTS readings_hour_bins CASCADE`);
+  return true;
+}
+
+/** Wait out whoever holds the refresh, then take our turn. */
+async function retryRefresh(prisma: PrismaClient, sql: string): Promise<void> {
+  for (let attempt = 1; attempt <= 10; attempt++) {
+    await new Promise((r) => setTimeout(r, Math.min(30_000, 2_000 * attempt)));
+    try {
+      await prisma.$executeRawUnsafe(sql);
+      console.log(`[timescale-objects] refresh succeeded on attempt ${attempt + 1}`);
+      return;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (!/concurrent refresh/i.test(msg)) throw err;
+    }
+  }
+  // Do not start the service on an empty aggregate pretending to be a full one.
+  throw new Error(
+    "could not refresh readings_hour_bins after rebuilding it — it is EMPTY and " +
+      "every rollup endpoint would serve near-nothing"
+  );
 }
 
 async function main() {
   const prisma = new PrismaClient();
   try {
-    await dropIfDefinitionDrifted(prisma);
+    // A rebuild leaves the aggregate EMPTY until the catch-up refresh runs, so
+    // losing the race for it is not the harmless outcome it is on a normal
+    // boot: /api/series and /api/aggregate would serve almost nothing, and the
+    // live-edge policy only reaches back three hours. (Observed exactly this
+    // locally — 4 of 168 hourly buckets survived a rebuild whose refresh was
+    // skipped.) The late-data policy would repair it, a day later.
+    const rebuilt = await dropIfDefinitionDrifted(prisma);
     for (const s of [STATEMENTS[0], STAMP_STATEMENT, ...STATEMENTS.slice(1)]) {
       try {
         await prisma.$executeRawUnsafe(s.sql);
@@ -170,11 +197,18 @@ async function main() {
         if (/already exists/i.test(msg)) {
           console.log(`[timescale-objects] exists: ${s.label}`);
         } else if (/concurrent refresh/i.test(msg)) {
-          // The ingester and sim-backfill both run this on boot and can reach
-          // the refresh together (Postgres 55P03). Whoever got there first is
-          // doing the work, and the refresh policy would catch up regardless —
-          // losing the race is not a failure.
-          console.log(`[timescale-objects] already running elsewhere: ${s.label}`);
+          // The app, the ingester and sim-backfill all run this on boot and can
+          // reach the refresh together (Postgres 55P03). On a normal boot the
+          // aggregate is already populated and whoever got there first is doing
+          // the work, so losing the race is not a failure.
+          //
+          // After a rebuild it is. Wait for the other party and try again.
+          if (rebuilt && s.call) {
+            console.log(`[timescale-objects] refresh contended after a rebuild; retrying: ${s.label}`);
+            await retryRefresh(prisma, s.sql);
+          } else {
+            console.log(`[timescale-objects] already running elsewhere: ${s.label}`);
+          }
         } else {
           throw err;
         }
