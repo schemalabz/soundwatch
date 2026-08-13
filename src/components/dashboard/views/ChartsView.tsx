@@ -8,7 +8,9 @@
 
 import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import { dashboardStrings as tr, LOCALE } from "@/lib/strings/dashboard";
+import { cn } from "@/lib/utils";
 import {
+  instantMatches,
   dowSelectionMask,
   hourSelectionMask,
   monthSelectionMask,
@@ -20,20 +22,78 @@ import MetricMention from "../MetricMention";
 import RadialChart, { type RadialSlice } from "../charts/RadialChart";
 import TimelineChart from "../charts/TimelineChart";
 import type { SeriesBucketData, SeriesResponse } from "../charts/types";
+import { BUCKETS, bucketViable, defaultBucket } from "@/lib/dashboard/buckets";
 import { devRenderCount } from "@/lib/dashboard/devtools";
+
+// Slow enough not to hammer a raw-readings query, fast enough that a
+// 1-minute chart visibly advances while you watch it.
+const LIVE_REFRESH_MS = 30_000;
 
 /** Mon-first display order over EXTRACT-style dow (0 = Sunday). */
 const DOW_ORDER = [1, 2, 3, 4, 5, 6, 0];
 
-function Section({ title, caption, children }: { title: string; caption?: React.ReactNode; children: React.ReactNode }) {
+function Section({
+  title,
+  caption,
+  aside,
+  children,
+}: {
+  title: string;
+  caption?: React.ReactNode;
+  /** Controls that belong to this chart, right-aligned on the title row. */
+  aside?: React.ReactNode;
+  children: React.ReactNode;
+}) {
   return (
     <section>
-      <h2 className="text-[13px] font-semibold tracking-tight text-foreground">
-        {title}
-        {caption && <span className="ml-2 text-[10.5px] font-normal text-muted-foreground">{caption}</span>}
-      </h2>
+      <div className="flex items-baseline justify-between gap-3">
+        <h2 className="text-[13px] font-semibold tracking-tight text-foreground">
+          {title}
+          {caption && <span className="ml-2 text-[10.5px] font-normal text-muted-foreground">{caption}</span>}
+        </h2>
+        {aside}
+      </div>
       <div className="mt-2">{children}</div>
     </section>
+  );
+}
+
+/** Resolution picker: unviable widths are shown disabled rather than hidden,
+ *  so the ladder reads the same at every domain length. */
+function BucketPicker({
+  domainMs,
+  active,
+  onChange,
+}: {
+  domainMs: number;
+  active: string;
+  onChange: (id: string) => void;
+}) {
+  return (
+    <div className="flex items-center gap-1" role="group" aria-label={tr.charts.resolution}>
+      {BUCKETS.map((b) => {
+        const viable = bucketViable(domainMs, b.seconds);
+        return (
+          <button
+            key={b.id}
+            type="button"
+            disabled={!viable}
+            aria-pressed={b.id === active}
+            title={viable ? b.label : tr.charts.resolutionUnavailable}
+            onClick={() => onChange(b.id)}
+            className={cn(
+              "rounded px-1.5 py-0.5 text-[10px] font-medium tabular-nums transition-colors",
+              b.id === active
+                ? "bg-sound/15 text-foreground inset-ring inset-ring-sound/40"
+                : "text-muted-foreground hover:bg-secondary hover:text-foreground",
+              !viable && "pointer-events-none text-muted-foreground/30"
+            )}
+          >
+            {b.id}
+          </button>
+        );
+      })}
+    </div>
   );
 }
 
@@ -79,23 +139,44 @@ function ChartsView({
   const [result, setResult] = useState<{ query: string; data: SeriesResponse } | null>(null);
 
   const domainDays = (nowMs - domainStartMs) / 86_400_000;
-  const bucket: "hour" | "day" = domainDays <= 8 ? "hour" : "day";
-  const query = `${aggQuery}&bucket=${bucket}`;
+  const domainMs = Math.max(1, nowMs - domainStartMs);
+
+  // null = follow the domain. An explicit choice is kept only while it stays
+  // viable, so changing the period cannot strand the chart on 1-minute
+  // buckets across 90 days.
+  const [chosenBucket, setChosenBucket] = useState<string | null>(null);
+  const chosenViable = BUCKETS.find((b) => b.id === chosenBucket && bucketViable(domainMs, b.seconds));
+  const bucket = chosenViable ?? defaultBucket(domainMs);
+
+  const query = `${aggQuery}&bucket=${bucket.id}`;
   const series = result?.query === query ? result.data : null;
   const loading = series == null;
 
+  // Live while the filters admit the present — the exact test the timebar's
+  // LIVE zone uses, so the two can never disagree. 24h/7d/30d and the
+  // unfiltered span all qualify; a date range that ended in the past, or a
+  // night-only filter during the day, correctly does not.
+  const isLive = instantMatches(filters, nowMs);
+
   useEffect(() => {
     let cancelled = false;
-    fetch(`/api/series?${query}`, { cache: "no-store" })
-      .then((r) => r.json())
-      .then((body: SeriesResponse) => {
-        if (!cancelled) setResult({ query, data: body });
-      })
-      .catch(() => {});
-    return () => {
+    const load = () =>
+      fetch(`/api/series?${query}`, { cache: "no-store" })
+        .then((r) => r.json())
+        .then((body: SeriesResponse) => {
+          if (!cancelled) setResult({ query, data: body });
+        })
+        .catch(() => {});
+    load();
+    if (!isLive) return () => {
       cancelled = true;
     };
-  }, [query]);
+    const timer = setInterval(load, LIVE_REFRESH_MS);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [query, isLive]);
 
   const hourMask = useMemo(() => hourSelectionMask(filters), [filters]);
   const dowMask = useMemo(() => dowSelectionMask(filters), [filters]);
@@ -171,11 +252,33 @@ function ChartsView({
     <div className="absolute inset-0 z-10 overflow-y-auto bg-background">
       <div className="mx-auto max-w-4xl px-6 pb-16 pt-[4.5rem] md:px-10">
         <div className="flex flex-col gap-10">
-          <Section title={tr.charts.timeline} caption={<MetricMention metric={metric} onHover={onMetricRefHover} />}>
+          <Section
+            title={tr.charts.timeline}
+            caption={
+              <>
+                <MetricMention metric={metric} onHover={onMetricRefHover} />
+                {isLive && (
+                  <span className="ml-2 inline-flex items-center gap-1 align-baseline">
+                    <span className="relative inline-flex size-1.5">
+                      <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-sound opacity-60" />
+                      <span className="relative inline-flex size-1.5 rounded-full bg-sound" />
+                    </span>
+                    <span className="text-[9.5px] font-semibold tracking-[0.1em] text-sound">LIVE</span>
+                  </span>
+                )}
+              </>
+            }
+            aside={<BucketPicker domainMs={domainMs} active={bucket.id} onChange={setChosenBucket} />}
+          >
             {loading || !series ? (
               <Skeleton />
             ) : (
-              <TimelineChart points={series.timeline} metric={metric} bucket={series.bucket} onMetricRefHover={onMetricRefHover} />
+              <TimelineChart
+                points={series.timeline}
+                metric={metric}
+                bucketSeconds={series.bucketSeconds}
+                onMetricRefHover={onMetricRefHover}
+              />
             )}
           </Section>
 

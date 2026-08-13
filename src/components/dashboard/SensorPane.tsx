@@ -40,6 +40,12 @@ interface SensorDetail {
 }
 
 const DAY_MS = 24 * 3600_000;
+// The pane's chart is a fixed last-24h window, so its resolution is fixed
+// too: 5 minutes gives 288 points, fine enough to show a passing lorry.
+const PANE_BUCKET = "5m";
+// The hero already refreshes on its own 5s clock; a chart frozen beside it
+// was the inconsistency.
+const LIVE_REFRESH_MS = 30_000;
 
 function SensorPane({
   sensorId,
@@ -75,23 +81,28 @@ function SensorPane({
 
   useEffect(() => {
     let cancelled = false;
-    const frameAt = quantizeFrameMs(Date.now());
-    Promise.all([
-      fetch(`/api/sensors/${sensorId}`, { cache: "no-store" }).then((r) => r.json()),
-      fetch(`/api/series?from=${Date.now() - DAY_MS}&bucket=hour&sensor=${sensorId}`, { cache: "no-store" }).then((r) =>
-        r.json()
-      ),
-      // The same 5-minute live frame the map circles render.
-      fetch(`/api/frames?at=${frameAt}&window=${windowS}&metric=laeq`, { cache: "no-store" }).then((r) => r.json()),
-    ])
-      .then(([d, s, f]: [SensorDetail, SeriesResponse, { frames: Record<string, FrameData> }]) => {
-        if (cancelled) return;
-        const frame = f.frames?.[String(frameAt)] ?? {};
-        setLoaded({ id: sensorId, detail: d, series: s, liveLaeq: frame[sensorId]?.laeq ?? null });
-      })
-      .catch(() => {});
+    const load = () => {
+      const frameAt = quantizeFrameMs(Date.now());
+      return Promise.all([
+        fetch(`/api/sensors/${sensorId}`, { cache: "no-store" }).then((r) => r.json()),
+        fetch(`/api/series?from=${Date.now() - DAY_MS}&bucket=${PANE_BUCKET}&sensor=${sensorId}`, {
+          cache: "no-store",
+        }).then((r) => r.json()),
+        // The same live frame the map circles render.
+        fetch(`/api/frames?at=${frameAt}&window=${windowS}&metric=laeq`, { cache: "no-store" }).then((r) => r.json()),
+      ])
+        .then(([d, s, f]: [SensorDetail, SeriesResponse, { frames: Record<string, FrameData> }]) => {
+          if (cancelled) return;
+          const frame = f.frames?.[String(frameAt)] ?? {};
+          setLoaded({ id: sensorId, detail: d, series: s, liveLaeq: frame[sensorId]?.laeq ?? null });
+        })
+        .catch(() => {});
+    };
+    load();
+    const timer = setInterval(load, LIVE_REFRESH_MS);
     return () => {
       cancelled = true;
+      clearInterval(timer);
     };
   }, [sensorId, windowS]);
 
@@ -101,7 +112,7 @@ function SensorPane({
     ageS == null ? "var(--sw-silver)" : ageS < 120 ? "var(--sw-ok)" : ageS < 3600 ? "var(--sw-slate)" : "var(--sw-loud)";
   const heroLaeq = liveLaeq ?? latest?.laeq ?? null;
 
-  // 24h stats straight from the hourly buckets: exact energy mean, the
+  // 24h stats straight from the chart's own buckets: exact energy mean, the
   // quietest hour's LAeq, and the loudest recorded instant (a true Lmax).
   const stats = useMemo(() => {
     const pts = series?.timeline ?? [];
@@ -181,7 +192,7 @@ function SensorPane({
             )}
           </div>
           {series && series.timeline.length > 0 ? (
-            <TimelineChart points={series.timeline} metric="laeq" bucket="hour" height={110} compact />
+            <TimelineChart points={series.timeline} metric="laeq" bucketSeconds={series.bucketSeconds} height={110} compact />
           ) : (
             <div className="grid h-24 place-items-center rounded-md bg-secondary text-[11px] text-muted-foreground">
               {series ? tr.pane.noData : "…"}

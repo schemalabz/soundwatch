@@ -12,7 +12,10 @@ export interface SeriesPoint extends SeriesBucketData {
 }
 
 export interface SeriesResponse {
-  bucket: "hour" | "day";
+  /** Bucket id actually served (the server clamps over-fine requests). */
+  bucket: string;
+  /** Width of one point, in seconds. */
+  bucketSeconds: number;
   /** Keyed 0-23. */
   hours: Record<number, SeriesBucketData>;
   /** Keyed 0-6, 0 = Sunday. */

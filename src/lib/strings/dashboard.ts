@@ -81,7 +81,12 @@ export const dashboardStrings = {
   },
   charts: {
     timeline: "Χρονική εξέλιξη",
+    resolution: "Ανάλυση",
+    resolutionUnavailable: "Δεν ταιριάζει σε αυτή την περίοδο",
+    // The shaded envelope needs saying out loud: a reader should not have to
+    // infer that the band is a spread and not an error bar.
     timelineBand: "εύρος L90–L10",
+    bandLegendBand: "εύρος L90–L10 — το 80% των διαστημάτων",
     clock: "Το εικοσιτετράωρο",
     clockCaption: "ανά ώρα της ημέρας",
     dows: "Η εβδομάδα",

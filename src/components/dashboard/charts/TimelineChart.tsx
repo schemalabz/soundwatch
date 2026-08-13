@@ -34,14 +34,15 @@ function useMeasuredWidth(): [React.RefObject<HTMLDivElement | null>, number] {
 export default function TimelineChart({
   points,
   metric,
-  bucket,
+  bucketSeconds,
   onMetricRefHover,
   height,
   compact,
 }: {
   points: SeriesPoint[];
   metric: AggKey;
-  bucket: "hour" | "day";
+  /** Width of one point, in seconds — drives tick format and gap detection. */
+  bucketSeconds: number;
   onMetricRefHover?: (on: boolean) => void;
   /** Chart height in px (defaults to the charts-page size). */
   height?: number;
@@ -64,21 +65,23 @@ export default function TimelineChart({
     () =>
       new Intl.DateTimeFormat(
         LOCALE,
-        bucket === "hour"
-          ? { timeZone: "UTC", weekday: "short", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }
-          : { timeZone: "UTC", day: "numeric", month: "short" }
+        bucketSeconds < 3600
+          ? { timeZone: "UTC", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }
+          : bucketSeconds < 86_400
+            ? { timeZone: "UTC", weekday: "short", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }
+            : { timeZone: "UTC", day: "numeric", month: "short" }
       ),
-    [bucket]
+    [bucketSeconds]
   );
   const fmtFull = useMemo(
     () =>
       new Intl.DateTimeFormat(
         LOCALE,
-        bucket === "hour"
+        bucketSeconds < 86_400
           ? { timeZone: "UTC", weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }
           : { timeZone: "UTC", weekday: "long", day: "numeric", month: "long" }
       ),
-    [bucket]
+    [bucketSeconds]
   );
 
   const geom = useMemo(() => {
@@ -100,7 +103,7 @@ export default function TimelineChart({
 
     // Split into runs of time-adjacent buckets: a jump larger than one
     // bucket means the filters excluded the span in between.
-    const bucketMs = bucket === "hour" ? 3600_000 : 86_400_000;
+    const bucketMs = bucketSeconds * 1000;
     const runs: number[][] = [];
     let run: number[] = [0];
     for (let i = 1; i < points.length; i++) {
@@ -170,7 +173,7 @@ export default function TimelineChart({
 
     return { x, y, lo, hi, runs, lineRuns, gaps, ticks, gridLevels, innerW };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- PAD_*/H derive from compact/height
-  }, [points, width, metric, bucket, compact, height]);
+  }, [points, width, metric, bucketSeconds, compact, height]);
 
   if (points.length === 0) {
     return <div className="py-10 text-center text-[12px] text-muted-foreground">{tr.charts.noData}</div>;
@@ -355,11 +358,24 @@ export default function TimelineChart({
             <span className="tabular-nums">{tr.board.measurements(fmtInt(hoveredPoint.n))}</span>
           </>
         ) : compact ? null : (
-          <span>
-            — <MetricMention metric={metric} onHover={onMetricRefHover} /> · {tr.charts.timelineBand}
+          // Idle: name both marks. The band is a SPREAD, not an error bar or a
+          // confidence interval, and nothing on screen said so.
+          <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
+            <span className="flex items-center gap-1.5">
+              <span className="h-[2px] w-4 rounded-full" style={{ backgroundColor: "var(--sw-sound)" }} />
+              <MetricMention metric={metric} onHover={onMetricRefHover} />
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span
+                className="h-2.5 w-4 rounded-[2px]"
+                style={{ background: "linear-gradient(to bottom, color-mix(in srgb, var(--sw-sound) 22%, transparent), color-mix(in srgb, var(--sw-silver) 30%, transparent))" }}
+              />
+              {tr.charts.bandLegendBand}
+            </span>
           </span>
         )}
       </div>
+
     </div>
   );
 }
