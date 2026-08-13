@@ -94,7 +94,12 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.simulator
-    command: ["sh", "-c", "npx prisma migrate deploy && npx tsx scripts/timescale-objects.ts && exec npx tsx simulator/index.ts backfill"]
+    # timescale-objects runs AFTER the backfill: its initial refresh is what
+    # materializes the aggregate, and running it first (over an empty table)
+    # left every dashboard query merging 6M raw rows until the 15-minute
+    # refresh policy caught up. The ingester creates the aggregate on its own
+    # boot regardless, so nothing depends on it existing before this point.
+    command: ["sh", "-c", "npx prisma migrate deploy && npx tsx simulator/index.ts backfill && exec npx tsx scripts/timescale-objects.ts"]
     environment:
       - DATABASE_URL=postgresql://soundwatch:soundwatch@postgres:5432/soundwatch
       - SIM_BACKFILL_DAYS=${SIM_BACKFILL_DAYS:-90}

@@ -119,6 +119,12 @@ async function main() {
         const msg = err instanceof Error ? err.message : String(err);
         if (/already exists/i.test(msg)) {
           console.log(`[timescale-objects] exists: ${s.label}`);
+        } else if (/concurrent refresh/i.test(msg)) {
+          // The ingester and sim-backfill both run this on boot and can reach
+          // the refresh together (Postgres 55P03). Whoever got there first is
+          // doing the work, and the refresh policy would catch up regardless —
+          // losing the race is not a failure.
+          console.log(`[timescale-objects] already running elsewhere: ${s.label}`);
         } else {
           throw err;
         }
