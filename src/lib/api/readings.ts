@@ -70,6 +70,16 @@ export const READING_SELECT = {
 
 export type ReadingRow = Prisma.ReadingGetPayload<{ select: typeof READING_SELECT }>;
 
+/**
+ * bands_db is a Json column, so Prisma types it as the full JsonValue union.
+ * The ingester only ever writes (number | null)[] — decodeBandsDb in
+ * mqtt-ingester/flavor2.ts, where null means "no energy recorded" for that
+ * band. This is the single place that narrowing happens.
+ */
+export function toBandsDb(value: ReadingRow["bandsDb"]): (number | null)[] | null {
+  return (value as (number | null)[] | null) ?? null;
+}
+
 export function serializeReading(r: ReadingRow): ApiReading {
   const censoring = deriveCensoring(r.histRaw);
   return {
@@ -84,7 +94,7 @@ export function serializeReading(r: ReadingRow): ApiReading {
     lmaxEst: r.lmaxEst,
     lminEst: r.lminEst,
     hist: parseHist(r.histRaw),
-    bandsDb: (r.bandsDb as (number | null)[] | null) ?? null,
+    bandsDb: toBandsDb(r.bandsDb),
     realizedDuty: r.realizedDuty,
     frameCount: r.frameCount,
     intervalMs: r.intervalMs,
