@@ -73,7 +73,7 @@
     },
     "noiseDba": {
       "label": "Noise",
-      "description": "A-weighted sound pressure level — the standard measurement for environmental noise. Prolonged exposure above 70 dBA can cause hearing damage."
+      "description": "Relative sound level, uncalibrated — useful for comparing this location over time, not against noise limits or other instruments."
     },
     "temperature": {
       "label": "Temperature",

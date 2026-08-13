@@ -61,11 +61,14 @@ export const METRIC_GROUPS: MetricGroupDef[] = [
   },
 ];
 
+// Uncalibrated device-dB: CALIB_OFFSET_DB = 0 and no absolute reference has
+// ever been applied, so this cannot be compared to a legal threshold or another
+// instrument — hence no guideline. See the measurement contract in
+// soundwatch-firmware: docs/soundwatch/measurement-contract.md
 export const NOISE_METRIC: MetricDef = {
   key: "noiseDba",
-  unit: "dBA",
+  unit: "dB",
   color: "#c2410c",
-  guideline: { value: 70, source: "WHO", compare: "below" },
 };
 
 export function getMetricDef(key: string): MetricDef | undefined {
