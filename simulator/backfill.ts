@@ -173,12 +173,18 @@ export async function backfill(prisma: PrismaClient): Promise<void> {
       const sensorId = sensorIds.get(sensor.deviceId)!;
       const phase = phaseOffsetS(sensor.deviceId, intervalS);
 
+      // receivedAt, not recordedAt. The grid below is TRUE time; recordedAt
+      // carries each device's clock drift, so resuming from max(recordedAt)
+      // starts a pass that far ahead of where it left off — a median 2101 s
+      // hole across the fleet, measured. ON CONFLICT DO NOTHING on
+      // (sensor_id, recorded_at) then makes the hole permanent, and the
+      // catch-up loop computes zero remaining slots and reports "up to date".
       const existing = await prisma.reading.aggregate({
         where: { sensorId },
-        _max: { recordedAt: true },
+        _max: { receivedAt: true },
       });
-      const resumeT = existing._max.recordedAt
-        ? Math.floor(existing._max.recordedAt.getTime() / 1000) + 1
+      const resumeT = existing._max.receivedAt
+        ? Math.floor(existing._max.receivedAt.getTime() / 1000) + 1
         : horizonT;
       const fromT = Math.max(horizonT, resumeT);
 

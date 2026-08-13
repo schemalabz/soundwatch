@@ -4,6 +4,11 @@ import { FLEET } from "./fleet";
 import { generateReading } from "./model";
 import { buildPayload, NETBUFF_SIZE } from "./payload";
 
+// Fleet-wide sweeps: ~0.3-0.6 s idle, measured at 4-9 s on a machine at load
+// average 14. Vitest defaults to 5 s, so on a busy CI runner these fail for
+// reasons that have nothing to do with the code under test.
+const SLOW_TEST_MS = 30_000;
+
 const T0 = Date.UTC(2026, 5, 16, 9, 0, 0) / 1000;
 
 describe("wire payload", () => {
@@ -34,7 +39,7 @@ describe("wire payload", () => {
       }
     }
     expect(maxLen).toBeLessThanOrEqual(NETBUFF_SIZE);
-  });
+  }, SLOW_TEST_MS);
 
   it("timestamps are second-precision ISO with Z suffix", () => {
     const r = generateReading(FLEET[0], T0, 60);

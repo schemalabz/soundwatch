@@ -2,6 +2,11 @@ import { describe, expect, it } from "vitest";
 import { FLEET } from "./fleet";
 import { isOnline, lastOutageEndBefore, MAX_OUTAGE_S, MIN_OUTAGE_S } from "./outages";
 
+// Fleet-wide sweeps: ~0.3-0.6 s idle, measured at 4-9 s on a machine at load
+// average 14. Vitest defaults to 5 s, so on a busy CI runner these fail for
+// reasons that have nothing to do with the code under test.
+const SLOW_TEST_MS = 30_000;
+
 const T0 = Date.UTC(2026, 5, 16, 0, 0, 0) / 1000;
 const DAY = 86400;
 
@@ -67,7 +72,7 @@ describe("outage model", () => {
         }
       }
     }
-  });
+  }, SLOW_TEST_MS);
 
   it("reports a recovery time consistent with the outage that ended", () => {
     // Find an outage end via scanning, then lastOutageEndBefore must match.

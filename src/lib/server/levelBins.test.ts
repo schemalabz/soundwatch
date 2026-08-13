@@ -28,8 +28,43 @@ describe("level bins", () => {
     // Median falls on the boundary between the two bins: rank 100 lands at
     // the top of bin 21 -> 51 dB.
     expect(out.l50).toBeCloseTo(51, 5);
-    expect(out.l90).toBeGreaterThanOrEqual(50);
-    expect(out.l10).toBeLessThanOrEqual(61);
+    // Exact, not one-sided. These bounds used to be >= 50 and <= 61, which
+    // both quantiles satisfy no matter which quantile they are: swapping
+    // l10 to percentile(0.1), or l90 to percentile(0.5), failed nothing.
+    //
+    // With 100 in bin 21 [50,51) and 100 in bin 31 [60,61):
+    //   l90 = percentile(0.1) -> rank 20, one fifth into bin 21 -> 50.2
+    //   l10 = percentile(0.9) -> rank 180, four fifths into bin 31 -> 60.8
+    expect(out.l90).toBeCloseTo(50.2, 5);
+    expect(out.l10).toBeCloseTo(60.8, 5);
+  });
+});
+
+describe("the bin ceiling clears the fleet", () => {
+  // Raising BIN_HI from 91 to 128 is the main data correction on this branch:
+  // at 91 every interval above it fell into the overflow bin and binLow()
+  // returned 91, so our own aggregate reproduced the firmware clamp that
+  // release 1.1 had just removed. Reverting BOTH copies of the constant left
+  // the whole suite green — levelBins.test.ts pinned the two copies to each
+  // other, never to reality, so the exact regression could return in silence.
+  //
+  // Anchored to a measurement, not to a preference: 97.7 device-dB is the
+  // loudest interval the fleet has produced since 1.1.
+  const FLEET_MAX_OBSERVED_DB = 97.7;
+
+  it("is above the loudest level the fleet has produced", () => {
+    expect(BIN_HI).toBeGreaterThan(FLEET_MAX_OBSERVED_DB);
+    expect(CAGG_BINS.hi).toBeGreaterThan(FLEET_MAX_OBSERVED_DB);
+  });
+
+  it("does not clamp a level the fleet can reach", () => {
+    // binLow of the top real bin must sit above the fleet max, or a loud
+    // interval lands in overflow and every percentile reading it is wrong.
+    expect(binLow(BIN_COUNT)).toBeGreaterThan(FLEET_MAX_OBSERVED_DB);
+  });
+
+  it("keeps 1-dB bins", () => {
+    expect(BIN_COUNT).toBe(BIN_HI - BIN_LO);
   });
 });
 

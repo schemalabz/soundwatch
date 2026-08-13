@@ -204,6 +204,9 @@ export function calibrationOffsetDb(deviceId: string): number {
  * query must use received_at. Modelling it keeps that failure reachable: with
  * recorded_at === received_at the simulator can never expose an ordering bug.
  */
+/** ln(10)/20 — the dB gap between the energy mean and the arithmetic mean. */
+const LOG10_OVER_20 = Math.LN10 / 20;
+
 export function clockDriftS(deviceId: string, tSec: number): number {
   // Drift accumulates since the last NTP SYNC, not since power-on. Syncs
   // happen every few hours; reboots every few days. Resetting only at reboot
@@ -262,9 +265,12 @@ export function generateReading(sensor: FleetSensor, tSec: number, intervalS: nu
 
   const sigma = sensor.archetype === "arterial" ? 6 : 4;
   // Energy-domain mean of a normal dB distribution exceeds mu by
-  // ln(10)/20 * sigma^2 ≈ 0.0576*sigma^2; compensate so the ingester's
-  // 10*log10(energySum/frameCount) lands on the target L.
-  const mu = L - 0.057565 * sigma * sigma;
+  // ln(10)/20 * sigma^2. The constant here used to be 0.057565, which is
+  // ln(10)/40 — half of it, and half of what the comment on this very line
+  // claimed. The histogram then carried more energy than the laeq in the same
+  // payload: 2.08 dB apart for the arterial archetype (sigma 6), in a file
+  // whose whole purpose is emitting self-consistent frames.
+  const mu = L - LOG10_OVER_20 * sigma * sigma;
 
   let baseFrames = event ? Math.round(frameCount * (1 - event.frameFraction)) : frameCount;
   // At very short intervals the event mass can round to zero frames; treat

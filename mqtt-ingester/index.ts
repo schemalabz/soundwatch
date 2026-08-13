@@ -69,7 +69,9 @@ async function handleMessage(topic: string, message: Buffer): Promise<void> {
         ? `Stored reading from ${deviceId}: LAeq=${row.laeq.toFixed(1)} dB, ` +
           `duty=${((row.realizedDuty ?? 0) * 100).toFixed(1)}% ` +
           `(frames=${row.frameCount}, ${row.intervalMs != null ? (row.intervalMs / 1000).toFixed(1) : row.intervalS}s)`
-        : `Stored reading from ${deviceId}: noise=${row.noiseDba} dBA`
+        // Stock firmware's field. Its unit claim is the vendor's and has never
+        // been validated, so we log the number without endorsing a unit.
+        : `Stored reading from ${deviceId}: noise=${row.noiseDba} (stock, uncalibrated)`
     );
   } catch (err) {
     // P2002 = the (sensor_id, recorded_at) unique constraint rejecting a

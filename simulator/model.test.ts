@@ -4,6 +4,7 @@ import { generateReading, targetLevelDb, localTime, calibrationOffsetDb, clockDr
 import { buildPayload } from "./payload";
 import { payloadToRow } from "./rowBuilder";
 import { parseSensorPayload } from "../mqtt-ingester/parser";
+import { HIST_BIN_DB, HIST_MIN_DB } from "../mqtt-ingester/flavor2";
 
 // A fixed reference instant: Tuesday 2026-06-16 (UTC). All tests derive times
 // from this so they never depend on wall-clock now.
@@ -206,4 +207,46 @@ describe("firmware 1.1 realism", () => {
     expect(max).toBeGreaterThan(80);
     expect(max).toBeLessThanOrEqual(100);
   });
+});
+
+describe("frame histogram agrees with the interval laeq", () => {
+  // The device publishes both, computed from the same frames, so they must
+  // describe the same sound. The mu compensation is what keeps them together:
+  // the energy mean of a normal dB distribution sits ln(10)/20 * sigma^2 above
+  // the arithmetic mean, so mu has to be pushed down by exactly that.
+  //
+  // The constant was 0.057565 — ln(10)/40, half the right value, and half of
+  // what the comment on the same line claimed. The histogram then carried
+  // 2.08 dB more energy than the laeq beside it, for the archetype with the
+  // widest sigma. A simulator whose two channels disagree teaches us to trust
+  // numbers the fleet would never produce.
+  const midpointLaeq = (counts: number[]): number | null => {
+    let energy = 0;
+    let n = 0;
+    counts.forEach((c, i) => {
+      energy += c * Math.pow(10, (HIST_MIN_DB + i * HIST_BIN_DB + HIST_BIN_DB / 2) / 10);
+      n += c;
+    });
+    return n > 0 ? 10 * Math.log10(energy / n) : null;
+  };
+
+  for (const archetype of ["arterial", "residential"] as const) {
+    it(`stays within 0.5 dB for the ${archetype} archetype`, () => {
+      const sensor = FLEET.find((s) => s.archetype === archetype)!;
+      let sum = 0;
+      let n = 0;
+      for (let k = 0; k < 500; k++) {
+        const r = generateReading(sensor, 1_786_000_000 + k * 60, 60);
+        if (r.energySum <= 0 || r.frameCount <= 0) continue;
+        const fromHist = midpointLaeq(r.histCounts);
+        if (fromHist === null) continue;
+        sum += fromHist - 10 * Math.log10(r.energySum / r.frameCount);
+        n++;
+      }
+      expect(n).toBeGreaterThan(400);
+      // Signed, not absolute: the old bug was a systematic +2.08 dB, and a
+      // one-sided bound would have let it through in the other direction.
+      expect(Math.abs(sum / n)).toBeLessThan(0.5);
+    });
+  }
 });

@@ -41,7 +41,7 @@ export type SensorField = keyof typeof SENSOR_FIELD_MAP;
 // NOTE: this map predates
 // this one — candidate for future de-duplication onto this shared definition.
 export const STOCK_SENSOR_ID_MAP: Record<number, string> = {
-  53: "noiseDba", // Noise Level (dBA)
+  53: "noiseDba", // stock "Noise Level"; the vendor's unit claim, unvalidated
   55: "temperature", // Temperature (°C)
   56: "humidity", // Humidity (%)
   14: "lightLux", // Light (lux)

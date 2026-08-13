@@ -10,7 +10,7 @@
 // any slice inspects it. No tooltips floating over geometry.
 
 import { useMemo, useState } from "react";
-import { levelColor, paletteStops } from "@/lib/dashboard/levels";
+import { DEFAULT_STOPS, levelColor, paletteStops } from "@/lib/dashboard/levels";
 import { fmtDb } from "@/lib/dashboard/format";
 
 export interface RadialSlice {
@@ -26,8 +26,14 @@ export interface RadialSlice {
   showLabel?: boolean;
 }
 
-const DB_MIN = 36;
-const DB_MAX = 86;
+// Radius shares the ramp with colour. These were 36 and 86 while levels.ts
+// moved to 35 and 100, so with the Μέγιστη metric an lmax_est of 92.7, 106.2
+// and 111.0 all drew the same maximum radius — every slice identical, which is
+// the exact saturation this branch set out to remove. Colour came from
+// levelColor on the new range, radius from the old one: two channels
+// disagreeing about the same slice.
+const DB_MIN = DEFAULT_STOPS.minDb;
+const DB_MAX = DEFAULT_STOPS.maxDb;
 
 function polar(cx: number, cy: number, r: number, deg: number): [number, number] {
   const rad = (deg * Math.PI) / 180;
