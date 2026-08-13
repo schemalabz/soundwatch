@@ -261,3 +261,12 @@ export const ErrorSchema = z.object({
   error: z.string(),
   issues: z.array(z.string()).optional(),
 });
+
+// Inferred response types — import these in the frontend rather than
+// hand-writing shapes. They are generated from the same schemas the routes
+// validate against and the OpenAPI document is built from, so all three move
+// together or not at all.
+export type ApiReadingsResponse = z.infer<typeof ReadingsResponseSchema>;
+export type ApiSensorListItem = z.infer<typeof SensorListItemSchema>;
+export type ApiSensorDetail = z.infer<typeof SensorDetailSchema>;
+export type ApiError = z.infer<typeof ErrorSchema>;

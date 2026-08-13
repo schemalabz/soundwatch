@@ -70,6 +70,62 @@ export const READING_SELECT = {
 
 export type ReadingRow = Prisma.ReadingGetPayload<{ select: typeof READING_SELECT }>;
 
+// camelCase field -> snake_case column, for the routes that read readings over
+// raw SQL rather than through Prisma. `satisfies Record<keyof ReadingRow, string>`
+// is a compile-time exhaustiveness check: if READING_SELECT gains a field, this
+// stops compiling rather than silently dropping it from the API. `as const` keeps
+// the column names as literal types, which is what lets contract.ts compare them
+// against the simulator's write map.
+export const READING_COLUMNS = {
+  recordedAt: "recorded_at",
+  receivedAt: "received_at",
+  noiseDba: "noise_dba",
+  laeq: "laeq",
+  l10: "l10",
+  l50: "l50",
+  l90: "l90",
+  lmaxEst: "lmax_est",
+  lminEst: "lmin_est",
+  histRaw: "hist_raw",
+  bandsDb: "bands_db",
+  realizedDuty: "realized_duty",
+  frameCount: "frame_count",
+  intervalMs: "interval_ms",
+  intervalS: "interval_s",
+  payloadVersion: "payload_version",
+  energySaturations: "energy_saturations",
+  temperature: "temperature",
+  humidity: "humidity",
+  lightLux: "light_lux",
+  pressurePa: "pressure_pa",
+  uvA: "uv_a",
+  uvB: "uv_b",
+  uvC: "uv_c",
+  pm1: "pm1",
+  pm25: "pm25",
+  pm4: "pm4",
+  pm10: "pm10",
+  pn05: "pn_05",
+  pn10: "pn_10",
+  pn25: "pn_25",
+  pn40: "pn_40",
+  pn100: "pn_100",
+  tps: "tps",
+  battery: "battery",
+  rssi: "rssi",
+  sdCard: "sd_card",
+} as const satisfies Record<keyof ReadingRow, string>;
+
+/**
+ * bands_db is a Json column, so Prisma types it as the full JsonValue union.
+ * The ingester only ever writes (number | null)[] — decodeBandsDb in
+ * mqtt-ingester/flavor2.ts, where null means "no energy recorded" for that
+ * band. This is the single place that narrowing happens.
+ */
+export function toBandsDb(value: ReadingRow["bandsDb"]): (number | null)[] | null {
+  return (value as (number | null)[] | null) ?? null;
+}
+
 export function serializeReading(r: ReadingRow): ApiReading {
   const censoring = deriveCensoring(r.histRaw);
   return {
@@ -84,7 +140,7 @@ export function serializeReading(r: ReadingRow): ApiReading {
     lmaxEst: r.lmaxEst,
     lminEst: r.lminEst,
     hist: parseHist(r.histRaw),
-    bandsDb: (r.bandsDb as (number | null)[] | null) ?? null,
+    bandsDb: toBandsDb(r.bandsDb),
     realizedDuty: r.realizedDuty,
     frameCount: r.frameCount,
     intervalMs: r.intervalMs,
