@@ -6,6 +6,7 @@ import { instantMatches, parseEpochMs, parseWireFilters } from "@/lib/dashboard/
 import { athensWallTime } from "@/lib/dashboard/time";
 import { needsRawReadings, resolveBucket } from "@/lib/dashboard/buckets";
 import { BIN_LO, BIN_HI, BIN_COUNT } from "@/lib/server/levelBins";
+import type { SeriesResponse } from "@/components/dashboard/charts/types";
 
 // Grouped series over the FILTERED time-set, network-wide, for the charts
 // view: hour-of-day (24), day-of-week (7), month (12), and a time series at
@@ -165,7 +166,9 @@ export async function GET(req: NextRequest) {
     .sort((a, b) => a[0] - b[0])
     .map(([t, acc]) => ({ t, ...acc.out() }));
 
-  return NextResponse.json({
+  // Annotated with the type the client imports, so the two cannot drift: a
+  // field renamed here fails to compile rather than arriving as undefined.
+  const payload: SeriesResponse = {
     // What was actually served — resolveBucket may have clamped the request.
     bucket: bucket.id,
     bucketSeconds: bucketS,
@@ -173,5 +176,6 @@ export async function GET(req: NextRequest) {
     dows: emit(dims.dows),
     months: emit(dims.months),
     timeline,
-  });
+  };
+  return NextResponse.json(payload);
 }

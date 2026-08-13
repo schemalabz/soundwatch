@@ -28,14 +28,16 @@ import {
 import { audibleRadiusM, levelColor, metersPerPixel, paletteStops } from "@/lib/dashboard/levels";
 import { withinLocations, type LocationPin, type TimeSegment } from "@/lib/dashboard/filters";
 import { devExpose, devRenderCount } from "@/lib/dashboard/devtools";
+import type { ApiSensorListItem } from "@/lib/api/schemas";
 
-export interface SensorMeta {
-  id: string;
-  name: string | null;
-  address: string | null;
+// The identity fields come from the published contract, so a rename in
+// ApiSensorListItem breaks here rather than arriving as undefined. Coordinates
+// are deliberately narrowed to non-null: the map only ever receives sensors
+// that PUBLIC_SENSOR_WHERE has already filtered to located ones.
+export type SensorMeta = Pick<ApiSensorListItem, "id" | "name" | "address"> & {
   latitude: number;
   longitude: number;
-}
+};
 
 export interface SensorLayerProps {
   map: mapboxgl.Map | null;

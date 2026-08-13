@@ -117,7 +117,9 @@ export async function GET() {
     };
   });
 
-  return NextResponse.json({
+  // Annotated with the type the page imports, so the two cannot drift: a field
+  // renamed here fails to compile rather than arriving as undefined.
+  const payload: StatusResponse = {
     bucketHours: BUCKET_S / 3600,
     windowDays: WINDOW_DAYS,
     sensors,
@@ -125,5 +127,22 @@ export async function GET() {
       days: INGEST_DAYS,
       hours: ingest.map((r) => ({ t: Number(r.h) * 3600_000, n: Number(r.n) })),
     },
-  });
+  };
+  return NextResponse.json(payload);
+}
+
+export type StatusSensor = {
+  id: string;
+  name: string | null;
+  /** Age of this sensor's newest reading; null when it has never reported. */
+  secondsAgo: number | null;
+  /** Bitstring, one char per 6h bucket: "1" = at least one reading. */
+  cells: string;
+};
+
+export interface StatusResponse {
+  bucketHours: number;
+  windowDays: number;
+  sensors: StatusSensor[];
+  ingest: { days: number; hours: { t: number; n: number }[] };
 }
