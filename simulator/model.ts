@@ -205,13 +205,21 @@ export function calibrationOffsetDb(deviceId: string): number {
  * recorded_at === received_at the simulator can never expose an ordering bug.
  */
 export function clockDriftS(deviceId: string, tSec: number): number {
-  const bootPeriodS = Math.round((3 + 7 * rand01(deviceId, "boot", 0)) * 86400);
-  const scheduledBootT = tSec - (tSec % bootPeriodS);
-  const outageEndT = lastOutageEndBefore(deviceId, tSec);
-  const sinceSyncS = Math.max(0, tSec - Math.max(scheduledBootT, outageEndT ?? 0));
+  // Drift accumulates since the last NTP SYNC, not since power-on. Syncs
+  // happen every few hours; reboots every few days. Resetting only at reboot
+  // parked every unit at the cap, which is not what a fleet looks like — and
+  // it hid a real bug rather than exposing one, because with every clock
+  // maximally fast NOTHING lands inside a window ending at now.
+  const syncPeriodS = 6 * 3600 + Math.round(rand01(deviceId, "ntp", 0) * 6 * 3600); // 6-12 h
+  const sinceBootS = (() => {
+    const bootPeriodS = Math.round((3 + 7 * rand01(deviceId, "boot", 0)) * 86400);
+    const outageEndT = lastOutageEndBefore(deviceId, tSec);
+    return Math.max(0, tSec - Math.max(tSec - (tSec % bootPeriodS), outageEndT ?? 0));
+  })();
+  // Whichever resync happened more recently wins.
+  const sinceSyncS = Math.min(tSec % syncPeriodS, sinceBootS);
   // ~10 min per 12 h, with a per-unit rate so they do not drift in lockstep.
-  // Capped at 35 min: that is the largest drift actually observed in the
-  // field, and real units resync far more often than they reboot.
+  // Capped at 35 min — the largest drift actually observed in the field.
   const rate = (600 / 43200) * (0.4 + 1.2 * rand01(deviceId, "drift", 0));
   return Math.min(35 * 60, Math.round(sinceSyncS * rate));
 }

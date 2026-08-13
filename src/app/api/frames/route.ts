@@ -58,6 +58,20 @@ export async function GET(req: NextRequest) {
   // observed to fall into a seconds-long generic plan.
   const arrayLiteral = `ARRAY[${times.map((t) => `'${new Date(t).toISOString()}'`).join(",")}]::timestamptz[]`;
 
+  // Which clock bounds the window.
+  //
+  // Playback asks "what did this place sound like at 03:00?" — a question
+  // about when the sound happened, so it windows on recorded_at and accepts
+  // the device clock's error.
+  //
+  // Live asks "what is it like now?", and there recorded_at is actively
+  // wrong: device clocks run FORWARD up to ~35 min between NTP syncs, so a
+  // drifted unit stamps its readings in the future and falls outside a window
+  // ending at now — it vanishes from the map while reporting perfectly. Live
+  // therefore windows on received_at, "what we have heard recently", which is
+  // what live means and is immune to the drift.
+  const timeCol = req.nextUrl.searchParams.get("by") === "received" ? "r.received_at" : "r.recorded_at";
+
   const rows = await prisma.$queryRawUnsafe<FrameSqlRow[]>(`
     SELECT f.t, s.id AS sensor_id, agg.laeq, agg.n
     FROM sensors s
@@ -66,8 +80,8 @@ export async function GET(req: NextRequest) {
       SELECT ${metricSql} AS laeq, count(*) AS n
       FROM readings r
       WHERE r.sensor_id = s.id
-        AND r.recorded_at > f.t - make_interval(secs => ${Math.floor(windowS)})
-        AND r.recorded_at <= f.t
+        AND ${timeCol} > f.t - make_interval(secs => ${Math.floor(windowS)})
+        AND ${timeCol} <= f.t
         AND r.laeq IS NOT NULL
       HAVING count(*) > 0
     ) agg ON true

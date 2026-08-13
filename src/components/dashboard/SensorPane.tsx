@@ -89,7 +89,7 @@ function SensorPane({
           cache: "no-store",
         }).then((r) => r.json()),
         // The same live frame the map circles render.
-        fetch(`/api/frames?at=${frameAt}&window=${windowS}&metric=laeq`, { cache: "no-store" }).then((r) => r.json()),
+        fetch(`/api/frames?at=${frameAt}&window=${windowS}&metric=laeq&by=received`, { cache: "no-store" }).then((r) => r.json()),
       ])
         .then(([d, s, f]: [SensorDetail, SeriesResponse, { frames: Record<string, FrameData> }]) => {
           if (cancelled) return;

@@ -287,7 +287,7 @@ function SensorLayer({ map, sensors, cursor, stepMs, segments, playing, metric, 
     const load = async () => {
       try {
         const at = quantizeFrameMs(Date.now());
-        const res = await fetch(`/api/frames?at=${at}&window=${windowS}&metric=${metric}`, { cache: "no-store" });
+        const res = await fetch(`/api/frames?at=${at}&window=${windowS}&metric=${metric}&by=received`, { cache: "no-store" });
         const body: { frames: Record<string, FrameData> } = await res.json();
         if (cancelled) return;
         liveFrameRef.current = body.frames[String(at)] ?? {};
