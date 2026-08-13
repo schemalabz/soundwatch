@@ -3,6 +3,7 @@
 import { useTranslations } from "next-intl";
 import { Link } from "@/i18n/navigation";
 import { getNoiseLevelColor } from "@/lib/geo";
+import { NOISE_METRIC } from "@/lib/metrics";
 
 interface SensorData {
   id: string;
@@ -66,7 +67,7 @@ export default function SensorPreviewPanel({
               {dba != null ? dba.toFixed(1) : "—"}
             </p>
             <p className="text-xs font-semibold" style={{ color }}>
-              {label} · dBA
+              {label} · {NOISE_METRIC.unit}
             </p>
           </div>
         </div>

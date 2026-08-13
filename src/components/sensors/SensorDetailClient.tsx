@@ -5,7 +5,7 @@ import { useTranslations } from "next-intl";
 import { Link, usePathname, useRouter } from "@/i18n/navigation";
 import dynamic from "next/dynamic";
 import { getNoiseLevelColor } from "@/lib/geo";
-import { type TimeRange, getTimeRangeFrom } from "@/lib/metrics";
+import { type TimeRange, getTimeRangeFrom, NOISE_METRIC } from "@/lib/metrics";
 import { getTranslatedGuidelineBadge } from "@/lib/guidelines";
 import TimeRangeSelector from "@/components/sensors/TimeRangeSelector";
 import MetricAccordion from "@/components/sensors/MetricAccordion";
@@ -94,7 +94,7 @@ export default function SensorDetailClient({
           <span className="text-4xl font-bold" style={{ color }}>
             {dba != null ? dba.toFixed(1) : "—"}
           </span>
-          <span className="text-muted">dBA</span>
+          <span className="text-muted">{NOISE_METRIC.unit}</span>
           <span
             className="text-xs font-semibold px-2 py-0.5 rounded"
             style={{ backgroundColor: color, color: "white" }}

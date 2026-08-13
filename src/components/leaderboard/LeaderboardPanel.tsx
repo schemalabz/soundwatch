@@ -3,6 +3,7 @@
 import { useTranslations } from "next-intl";
 import { Link } from "@/i18n/navigation";
 import { getNoiseLevelColor } from "@/lib/geo";
+import { NOISE_METRIC } from "@/lib/metrics";
 
 interface SensorData {
   id: string;
@@ -79,7 +80,9 @@ export default function LeaderboardPanel({
               )}
             </div>
             <div className="text-right flex-shrink-0">
-              <p className="font-bold text-sm">{dba.toFixed(1)} dBA</p>
+              <p className="font-bold text-sm">
+                {dba.toFixed(1)} {NOISE_METRIC.unit}
+              </p>
               <p className="text-xs font-semibold" style={{ color }}>
                 {label}
               </p>

@@ -163,7 +163,7 @@
     "introProblem": "Despite the scale of the problem, Athens today lacks a public, accessible noise monitoring network. Without data, the problem remains invisible and the conversation around solutions is based on assumptions.",
     "mission": "Soundwatch Athens aims to fill this gap — not just by measuring noise, but by empowering citizens with the data they need to advocate for a better quality of life in their neighborhood.",
     "howItWorksTitle": "How It Works",
-    "howItWorks": "Each sensor measures noise levels (in dBA) locally on the device and transmits only the computed value — never raw audio — ensuring complete privacy. The data flows in real-time to this platform, where it's visualized on the interactive map.",
+    "howItWorks": "Each sensor measures sound levels on the device and transmits only computed levels — never raw audio — ensuring complete privacy. The data flows in real-time to this platform, where it's visualized on the interactive map.",
     "openDataTitle": "Open Data",
     "openData": "All sensor data is freely available through our public API. Anyone can access the data programmatically to build their own tools, conduct research, or advocate for change in their neighborhood.",
     "apiEndpoint": "API endpoint:",
