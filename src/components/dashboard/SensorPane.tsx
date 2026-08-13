@@ -32,6 +32,10 @@ interface SensorDetail {
   lastSeenAt: string | null;
   latestReading: {
     recordedAt: string;
+    // Liveness reads this, never recordedAt. A unit dead for 20 minutes with a
+    // clock 35 minutes fast would show ageS = 0 and a fresh green dot; after
+    // an NTP correction the same unit reads stale while perfectly healthy.
+    receivedAt: string;
     laeq: number | null;
     battery: number | null;
     rssi: number | null;
@@ -106,7 +110,7 @@ function SensorPane({
   }, [sensorId, windowS]);
 
   const latest = detail?.latestReading ?? null;
-  const ageS = latest ? Math.max(0, Math.round((nowMs - new Date(latest.recordedAt).getTime()) / 1000)) : null;
+  const ageS = latest ? Math.max(0, Math.round((nowMs - new Date(latest.receivedAt).getTime()) / 1000)) : null;
   const liveTone =
     ageS == null ? "var(--sw-silver)" : ageS < 120 ? "var(--sw-ok)" : ageS < 3600 ? "var(--sw-slate)" : "var(--sw-loud)";
   const heroLaeq = liveLaeq ?? latest?.laeq ?? null;

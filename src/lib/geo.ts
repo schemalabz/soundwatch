@@ -6,6 +6,12 @@ export const ATHENS_CENTER = {
 
 export const ATHENS_ZOOM = 12;
 
+/** Mapbox wants [lng, lat]; the object form above predates it. */
+export const ATHENS_CENTER_LNGLAT: [number, number] = [ATHENS_CENTER.lng, ATHENS_CENTER.lat];
+
+/** The dashboard map opens wider than the install picker: the whole basin. */
+export const ATHENS_OVERVIEW_ZOOM = 11.3;
+
 export type NoiseLevel = "quiet" | "moderate" | "loud" | "very_loud";
 
 export function getNoiseLevel(dba: number): NoiseLevel {

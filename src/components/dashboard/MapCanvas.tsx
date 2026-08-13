@@ -8,7 +8,11 @@ import { useEffect, useRef, useState } from "react";
 import mapboxgl from "mapbox-gl";
 import "mapbox-gl/dist/mapbox-gl.css";
 
-const ATHENS_CENTER: [number, number] = [23.7315, 37.9755];
+// Athens had two centres, 0.9 km apart, chosen by whichever map opened:
+// this file's local [23.7315, 37.9755] and geo.ts's ATHENS_CENTER, which the
+// install picker uses. One of them now.
+import { ATHENS_CENTER_LNGLAT, ATHENS_OVERVIEW_ZOOM } from "@/lib/geo";
+
 const TOKEN = process.env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN;
 
 export default function MapCanvas({
@@ -28,8 +32,8 @@ export default function MapCanvas({
     const map = new mapboxgl.Map({
       container: containerRef.current,
       style: "mapbox://styles/mapbox/light-v11",
-      center: ATHENS_CENTER,
-      zoom: 11.3,
+      center: ATHENS_CENTER_LNGLAT,
+      zoom: ATHENS_OVERVIEW_ZOOM,
       minZoom: 9,
       maxZoom: 17,
       dragRotate: false,
