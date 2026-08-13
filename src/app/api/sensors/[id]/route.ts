@@ -30,7 +30,6 @@ export async function GET(
 
   return NextResponse.json({
     id: sensor.id,
-    deviceId: sensor.deviceId,
     name: sensor.name,
     latitude: sensor.latitude,
     longitude: sensor.longitude,

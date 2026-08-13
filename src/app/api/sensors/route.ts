@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db";
 import { PUBLIC_SENSOR_WHERE } from "@/lib/locations";
 import { checkAdminAuth } from "../admin/auth";
 import { READING_SELECT, serializeReading, type ReadingRow } from "@/lib/api/readings";
+import { PUBLIC_SENSOR_SQL } from "@/lib/server/filterSql";
 
 export const dynamic = "force-dynamic";
 
@@ -77,14 +78,13 @@ export async function GET(request: Request) {
     : PUBLIC_SENSOR_WHERE;
   const sqlWhere = wantsExperimental
     ? "s.is_active AND s.latitude IS NOT NULL"
-    : "s.is_active AND NOT s.is_experimental AND s.latitude IS NOT NULL";
+    : PUBLIC_SENSOR_SQL;
 
   const [sensors, latest] = await Promise.all([
     prisma.sensor.findMany({
       where,
       select: {
         id: true,
-        deviceId: true,
         name: true,
         latitude: true,
         longitude: true,
@@ -116,7 +116,6 @@ export async function GET(request: Request) {
       const row = latestBySensor.get(sensor.id);
       return {
         id: sensor.id,
-        deviceId: sensor.deviceId,
         name: sensor.name,
         latitude: sensor.latitude,
         longitude: sensor.longitude,

@@ -7,6 +7,19 @@
 
 import { HOUR_PRESET_RANGES, type DashboardFilters } from "@/lib/dashboard/filters";
 
+/**
+ * Who the public is allowed to see. Active, sited, and not a bench unit.
+ *
+ * This lived as a copy-pasted string literal in seven raw queries, which is
+ * exactly as safe as it sounds: /api/freshness shipped with the clause simply
+ * missing and served the entire fleet — bench units, never-installed units —
+ * to anyone, polled every 5 s from the home page. A predicate that must appear
+ * in every query is a predicate that belongs in one place.
+ *
+ * `s` is the sensors alias every one of those queries already uses.
+ */
+export const PUBLIC_SENSOR_SQL = "s.is_active AND NOT s.is_experimental AND s.latitude IS NOT NULL";
+
 /** Athens wall time of a timestamptz column (naive result, wall components). */
 export function athensTimeSql(col: string): string {
   return `timezone('Europe/Athens', ${col})`;

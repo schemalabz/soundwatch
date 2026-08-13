@@ -3,7 +3,6 @@
 
 export interface FreshnessSensor {
   id: string;
-  deviceId: string;
   name: string | null;
   secondsAgo: number | null;
   spanDays: number | null;

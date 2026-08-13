@@ -15,7 +15,6 @@ export const dynamic = "force-dynamic";
 
 interface FreshnessSqlRow {
   id: string;
-  device_id: string;
   name: string | null;
   last_at: Date | null;
   first_at: Date | null;
@@ -24,7 +23,7 @@ interface FreshnessSqlRow {
 
 export async function GET() {
   const rows = await prisma.$queryRaw<FreshnessSqlRow[]>`
-    SELECT s.id, s.device_id, s.name,
+    SELECT s.id, s.name,
            last.received_at AS last_at, last.laeq AS last_laeq,
            first.recorded_at AS first_at
     FROM sensors s
@@ -36,7 +35,8 @@ export async function GET() {
       SELECT recorded_at FROM readings r
       WHERE r.sensor_id = s.id ORDER BY recorded_at ASC LIMIT 1
     ) first ON true
-    ORDER BY s.device_id`;
+    WHERE s.is_active AND NOT s.is_experimental AND s.latitude IS NOT NULL
+    ORDER BY s.name NULLS LAST, s.id`;
 
   // Staleness reads received_at (server insert time): device clocks drift up to
   // ~10 min FORWARD between NTP syncs, so recorded_at would report a drifted
@@ -49,7 +49,6 @@ export async function GET() {
     const firstMs = r.first_at?.getTime() ?? null;
     return {
       id: r.id,
-      deviceId: r.device_id,
       name: r.name,
       secondsAgo: lastMs == null ? null : Math.max(0, Math.round((nowMs - lastMs) / 1000)),
       spanDays: lastMs == null || firstMs == null ? null : (lastMs - firstMs) / 86_400_000,

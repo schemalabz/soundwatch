@@ -12,7 +12,6 @@ import { fmtDb } from "@/lib/dashboard/format";
 
 interface StatusSensor {
   id: string;
-  deviceId: string;
   name: string | null;
   secondsAgo: number | null;
   cells: string;
@@ -224,7 +223,7 @@ export default function StatusPage() {
                 <div key={s.id} className="flex items-center gap-3 px-4 py-1.5 transition-colors hover:bg-secondary/50 max-md:flex-wrap">
                   <Dot on={on} />
                   <div className="w-40 shrink-0 truncate">
-                    <span className="text-[13px] font-medium leading-tight">{s.name ?? s.deviceId}</span>
+                    <span className="text-[13px] font-medium leading-tight">{s.name ?? `#${s.id.slice(0, 8)}`}</span>
                   </div>
                   <span className="w-14 shrink-0 text-right text-[11px] tabular-nums text-muted-foreground">
                     {ago(s.secondsAgo)}

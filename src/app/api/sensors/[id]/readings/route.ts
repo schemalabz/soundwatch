@@ -59,7 +59,6 @@ export async function GET(
 
   return NextResponse.json({
     sensorId: id,
-    deviceId: sensor.deviceId,
     count: readings.length,
     readings: readings.map(serializeReading),
   });

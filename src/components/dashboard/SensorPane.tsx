@@ -25,7 +25,6 @@ import { devRenderCount } from "@/lib/dashboard/devtools";
 
 interface SensorDetail {
   id: string;
-  deviceId: string;
   name: string | null;
   address: string | null;
   latitude: number | null;
@@ -134,7 +133,7 @@ function SensorPane({
       <div className="flex items-start justify-between gap-2 border-b px-4 py-3">
         <div className="min-w-0">
           <div className="truncate text-[15px] font-semibold leading-tight">{detail?.name ?? "…"}</div>
-          <div className="truncate text-[11px] text-muted-foreground">{detail?.address ?? detail?.deviceId ?? ""}</div>
+          <div className="truncate text-[11px] text-muted-foreground">{detail?.address ?? (detail ? `#${detail.id.slice(0, 8)}` : "")}</div>
         </div>
         <Button variant="ghost" size="icon" className="-mr-1.5 -mt-1 size-7 shrink-0" onClick={onClose} aria-label={tr.pane.close}>
           <X className="size-3.5" />

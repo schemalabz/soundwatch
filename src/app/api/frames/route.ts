@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
+import { PUBLIC_SENSOR_SQL } from "@/lib/server/filterSql";
 
 // Batch frame endpoint for map playback: for each requested instant, the
 // energy-averaged LAeq per public sensor over a trailing window ending at
@@ -85,7 +86,7 @@ export async function GET(req: NextRequest) {
         AND r.laeq IS NOT NULL
       HAVING count(*) > 0
     ) agg ON true
-    WHERE s.is_active AND NOT s.is_experimental AND s.latitude IS NOT NULL`);
+    WHERE ${PUBLIC_SENSOR_SQL}`);
 
   // { [epochMs]: { [sensorId]: { laeq, n } } }
   const frames: Record<string, Record<string, { laeq: number; n: number }>> = {};

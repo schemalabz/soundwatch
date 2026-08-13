@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
+import { PUBLIC_SENSOR_SQL } from "@/lib/server/filterSql";
 
 // Network status: per public sensor, the age of its newest reading plus a
 // 30-day liveness map in 6-hour buckets (120 cells). The bucket query is one
@@ -13,7 +14,6 @@ const WINDOW_DAYS = 30;
 
 interface MetaRow {
   id: string;
-  device_id: string;
   name: string | null;
   last_at: Date | null;
 }
@@ -32,14 +32,14 @@ export async function GET() {
   const nowMs = Date.now();
   const [meta, buckets, ingest] = await Promise.all([
     prisma.$queryRaw<MetaRow[]>`
-      SELECT s.id, s.device_id, s.name, last.received_at AS last_at
+      SELECT s.id, s.name, last.received_at AS last_at
       FROM sensors s
       LEFT JOIN LATERAL (
         -- received_at: a drifting device clock must not decide liveness.
         SELECT received_at FROM readings r
         WHERE r.sensor_id = s.id ORDER BY received_at DESC LIMIT 1
       ) last ON true
-      WHERE s.is_active AND NOT s.is_experimental AND s.latitude IS NOT NULL
+      WHERE ${PUBLIC_SENSOR_SQL}
       ORDER BY s.name NULLS LAST`,
     // Liveness cells come from the hourly rollup — 6h cells are unions of
     // hour buckets, so summing the cagg is exact (and ~100x less data than
@@ -48,7 +48,7 @@ export async function GET() {
       SELECT rb.sensor_id, floor(extract(epoch FROM rb.bucket) / ${BUCKET_S})::bigint AS b
       FROM readings_hour_bins rb
       JOIN sensors s ON s.id = rb.sensor_id
-      WHERE s.is_active AND NOT s.is_experimental AND s.latitude IS NOT NULL
+      WHERE ${PUBLIC_SENSOR_SQL}
         AND rb.bucket > now() - make_interval(days => ${WINDOW_DAYS}::int)
       GROUP BY 1, 2`,
     // Ingest volume: readings per hour, fleet-wide, straight off the rollup.
@@ -56,7 +56,7 @@ export async function GET() {
       SELECT extract(epoch FROM rb.bucket)::bigint / 3600 AS h, sum(rb.n)::bigint AS n
       FROM readings_hour_bins rb
       JOIN sensors s ON s.id = rb.sensor_id
-      WHERE s.is_active AND NOT s.is_experimental AND s.latitude IS NOT NULL
+      WHERE ${PUBLIC_SENSOR_SQL}
         AND rb.bucket > now() - make_interval(days => ${INGEST_DAYS}::int)
       GROUP BY 1
       ORDER BY 1`,
@@ -82,7 +82,6 @@ export async function GET() {
     for (let i = 0; i < cellCount; i++) cells += set?.has(i) ? "1" : "0";
     return {
       id: m.id,
-      deviceId: m.device_id,
       name: m.name,
       secondsAgo: m.last_at ? Math.max(0, Math.round((nowMs - m.last_at.getTime()) / 1000)) : null,
       cells,

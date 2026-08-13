@@ -26,8 +26,11 @@ export async function GET(request: Request) {
 
   const sensors = await prisma.sensor.findMany({
     where: wantsExperimental ? {} : { isExperimental: false },
-    select: { id: true, deviceId: true, lastSeenAt: true },
-    orderBy: { deviceId: "asc" },
+    // deviceId is the install credential (POST /api/install/{token}/location
+    // authenticates with nothing else), so it never leaves an unauthenticated
+    // route. The public id keys this feed instead.
+    select: { id: true, name: true, lastSeenAt: true },
+    orderBy: { id: "asc" },
   });
 
   const readings = await prisma.reading.findMany({
@@ -57,23 +60,19 @@ export async function GET(request: Request) {
     },
   });
 
-  const byId = new Map(sensors.map((s) => [s.id, s.deviceId]));
   const devices = new Map<string, typeof readings>();
-  for (const r of readings) {
-    const dev = byId.get(r.sensorId);
-    if (!dev) continue;
-    if (!devices.has(dev)) devices.set(dev, []);
-    devices.get(dev)!.push(r);
-  }
+  for (const s of sensors) devices.set(s.id, []);
+  for (const r of readings) devices.get(r.sensorId)?.push(r);
 
   return NextResponse.json({
     generatedAt: new Date().toISOString(),
     windowMinutes: minutes,
     devices: [...devices.entries()]
       .sort(([a], [b]) => a.localeCompare(b))
-      .map(([deviceId, rows]) => ({
-        deviceId,
-        lastSeenAt: sensors.find((s) => s.deviceId === deviceId)?.lastSeenAt ?? null,
+      .map(([sensorId, rows]) => ({
+        sensorId,
+        name: sensors.find((s) => s.id === sensorId)?.name ?? null,
+        lastSeenAt: sensors.find((s) => s.id === sensorId)?.lastSeenAt ?? null,
         count: rows.length,
         latest: rows[rows.length - 1] ?? null,
         series: rows.map((r) => ({

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { locationSql } from "@/lib/server/filterSql";
+import { PUBLIC_SENSOR_SQL, locationSql } from "@/lib/server/filterSql";
 import { BinAccumulator, type LevelSummary } from "@/lib/server/levelBins";
 import { instantMatches, parseWireFilters } from "@/lib/dashboard/filters";
 import { athensWallTime } from "@/lib/dashboard/time";
@@ -89,7 +89,6 @@ export async function GET(req: NextRequest) {
   // bucket is included whole, consistent with the real-time tail including the
   // partial current one.
   const fromIso = new Date(Math.floor(fromMs / (bucketS * 1000)) * bucketS * 1000).toISOString();
-  const publicWhere = "s.is_active AND NOT s.is_experimental AND s.latitude IS NOT NULL";
 
   const rows = needsRawReadings(bucketS)
     ? // Sub-hour: the aggregate is hourly and cannot answer. Same 1-dB
@@ -102,7 +101,7 @@ export async function GET(req: NextRequest) {
                count(*)::bigint AS n
         FROM readings r
         JOIN sensors s ON s.id = r.sensor_id
-        WHERE ${publicWhere}
+        WHERE ${PUBLIC_SENSOR_SQL}
           AND r.laeq IS NOT NULL
           AND r.recorded_at >= '${fromIso}'::timestamptz
           ${locationSql(filters)}
@@ -116,7 +115,7 @@ export async function GET(req: NextRequest) {
                sum(rb.n)::bigint AS n
         FROM readings_hour_bins rb
         JOIN sensors s ON s.id = rb.sensor_id
-        WHERE ${publicWhere}
+        WHERE ${PUBLIC_SENSOR_SQL}
           AND rb.bucket >= '${fromIso}'::timestamptz
           ${locationSql(filters)}
           ${sensorSql}

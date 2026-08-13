@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { filterSql, locationSql, rangesSql } from "@/lib/server/filterSql";
+import { PUBLIC_SENSOR_SQL, filterSql, locationSql, rangesSql } from "@/lib/server/filterSql";
 import { parseWireFilters } from "@/lib/dashboard/filters";
 import { BinAccumulator } from "@/lib/server/levelBins";
 
@@ -50,7 +50,7 @@ export async function GET(req: NextRequest) {
            sum(rb.n)::bigint AS n
     FROM readings_hour_bins rb
     JOIN sensors s ON s.id = rb.sensor_id
-    WHERE s.is_active AND NOT s.is_experimental AND s.latitude IS NOT NULL
+    WHERE ${PUBLIC_SENSOR_SQL}
       AND rb.bucket >= '${fromHourIso}'::timestamptz
       ${filters}
       ${ranges}
