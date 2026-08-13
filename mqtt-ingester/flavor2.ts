@@ -21,7 +21,7 @@ export interface Percentiles {
   l90: number; // level exceeded 90% of the time (10th percentile)
 }
 
-function parseCounts(raw: string): number[] | null {
+export function parseCounts(raw: string): number[] | null {
   if (!raw) return null;
   const parts = raw.split("-");
   const counts: number[] = [];
