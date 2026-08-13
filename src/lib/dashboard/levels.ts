@@ -94,17 +94,21 @@ export function paletteStops(): LevelStops {
 // The ANCHOR is not honest and cannot be: our levels are uncalibrated
 // device-dB with an arbitrary zero (CALIB_OFFSET_DB = 0, no absolute
 // reference has ever been applied), so there is no defensible absolute
-// distance. 55 device-dB -> 100 m is a legible choice, nothing more. Treat
+// distance. 55 device-dB -> 33 m is a legible choice, nothing more. Treat
 // these circles as "this one is heard about twice as far as that one", never
 // as a coverage or nuisance footprint.
 //
 // Real propagation also involves ground absorption, barriers, reflection off
 // façades and wind — a street canyon is nothing like free field. This is a
 // first-order illustration.
+// Anchor and clamps scaled to a third of their first draft: at full spread a
+// handful of loud sensors covered whole districts and the map read as four
+// circles rather than fifty. Scaling all three together keeps the ratios —
+// the only honest part — exactly intact.
 const ANCHOR_DB = 55;
-const ANCHOR_M = 100;
-const MIN_RADIUS_M = 15;
-const MAX_RADIUS_M = 4000;
+const ANCHOR_M = 33;
+const MIN_RADIUS_M = 5;
+const MAX_RADIUS_M = 1330;
 
 /** Illustrative audible radius in metres for a level. See the caveats above. */
 export function audibleRadiusM(laeq: number): number {
