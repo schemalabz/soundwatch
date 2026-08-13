@@ -5,6 +5,8 @@
 // means. All fragments are built ONLY from validated enums/numbers —
 // nothing user-typed is ever inlined.
 
+import { Prisma } from "@prisma/client";
+
 import { HOUR_PRESET_RANGES, type DashboardFilters } from "@/lib/dashboard/filters";
 
 /**
@@ -19,6 +21,15 @@ import { HOUR_PRESET_RANGES, type DashboardFilters } from "@/lib/dashboard/filte
  * `s` is the sensors alias every one of those queries already uses.
  */
 export const PUBLIC_SENSOR_SQL = "s.is_active AND NOT s.is_experimental AND s.latitude IS NOT NULL";
+
+/**
+ * The same predicate for a `$queryRaw` TAGGED TEMPLATE, which binds its
+ * interpolations as parameters rather than inlining them — dropping the bare
+ * string in there yields `WHERE $1` and a 500. Prisma.raw is the documented
+ * escape hatch, and this constant means nobody has to remember which of the
+ * two query styles a given route uses.
+ */
+export const PUBLIC_SENSOR_RAW = Prisma.raw(PUBLIC_SENSOR_SQL);
 
 /** Athens wall time of a timestamptz column (naive result, wall components). */
 export function athensTimeSql(col: string): string {

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import type { FreshnessResponse, FreshnessSensor } from "@/types/freshness";
+import { PUBLIC_SENSOR_RAW } from "@/lib/server/filterSql";
 
 // Fleet data-freshness overview for the dev dashboard: per sensor, when the
 // newest reading was recorded (staleness), how far back the history reaches
@@ -35,7 +36,7 @@ export async function GET() {
       SELECT recorded_at FROM readings r
       WHERE r.sensor_id = s.id ORDER BY recorded_at ASC LIMIT 1
     ) first ON true
-    WHERE s.is_active AND NOT s.is_experimental AND s.latitude IS NOT NULL
+    WHERE ${PUBLIC_SENSOR_RAW}
     ORDER BY s.name NULLS LAST, s.id`;
 
   // Staleness reads received_at (server insert time): device clocks drift up to

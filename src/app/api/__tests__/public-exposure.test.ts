@@ -78,6 +78,7 @@ describe("unauthenticated API surface", () => {
     const unfiltered = readsSensors.filter(
       (r) =>
         !r.src.includes("PUBLIC_SENSOR_SQL") &&
+        !r.src.includes("PUBLIC_SENSOR_RAW") &&
         !r.src.includes("PUBLIC_SENSOR_WHERE") &&
         !r.src.includes(PUBLIC_SENSOR_SQL) &&
         !r.src.includes("isExperimental: false") &&
@@ -88,10 +89,20 @@ describe("unauthenticated API surface", () => {
     expect(unfiltered.map((r) => r.rel)).toEqual([]);
   });
 
-  it("keeps the verbatim copy in /api/freshness equal to the constant", () => {
-    // $queryRaw tagged templates cannot take an interpolated identifier, so
-    // this one route spells the predicate out. Pin it.
-    const freshness = ROUTES.find((r) => r.rel.includes("freshness"))!;
-    expect(freshness.raw).toContain(PUBLIC_SENSOR_SQL);
+  it("uses the Prisma.raw form inside $queryRaw tagged templates", () => {
+    // A tagged template BINDS its interpolations. `WHERE ${PUBLIC_SENSOR_SQL}`
+    // compiles to `WHERE $1` with the clause passed as a string parameter, and
+    // Postgres answers "argument of WHERE must be type boolean, not text" — a
+    // 500. This was introduced by the refactor that created the constant, and
+    // /api/status served 500 until it was caught. $queryRawUnsafe takes a
+    // JS-built string and wants the plain form; the two are not interchangeable.
+    const wrong = ROUTES.filter(
+      (r) => /\$queryRaw</.test(r.src) && /\$\{PUBLIC_SENSOR_SQL\}/.test(r.src)
+    );
+    expect(wrong.map((r) => r.rel)).toEqual([]);
+
+    for (const r of ROUTES.filter((x) => /\$queryRaw</.test(x.src) && /FROM sensors/.test(x.src))) {
+      expect(r.src, r.rel).toContain("PUBLIC_SENSOR_RAW");
+    }
   });
 });
