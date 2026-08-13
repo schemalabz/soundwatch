@@ -80,3 +80,39 @@ export function paletteStops(): LevelStops {
   };
   return cssStops;
 }
+
+// --- audible reach -------------------------------------------------------
+//
+// How far a sound carries, as a radius in metres, so the map can draw circles
+// at real-world size instead of a fixed pixel size.
+//
+// The physics is spherical spreading: a point source loses ~6 dB per doubling
+// of distance, so a level difference of ΔdB corresponds to a distance ratio of
+// 10^(Δ/20). A sensor reading 6 dB louder than its neighbour is drawn with
+// twice the radius, which is the honest part of this.
+//
+// The ANCHOR is not honest and cannot be: our levels are uncalibrated
+// device-dB with an arbitrary zero (CALIB_OFFSET_DB = 0, no absolute
+// reference has ever been applied), so there is no defensible absolute
+// distance. 55 device-dB -> 100 m is a legible choice, nothing more. Treat
+// these circles as "this one is heard about twice as far as that one", never
+// as a coverage or nuisance footprint.
+//
+// Real propagation also involves ground absorption, barriers, reflection off
+// façades and wind — a street canyon is nothing like free field. This is a
+// first-order illustration.
+const ANCHOR_DB = 55;
+const ANCHOR_M = 100;
+const MIN_RADIUS_M = 15;
+const MAX_RADIUS_M = 4000;
+
+/** Illustrative audible radius in metres for a level. See the caveats above. */
+export function audibleRadiusM(laeq: number): number {
+  const r = ANCHOR_M * Math.pow(10, (laeq - ANCHOR_DB) / 20);
+  return Math.min(MAX_RADIUS_M, Math.max(MIN_RADIUS_M, r));
+}
+
+/** Metres per screen pixel at a given latitude and zoom (Web Mercator). */
+export function metersPerPixel(lat: number, zoom: number): number {
+  return (156543.03392 * Math.cos((lat * Math.PI) / 180)) / Math.pow(2, zoom);
+}

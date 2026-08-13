@@ -25,7 +25,7 @@ import {
   upcomingFrameTimes,
   type FrameData,
 } from "@/lib/dashboard/frames";
-import { levelColor, levelScale, paletteStops } from "@/lib/dashboard/levels";
+import { audibleRadiusM, levelColor, metersPerPixel, paletteStops } from "@/lib/dashboard/levels";
 import { withinLocations, type LocationPin, type TimeSegment } from "@/lib/dashboard/filters";
 import { devExpose, devRenderCount } from "@/lib/dashboard/devtools";
 
@@ -78,7 +78,9 @@ interface MarkerHandle {
 // The label needs BOTH a close-enough zoom (city scale, not the whole
 // basin) and a ring wide enough to frame two digits.
 const LABEL_MIN_ZOOM = 12.2;
-const LABEL_MIN_SCALE = 0.62;
+// Rendered diameter, not a transform factor: the circle is geographic now, so
+// its scale means nothing without the zoom it was computed at.
+const LABEL_MIN_PX = 22;
 
 function makeMarkerElement(): { root: HTMLDivElement; circle: HTMLSpanElement; label: HTMLSpanElement } {
   const root = document.createElement("div");
@@ -120,11 +122,30 @@ function makeMarkerElement(): { root: HTMLDivElement; circle: HTMLSpanElement; l
 }
 
 /** Apply one sensor's frame value to its circle. null = no data (gray). */
+/**
+ * Pixel scale for a level: the circle is drawn at its illustrative audible
+ * RADIUS, so it keeps a real-world size and grows as you zoom in, rather than
+ * staying a fixed dot on screen.
+ *
+ * The element is MARKER_PX wide and scaled by transform, which keeps the
+ * animation on the compositor. Clamped at both ends: below MIN_PX a loud-vs-
+ * quiet difference stops being visible and the target stops being clickable;
+ * above MAX_PX one sensor swallows the city.
+ */
+const MIN_PX = 11;
+const MAX_PX = 900;
+
+function scaleForLevel(laeq: number, mPerPx: number): number {
+  const diameterPx = (2 * audibleRadiusM(laeq)) / mPerPx;
+  return Math.min(MAX_PX, Math.max(MIN_PX, diameterPx)) / MARKER_PX;
+}
+
 function applyValue(
   h: Pick<MarkerHandle, "circle" | "label">,
   laeq: number | null,
   tweenMs: number,
   labelsOn: boolean,
+  mPerPx: number,
   timing: "linear" | "ease" = "linear"
 ): void {
   const fn = timing === "linear" ? "linear" : "cubic-bezier(0.25,0,0.2,1)";
@@ -134,17 +155,21 @@ function applyValue(
   if (laeq == null) {
     h.circle.style.borderColor = "rgba(191,192,192,0.55)";
     h.circle.style.transform = "scale(0.35)";
+    h.circle.style.borderWidth = `${(1.5 / 0.35).toFixed(3)}px`;
     h.circle.style.opacity = "0.6";
     h.label.style.opacity = "0";
   } else {
     const stops = paletteStops();
-    const scale = levelScale(laeq, stops);
+    const scale = scaleForLevel(laeq, mPerPx);
     const color = levelColor(laeq, stops);
     h.circle.style.borderColor = color;
     h.circle.style.transform = `scale(${scale.toFixed(3)})`;
+    // transform scales the border with everything else, so a 40x circle would
+    // get a 60px rim. Counter-scale to keep the stroke visually constant.
+    h.circle.style.borderWidth = `${(1.5 / scale).toFixed(3)}px`;
     h.circle.style.opacity = "1";
     // Show the value only when zoomed in enough AND the ring can frame it.
-    if (labelsOn && scale >= LABEL_MIN_SCALE) {
+    if (labelsOn && scale * MARKER_PX >= LABEL_MIN_PX) {
       h.label.textContent = String(Math.round(laeq));
       h.label.style.color = color;
       h.label.style.opacity = "1";
@@ -163,6 +188,9 @@ function SensorLayer({ map, sensors, cursor, stepMs, segments, playing, metric, 
   const markersRef = useRef(new Map<string, MarkerHandle>());
   const liveFrameRef = useRef<FrameData>({});
   const lastAppliedRef = useRef<number | "live" | null>(null);
+  // Last level shown per sensor. A zoom changes the metres-per-pixel and so
+  // the pixel size of every circle, without any new data arriving.
+  const lastLevelsRef = useRef(new Map<string, number | null>());
   const onSensorClickRef = useRef(onSensorClick);
   useEffect(() => {
     onSensorClickRef.current = onSensorClick;
@@ -180,10 +208,26 @@ function SensorLayer({ map, sensors, cursor, stepMs, segments, playing, metric, 
     }
   }, [clickThrough, version]);
 
-  // --- zoom tracking (quantized to 0.25 so label toggling is cheap) ---
+  // --- zoom tracking ---
+  // Two jobs at two rates. Label visibility is a React concern and quantizes
+  // to 0.25 so it re-renders rarely. Circle SIZE is geographic, so it must
+  // track zoom continuously — that runs imperatively over the marker
+  // elements, with transitions off, so the circles stay welded to the ground
+  // instead of easing along behind the basemap.
   useEffect(() => {
     if (!map) return;
-    const update = () => setZoomBucket(Math.round(map.getZoom() * 4) / 4);
+    const update = () => {
+      setZoomBucket(Math.round(map.getZoom() * 4) / 4);
+      const mPerPx = metersPerPixel(map.getCenter().lat, map.getZoom());
+      for (const [id, handle] of markersRef.current) {
+        const laeq = lastLevelsRef.current.get(id);
+        if (laeq == null) continue;
+        const scale = scaleForLevel(laeq, mPerPx);
+        handle.circle.style.transitionDuration = "0ms";
+        handle.circle.style.transform = `scale(${scale.toFixed(3)})`;
+        handle.circle.style.borderWidth = `${(1.5 / scale).toFixed(3)}px`;
+      }
+    };
     update();
     map.on("zoom", update);
     return () => {
@@ -298,12 +342,16 @@ function SensorLayer({ map, sensors, cursor, stepMs, segments, playing, metric, 
   useEffect(() => {
     void version; // re-apply whenever new data lands
     if (markersRef.current.size === 0) return;
+    // Circles are drawn at a real-world radius, so their pixel size depends on
+    // where and how far in the map currently is.
+    const mPerPx = map ? metersPerPixel(map.getCenter().lat, map.getZoom()) : metersPerPixel(38, 11.3);
     // Aggregate mode: the override IS the frame; settle onto it directly.
     if (overrideFrame != null) {
       lastAppliedRef.current = null;
       for (const [id, handle] of markersRef.current) {
         const v = overrideFrame[id];
-        applyValue(handle, v ? v.laeq : null, 500, zoomBucket >= LABEL_MIN_ZOOM, "ease");
+        lastLevelsRef.current.set(id, v ? v.laeq : null);
+        applyValue(handle, v ? v.laeq : null, 500, zoomBucket >= LABEL_MIN_ZOOM, mPerPx, "ease");
       }
       return;
     }
@@ -331,9 +379,10 @@ function SensorLayer({ map, sensors, cursor, stepMs, segments, playing, metric, 
     const labelsOn = zoomBucket >= LABEL_MIN_ZOOM;
     for (const [id, handle] of markersRef.current) {
       const v = frame?.[id];
-      applyValue(handle, v ? v.laeq : null, tween, labelsOn, timing);
+      lastLevelsRef.current.set(id, v ? v.laeq : null);
+      applyValue(handle, v ? v.laeq : null, tween, labelsOn, mPerPx, timing);
     }
-  }, [cursorQ, stepMs, version, zoomBucket, playing, metric, overrideFrame]);
+  }, [cursorQ, stepMs, version, zoomBucket, playing, metric, overrideFrame, map]);
 
   return null;
 }

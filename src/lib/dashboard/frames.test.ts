@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { FrameStore, frameKey, frameWindowS, quantizeFrameMs, upcomingFrameTimes } from "./frames";
-import { levelColor, levelScale, DEFAULT_STOPS } from "./levels";
+import { levelColor, levelScale, DEFAULT_STOPS, audibleRadiusM, metersPerPixel } from "./levels";
 
 const HOUR = 3_600_000;
 
@@ -84,6 +84,32 @@ describe("level encoding", () => {
     expect(levelScale(DEFAULT_STOPS.maxDb)).toBeCloseTo(DEFAULT_STOPS.maxScale, 10);
     expect(levelScale(DEFAULT_STOPS.maxDb + 20)).toBeCloseTo(DEFAULT_STOPS.maxScale, 10);
     expect(levelScale(70)).toBeGreaterThan(levelScale(50));
+  });
+
+  it("audible radius follows inverse-square: 6 dB doubles the reach", () => {
+    // Spherical spreading: distance ratio is 10^(Δ/20), so a doubling is
+    // 20·log10(2) = 6.02 dB — "6 dB per doubling" is the shorthand, not the
+    // identity. This ratio is the honest part of the circles; the anchor is
+    // not, because the scale is uncalibrated.
+    const DOUBLING_DB = 20 * Math.log10(2);
+    expect(audibleRadiusM(60 + DOUBLING_DB) / audibleRadiusM(60)).toBeCloseTo(2, 6);
+    expect(audibleRadiusM(60 + 2 * DOUBLING_DB) / audibleRadiusM(60)).toBeCloseTo(4, 6);
+    // The shorthand is close, and knowing how close is the point.
+    expect(audibleRadiusM(66) / audibleRadiusM(60)).toBeCloseTo(1.995, 3);
+    // Monotonic between the clamps.
+    for (let db = 45; db < 85; db += 5) {
+      expect(audibleRadiusM(db + 5)).toBeGreaterThan(audibleRadiusM(db));
+    }
+    // Clamped at both ends: a silent sensor stays clickable, a loud one does
+    // not swallow the city.
+    expect(audibleRadiusM(-50)).toBe(audibleRadiusM(0));
+    expect(audibleRadiusM(200)).toBe(audibleRadiusM(150));
+  });
+
+  it("metres-per-pixel halves with each zoom level", () => {
+    expect(metersPerPixel(38, 12) / metersPerPixel(38, 13)).toBeCloseTo(2, 6);
+    // Mercator: a degree of longitude is shorter away from the equator.
+    expect(metersPerPixel(60, 12)).toBeLessThan(metersPerPixel(0, 12));
   });
 
   it("covers the range firmware 1.1 actually produces (33.8 - 97.7 device-dB)", () => {
