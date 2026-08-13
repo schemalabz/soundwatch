@@ -58,9 +58,19 @@ docker compose -f docker-compose.dev.yml up -d   # postgres + mosquitto
 npx prisma migrate dev
 npm run dev                            # web app
 npm run ingester                       # subscriber, in a second shell
-npm run simulate                       # fake device, if you have no hardware
+npm run seed                           # 15 Athens sensor rows (locations only, no readings)
 npm test                               # vitest
 ```
+
+### Getting data to look at
+
+`npm run seed` gives you sensors on the map but **no readings**, so charts, the leaderboard and sensor detail render empty. There are three ways to fix that, and the first one is currently broken:
+
+- **`npm run simulate` does not work.** It publishes the pre-rebuild dialect (`soundwatch/sensors/<id>/readings`, JSON) and the ingester now speaks only the stock firmware dialect (`device/sck/<token>/readings/raw`, non-JSON). The messages are silently ignored — nothing errors, nothing lands. Its own header says so. Making it emit the stock format again (see `mqtt-ingester/parser.ts` and `STOCK_SENSOR_ID_MAP`) is the cleanest fix and unblocks all local frontend work.
+- **A sanitised database dump.** Workable, but see the warning below — a raw dump is a credential leak.
+- **Point a real bench unit at your machine.** Highest fidelity, needs hardware and the unit reconfigured to your broker.
+
+> **A production dump is not safe to hand out as-is.** `sensors.device_id` **is** the device's MQTT credential — the broker authorises on it (`token-as-secret`, ACL `device/sck/%c/#`). Anyone holding it can publish as that sensor. Rewrite `device_id` to synthetic values before sharing a dump, the same reason `provisioning-log.csv` is gitignored.
 
 ## Layout
 
