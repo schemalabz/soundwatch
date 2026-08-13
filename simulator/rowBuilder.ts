@@ -9,8 +9,9 @@ import { deriveReadingRow, type ReadingRow } from "../mqtt-ingester/row";
 export type { ReadingRow };
 
 /**
- * Backfill passes receivedAt = recordedAt: the row represents a reading that
- * WAS received live at the time it was recorded.
+ * Backfill passes the TRUE instant as receivedAt while the payload's own `t:`
+ * carries the device's drifted clock — the same split a live unit produces,
+ * where the server stamps arrival and the device stamps its own idea of now.
  */
 export function payloadToRow(payload: string, receivedAt: Date): ReadingRow | null {
   const reading = parseSensorPayload(payload);

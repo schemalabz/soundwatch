@@ -44,7 +44,9 @@ export function buildPayload(r: SimReading): string {
   }
 
   // Flavor 1 accumulators; payload v3 => id 238 carries milliseconds.
-  parts.push(`235:3`);
+  // 4 = the level-linearity fix is applied (firmware 1.1). Anything below 4
+  // is a lower bound above ~65 device-dB.
+  parts.push(`235:4`);
   parts.push(`236:${r.energySum}`);
   parts.push(`237:${r.frameCount}`);
   parts.push(`238:${r.intervalMs}`);

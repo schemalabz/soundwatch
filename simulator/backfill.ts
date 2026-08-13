@@ -202,7 +202,9 @@ export async function backfill(prisma: PrismaClient): Promise<void> {
           continue;
         }
         const sim = generateReading(sensor, t, intervalS);
-        const row = payloadToRow(buildPayload(sim), sim.recordedAt);
+        // receivedAt is the true instant; the payload's own `t:` carries the
+        // drifted device clock, exactly as a live unit would.
+        const row = payloadToRow(buildPayload(sim), sim.receivedAt);
         if (!row) throw new Error(`Simulator payload failed to parse for ${sensor.deviceId} at t=${t}`);
         batch.push({ sensorId, row });
         if (batch.length >= BATCH_ROWS) {

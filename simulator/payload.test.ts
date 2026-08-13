@@ -15,8 +15,8 @@ describe("wire payload", () => {
       expect(parsed!.recordedAt.getTime()).toBe(r.recordedAt.getTime());
       expect(parsed!.energySum).toBe(r.energySum);
       expect(parsed!.frameCount).toBe(r.frameCount);
-      expect(parsed!.payloadVersion).toBe(3);
-      expect(parsed!.intervalS).toBe(r.intervalMs); // v3: id 238 carries ms
+      expect(parsed!.payloadVersion).toBe(4); // level-linearity fix applied
+      expect(parsed!.intervalS).toBe(r.intervalMs); // v3+: id 238 carries ms
       expect(parsed!.noiseDba).toBeNull(); // id 53 must never be sent
       expect(parsed!.pressurePa).toBeCloseTo(r.pressureKpa * 1000, 5);
     }

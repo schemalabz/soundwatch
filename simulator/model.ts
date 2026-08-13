@@ -120,7 +120,11 @@ function maybeEvent(sensor: FleetSensor, lt: LocalTime, intervalIndex: number, t
   const r1 = rand01(sensor.deviceId, "event-level", intervalIndex);
   const r2 = rand01(sensor.deviceId, "event-mass", intervalIndex);
   return {
-    levelDb: Math.min(92, targetDb + 12 + 8 * r1),
+    // Frame levels, not interval levels: the loudest frame ever recorded was
+    // 111 device-dB. Pre-1.1 firmware could not have reported any of this.
+    // Squared so most events are ordinary and a rare few are genuinely loud —
+    // office construction is what put a bench unit at 97.7 interval LAeq.
+    levelDb: Math.min(110, targetDb + 10 + 34 * r1 * r1),
     frameFraction: 0.02 + 0.03 * r2,
     siren: rand01(sensor.deviceId, "event-kind", intervalIndex) < 0.4,
   };
@@ -142,7 +146,10 @@ function normCdf(x: number): number {
 // The generated reading
 
 export interface SimReading {
+  /** Device clock — drifted, and what travels on the wire as `t:`. */
   recordedAt: Date;
+  /** True instant the reading was produced; the server's received_at. */
+  receivedAt: Date;
   intervalMs: number;
   /** What the model aimed for, before events; tests compare against this. */
   targetLaeq: number;
@@ -181,6 +188,34 @@ function daylight(lt: LocalTime): number {
   return Math.sin(Math.PI * x);
 }
 
+/**
+ * Per-unit calibration offset, in dB. Uncalibrated units genuinely differ:
+ * two co-located bench units 51 hours apart measured a mean difference of
+ * +1.82 dB. Deterministic per device, roughly ±0.9 dB so a pair spans ~1.8 —
+ * which is the floor on any honest between-unit comparison we render.
+ */
+export function calibrationOffsetDb(deviceId: string): number {
+  return (rand01(deviceId, "calib", 0) - 0.5) * 1.8;
+}
+
+/**
+ * Device clock drift, in seconds. Real clocks run FORWARD ~10 min per 12 h
+ * between NTP syncs and snap back at reboot, which is why every ordering
+ * query must use received_at. Modelling it keeps that failure reachable: with
+ * recorded_at === received_at the simulator can never expose an ordering bug.
+ */
+export function clockDriftS(deviceId: string, tSec: number): number {
+  const bootPeriodS = Math.round((3 + 7 * rand01(deviceId, "boot", 0)) * 86400);
+  const scheduledBootT = tSec - (tSec % bootPeriodS);
+  const outageEndT = lastOutageEndBefore(deviceId, tSec);
+  const sinceSyncS = Math.max(0, tSec - Math.max(scheduledBootT, outageEndT ?? 0));
+  // ~10 min per 12 h, with a per-unit rate so they do not drift in lockstep.
+  // Capped at 35 min: that is the largest drift actually observed in the
+  // field, and real units resync far more often than they reboot.
+  const rate = (600 / 43200) * (0.4 + 1.2 * rand01(deviceId, "drift", 0));
+  return Math.min(35 * 60, Math.round(sinceSyncS * rate));
+}
+
 /** The model's headline output: target LAeq (pre-event) at time t. */
 export function targetLevelDb(sensor: FleetSensor, tSec: number): number {
   const lt = localTime(tSec);
@@ -188,8 +223,11 @@ export function targetLevelDb(sensor: FleetSensor, tSec: number): number {
   const wander =
     2.5 * spanScale * valueNoise(sensor.deviceId, "w-slow", tSec, 1800) +
     1.2 * spanScale * valueNoise(sensor.deviceId, "w-fast", tSec, 300);
-  const level = sensor.baseDb + diurnalOffsetDb(sensor.archetype, lt) + wander;
-  return Math.min(95, Math.max(35, level));
+  const level =
+    sensor.baseDb + diurnalOffsetDb(sensor.archetype, lt) + wander + calibrationOffsetDb(sensor.deviceId);
+  // Firmware 1.1 removed the ~68 dB clamp; the fleet now spans 33.8 - 97.7
+  // device-dB. The old 95 ceiling was a relic of the clamped world.
+  return Math.min(100, Math.max(33, level));
 }
 
 /**
@@ -204,7 +242,14 @@ export function generateReading(sensor: FleetSensor, tSec: number, intervalS: nu
   let event = maybeEvent(sensor, lt, intervalIndex, L);
 
   // --- frame-level histogram (the source of truth for all noise numbers) ---
-  const duty = 0.1 + 0.075 * (valueNoise(sensor.deviceId, "duty", t, 7200) + 1); // 0.10-0.25
+  // A frame costs ~27.8 ms of compute (11.6 capture + 16.2 FFT) to cover 11.6 ms
+  // of sound, so ~33% is the hardware ceiling and release 1.1 sustains p50
+  // ~31%. Publish exchanges interrupt accumulation, so intervals are bimodal:
+  // most run clean near the ceiling, a minority collapse.
+  const clean = rand01(sensor.deviceId, "duty-clean", intervalIndex) > 0.23;
+  const duty = clean
+    ? 0.29 + 0.02 * (valueNoise(sensor.deviceId, "duty", t, 7200) + 1)
+    : 0.08 + 0.05 * (valueNoise(sensor.deviceId, "duty", t, 7200) + 1);
   const frameCount = Math.max(1, Math.round(FRAMES_PER_SEC_REALTIME * intervalS * duty));
 
   const sigma = sensor.archetype === "arterial" ? 6 : 4;
@@ -303,7 +348,10 @@ export function generateReading(sensor: FleetSensor, tSec: number, intervalS: nu
     const publishFails = Math.floor(uptimeS / 86400);
     const captureFails = Math.floor(uptimeS / 7200) % 60;
     const i2sReinits = Math.floor(uptimeS / 14400);
-    diagString = [uptimeS, freeHeap, 64, wifiConnects, publishFails, captureFails, i2sReinits, 0, "1.0", "3e69ded", "3e69ded", 0].join("-");
+    // Release 1.1 (ef1ba3e) — the build the fleet actually runs. Field 12 is
+    // energy_saturations: 0 is what a healthy 1.1 unit reports, and the
+    // contract says to expect it even at 97.7 device-dB.
+    diagString = [uptimeS, freeHeap, 64, wifiConnects, publishFails, captureFails, i2sReinits, 0, "1.1", "ef1ba3e", "ef1ba3e", 0].join("-");
   }
 
   // --- environment ---
@@ -339,7 +387,8 @@ export function generateReading(sensor: FleetSensor, tSec: number, intervalS: nu
   }
 
   return {
-    recordedAt: new Date(t * 1000),
+    recordedAt: new Date((t + clockDriftS(sensor.deviceId, t)) * 1000),
+    receivedAt: new Date(t * 1000),
     intervalMs: intervalS * 1000,
     targetLaeq: L,
     event,

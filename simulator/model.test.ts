@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { FLEET, phaseOffsetS } from "./fleet";
-import { generateReading, targetLevelDb, localTime } from "./model";
+import { generateReading, targetLevelDb, localTime, calibrationOffsetDb, clockDriftS } from "./model";
 import { buildPayload } from "./payload";
 import { payloadToRow } from "./rowBuilder";
+import { parseSensorPayload } from "../mqtt-ingester/parser";
 
 // A fixed reference instant: Tuesday 2026-06-16 (UTC). All tests derive times
 // from this so they never depend on wall-clock now.
@@ -93,8 +94,10 @@ describe("round-trip through the real ingester code", () => {
       expect(row.histRaw!.split("-")).toHaveLength(30);
       const histSum = row.histRaw!.split("-").reduce((a, b) => a + Number(b), 0);
       expect(histSum).toBe(row.frameCount);
+      // ~33% is the device's compute ceiling (a frame costs ~27.8 ms to cover
+      // 11.6 ms of sound), and release 1.1 sustains p50 ~31%.
       expect(row.realizedDuty!).toBeGreaterThan(0.05);
-      expect(row.realizedDuty!).toBeLessThan(0.3);
+      expect(row.realizedDuty!).toBeLessThanOrEqual(0.34);
     }
   });
 
@@ -108,7 +111,9 @@ describe("round-trip through the real ingester code", () => {
     expect(bandsRow.bandsDb).toHaveLength(21);
     const diagRow = payloadToRow(buildPayload(withDiag), withDiag.recordedAt)!;
     expect(diagRow.deviceUptimeS).not.toBeNull();
-    expect(diagRow.samGitHash).toBe("3e69ded");
+    expect(diagRow.samGitHash).toBe("ef1ba3e");
+    expect(diagRow.soundwatchRelease).toBe("1.1");
+    expect(diagRow.energySaturations).toBe(0); // healthy 1.1 unit
   });
 
   it("events fatten the tail: lmaxEst well above laeq", () => {
@@ -154,5 +159,51 @@ describe("realism contrasts (what the future filter UI must show)", () => {
     const lt = localTime(TUESDAY_UTC); // midnight UTC Tuesday = 03:00 Athens
     expect(lt.hour).toBe(3);
     expect(lt.dow).toBe(2);
+  });
+});
+
+describe("firmware 1.1 realism", () => {
+  it("gives each unit a calibration offset, spanning ~1.8 dB across the fleet", () => {
+    const offsets = FLEET.map((s) => calibrationOffsetDb(s.deviceId));
+    for (const o of offsets) expect(Math.abs(o)).toBeLessThanOrEqual(0.9);
+    // Two co-located bench units measured a mean difference of +1.82 dB; the
+    // fleet spread should reach that, since it is the floor on any honest
+    // between-unit comparison the leaderboard renders.
+    expect(Math.max(...offsets) - Math.min(...offsets)).toBeGreaterThan(1.4);
+    // Deterministic.
+    expect(calibrationOffsetDb(FLEET[0].deviceId)).toBe(offsets[0]);
+  });
+
+  it("drifts the device clock forward and resets it at reboot", () => {
+    const id = FLEET[0].deviceId;
+    const drifts = Array.from({ length: 400 }, (_, k) => clockDriftS(id, TUESDAY_UTC + k * 3600));
+    for (const d of drifts) {
+      expect(d).toBeGreaterThanOrEqual(0); // never backwards
+      expect(d).toBeLessThan(3 * 3600); // bounded: reboots resync
+    }
+    expect(Math.max(...drifts)).toBeGreaterThan(60); // it actually drifts
+    // It must come back down — that reset is what makes recorded_at ordering
+    // manufacture phantom reboots, and why every ordering query uses
+    // received_at.
+    expect(drifts.some((d, i) => i > 0 && d < drifts[i - 1])).toBe(true);
+  });
+
+  it("stamps the device clock on the wire and the true instant as received", () => {
+    const r = generateReading(FLEET[0], TUESDAY_UTC + 40 * 3600, 60);
+    expect(r.recordedAt.getTime()).toBeGreaterThanOrEqual(r.receivedAt.getTime());
+    // The payload carries the DEVICE's claim, not the server's.
+    const parsed = parseSensorPayload(buildPayload(r))!;
+    expect(parsed.recordedAt.getTime()).toBe(r.recordedAt.getTime());
+  });
+
+  it("reaches the levels only 1.1 can report", () => {
+    // Pre-fix firmware clamped at ~68 device-dB and the fleet never passed
+    // 65.8; post-fix the observed range is 33.8 - 97.7.
+    let max = -Infinity;
+    for (const s of FLEET) {
+      for (let k = 0; k < 400; k++) max = Math.max(max, targetLevelDb(s, TUESDAY_UTC + k * 1800));
+    }
+    expect(max).toBeGreaterThan(80);
+    expect(max).toBeLessThanOrEqual(100);
   });
 });
