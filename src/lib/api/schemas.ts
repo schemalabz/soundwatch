@@ -41,8 +41,10 @@ export const ReadingSchema = z.object({
     .nullable()
     .describe(
       `Level exceeded 10% of the interval. ${PERCENTILE_COMMON} MAY BE CENSORED: ` +
-        "when topBinCensored is true the true value can exceed this by 12+ dB — " +
-        "treat any value at or above 88 as a floor (render '>= 88'), not a value."
+        "a value at or above 88 landed in the open-ended top bin and is a FLOOR, " +
+        "not a value — the true level can be 12+ dB higher, so render '>= 88'. " +
+        "Check topBinCensored: when it is true but this value is below 88, l10 " +
+        "itself is sound and only the interval's upper tail (lmaxEst) is bounded."
     ),
   l50: z
     .number()
@@ -60,10 +62,14 @@ export const ReadingSchema = z.object({
     .boolean()
     .nullable()
     .describe(
-      "True when frames landed in the histogram's open-ended top bin [88, inf) " +
-        "device-dB. A percentile landing there can only return 88-90 regardless " +
-        "of the true level — render '>= 88', not the number. Null when the " +
-        "interval has no histogram."
+      "True when ANY frame in this interval landed in the histogram's open-ended " +
+        "top bin [88, inf) device-dB, so the interval's loud tail is bounded and " +
+        "lmaxEst is a lower bound. It does NOT by itself mean l10 is censored: " +
+        "l10 is only censored when it reads 88 or above (a percentile landing in " +
+        "that bin can only return 88-90 whatever the true level). Measured over " +
+        "7 days of fleet data, every pinned l10 had this flag set, and it was " +
+        "additionally set on ~2.4% of intervals whose l10 was fine. Null when " +
+        "the interval has no histogram."
     ),
   bottomBinCensored: z
     .boolean()
