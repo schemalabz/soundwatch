@@ -152,12 +152,18 @@ Direction of travel: physical device (hardware id) / credential (token, rotatabl
   readings to flash and replays on reconnect — so `received_at` can be far later
   than `recorded_at`.
 - **Headroom is tight.** ~870 MB free of 1967 MB. Next.js builds are the pressure.
+- **Nightly DB backups run on the droplet** — 03:15 UTC, `-Fc` dumps, 14-day
+  rotation, installed and driven by `scripts/prod-backup.sh` (install/run/
+  status/fetch). Dumps live on the droplet only; fetch them periodically.
+- **Tokens are minted server-side** in the admin provisioning flow (16-char);
+  `onboard.sh` registers every unit with the backend before flashing.
 
 ## Not yet built
 
-- Automated database backups — **the only backups are manual dumps**
 - Alerting when a device goes silent (`last_seen_at` exists; nothing watches it)
 - Timescale hypertables / continuous aggregates / retention
-- Server-side token generation in the admin flow
+- Frame-log retention — nothing expires `frame_log_chunks`; at fleet scale it
+  grows ~13.6 GB/month against 38 GB free. Decide before the fleet grows,
+  not at 90 % full
 - `laeq` named as `laeq` in the UI (currently surfaced under the legacy
   `noiseDba` key so existing views keep working)

@@ -2,7 +2,7 @@
 
 > **Status:** working reference, revised 2026-08-12. The fleet runs firmware release **1.1** (`ef1ba3e`), prod has cut over, and 13 field units are provisioned.
 >
-> **What the numbers mean is not in this document.** That is [`measurement-contract.md`](../../soundwatch-firmware/docs/soundwatch/measurement-contract.md) in the firmware repo — field-by-field meaning, the server-side formulas, what is validated and how, and the known distortions. Read it before using the data; this document is the *plumbing*. Companion history lives beside it (`architecture-reference.md`, `foundation-ready.md`).
+> **What the numbers mean is not in this document.** That is [`measurement-contract.md`](https://github.com/schemalabz/soundwatch-firmware/blob/main/docs/soundwatch/measurement-contract.md) in the firmware repo — field-by-field meaning, the server-side formulas, what is validated and how, and the known distortions. Read it before using the data; this document is the *plumbing*. Companion history lives beside it (`architecture-reference.md`, `foundation-ready.md`).
 
 ## 1. The system in one picture
 

@@ -2,7 +2,7 @@
 
 Noise-monitoring sensors around Athens: a fleet of SmartCitizen Kit 2.3 units publish acoustic measurements over MQTT, this repo ingests them, computes every level and statistic, stores them, and serves the map, charts and admin.
 
-**If you are about to display, query or reason about the data, read [`../soundwatch-firmware/docs/soundwatch/measurement-contract.md`](../soundwatch-firmware/docs/soundwatch/measurement-contract.md) first.** It is the contract for what the numbers mean, what is validated, and where they lie. Two things from it that catch everyone:
+**If you are about to display, query or reason about the data, read [`measurement-contract.md` in the firmware repo](https://github.com/schemalabz/soundwatch-firmware/blob/main/docs/soundwatch/measurement-contract.md) first.** It is the contract for what the numbers mean, what is validated, and where they lie. Two things from it that catch everyone:
 
 - **The levels are not calibrated sound pressure.** Every dB value is *device-dB* with an arbitrary zero. "68" is not 68 dB(A) and must never be labelled or compared as though it were.
 - **`l10` saturates at 88–90.** The top histogram bin is open-ended, so percentiles cannot report above it — a chart built on raw `l10` goes flat and calm at exactly the loudest moments.
@@ -11,11 +11,11 @@ Noise-monitoring sensors around Athens: a fleet of SmartCitizen Kit 2.3 units pu
 
 The system spans two repos, and a doc lives with the code that would invalidate it.
 
-| | [`soundwatch`](.) (here) | [`soundwatch-firmware`](../soundwatch-firmware) |
+| | [`soundwatch`](.) (here) | [`soundwatch-firmware`](https://github.com/schemalabz/soundwatch-firmware) |
 |---|---|---|
 | owns | ingester, database, API, web app, deployment | device firmware, what the sensor measures, fleet operations |
 | read for | how a reading becomes a row, what the API serves, how prod runs | **what a number means**, release/flashing, provisioning, field gotchas |
-| index | this file → [`docs/`](docs/) | [`docs/soundwatch/README.md`](../soundwatch-firmware/docs/soundwatch/README.md) |
+| index | this file → [`docs/`](docs/) | [`docs/soundwatch/README.md`](https://github.com/schemalabz/soundwatch-firmware/blob/main/docs/soundwatch/README.md) |
 
 The measurement contract lives *there* because its claims break when firmware changes — bin edges, sentinels and clamps are device behaviour. The server-side formulas are in it too, because on this system **the device ships raw integers and the server does all the maths**, so the formulas are the definition rather than a reimplementation.
 
