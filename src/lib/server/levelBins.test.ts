@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { BIN_COUNT, BIN_HI, BIN_LO, BinAccumulator, binLow } from "./levelBins";
-import { CAGG_BINS } from "../../../scripts/timescale-objects";
+import { CAGG_BINS, CAGG_SQL, stampFor } from "../../../scripts/timescale-objects";
 
 describe("level bins", () => {
   it("the cagg SQL and the TS consumers agree on the bin scheme", () => {
@@ -30,5 +30,30 @@ describe("level bins", () => {
     expect(out.l50).toBeCloseTo(51, 5);
     expect(out.l90).toBeGreaterThanOrEqual(50);
     expect(out.l10).toBeLessThanOrEqual(61);
+  });
+});
+
+describe("continuous-aggregate drift stamp", () => {
+  // The stamp used to hold three numbers — the bin bounds — so it guarded the
+  // bin bounds and nothing else. Every other part of the view could change
+  // while the stamp stayed identical, CREATE ... IF NOT EXISTS would no-op,
+  // and a stale aggregate shipped silently. These two mutations were tried
+  // against the whole suite before the fix; neither failed anything.
+  const MUTATIONS: [string, string, string][] = [
+    ["bucket width", "time_bucket('1 hour'", "time_bucket('30 minutes'"],
+    ["lmax fallback", "max(COALESCE(lmax_est, laeq))", "max(laeq)"],
+    ["bin ceiling", `${CAGG_BINS.lo}, ${CAGG_BINS.hi}`, `${CAGG_BINS.lo}, 91`],
+    ["energy expression", "power(10, laeq / 10)", "power(10, laeq / 20)"],
+  ];
+
+  for (const [what, from, to] of MUTATIONS) {
+    it(`changes when the ${what} changes`, () => {
+      expect(CAGG_SQL, `"${from}" is no longer in the view definition`).toContain(from);
+      expect(stampFor(CAGG_SQL.replace(from, to))).not.toBe(stampFor(CAGG_SQL));
+    });
+  }
+
+  it("is stable for an unchanged definition", () => {
+    expect(stampFor(CAGG_SQL)).toBe(stampFor(CAGG_SQL));
   });
 });

@@ -20,15 +20,14 @@
 // policy (Timescale's own job scheduler, no external cron) materializes an
 // hour after it closes.
 
+import { createHash } from "node:crypto";
+
 import { PrismaClient } from "@prisma/client";
 
 // Mirrors BIN_LO / BIN_HI / BIN_COUNT in src/lib/server/levelBins.ts —
 // duplicated because this script also runs in the ingester image, which does
 // not ship src/lib.
 export const CAGG_BINS = { lo: 30, hi: 128, count: 98 } as const;
-
-/** The bin scheme this file intends, stamped onto the view as a comment. */
-const BIN_STAMP = `sw-bins:${CAGG_BINS.lo}/${CAGG_BINS.hi}/${CAGG_BINS.count}`;
 
 const STATEMENTS: { label: string; sql: string; call?: boolean }[] = [
   {
@@ -48,23 +47,38 @@ const STATEMENTS: { label: string; sql: string; call?: boolean }[] = [
       GROUP BY 1, 2, 3
       WITH NO DATA`,
   },
+
   {
-    // The stamp the drift check reads. Written every run so an aggregate
-    // created before stamping existed adopts one without a rebuild.
-    label: "bin-definition stamp",
-    // A continuous aggregate's user-facing object is a plain VIEW (relkind
-    // 'v') over the materialized hypertable — COMMENT ON MATERIALIZED VIEW
-    // errors with "is not a materialized view".
-    sql: `COMMENT ON VIEW readings_hour_bins IS '${BIN_STAMP}'`,
-  },
-  {
-    label: "refresh policy",
+    label: "refresh policy (live edge)",
     sql: `
       SELECT add_continuous_aggregate_policy(
         'readings_hour_bins',
         start_offset      => INTERVAL '3 hours',
         end_offset        => INTERVAL '1 hour',
         schedule_interval => INTERVAL '15 minutes',
+        if_not_exists     => true)`,
+  },
+  {
+    // The live-edge policy above never looks further back than 3 hours, and
+    // our devices store-and-forward: a unit that was offline for a day
+    // reconnects and writes rows into buckets that closed long ago. Those
+    // buckets are already materialized, the invalidation is recorded, and
+    // nothing ever comes back to act on it. materialized_only = false does
+    // not save us — it unions raw rows only ABOVE the materialization
+    // watermark, not below it. So the hours around an outage stay
+    // permanently undercounted, and the only thing that repaired them was a
+    // service restart, which in production is weeks apart.
+    //
+    // Once a day, walk the last 30 days. The offsets do not overlap the live
+    // policy's (30 days -> 3 hours vs 3 hours -> 1 hour), and Timescale's
+    // invalidation log makes the pass cost only what actually changed.
+    label: "refresh policy (late-arriving data)",
+    sql: `
+      SELECT add_continuous_aggregate_policy(
+        'readings_hour_bins',
+        start_offset      => INTERVAL '30 days',
+        end_offset        => INTERVAL '3 hours',
+        schedule_interval => INTERVAL '1 day',
         if_not_exists     => true)`,
   },
   {
@@ -78,7 +92,43 @@ const STATEMENTS: { label: string; sql: string; call?: boolean }[] = [
 ];
 
 /**
- * Drop the aggregate when its bin definition no longer matches this file.
+ * The fingerprint of the aggregate this file intends: a hash of the CREATE
+ * statement itself.
+ *
+ * A stamp holding only the three bin numbers guarded only the three bin
+ * numbers. Changing time_bucket('1 hour') to '30 minutes', or
+ * max(COALESCE(lmax_est, laeq)) to max(laeq), left the stamp identical, so
+ * the drift check passed, IF NOT EXISTS made the CREATE a no-op, and a stale
+ * aggregate shipped with nothing in the logs. Both mutations were tried
+ * against the full suite: neither failed a test.
+ *
+ * Hashing the source text we send has no normalization problem — that is the
+ * whole reason we do not read view_definition back from Postgres, which
+ * rewrites `30` as `(30)::double precision`.
+ */
+export const CAGG_SQL = STATEMENTS.find((s) => s.label.startsWith("continuous aggregate"))!.sql;
+
+export function stampFor(sql: string): string {
+  return `sw-cagg:${createHash("sha256").update(sql).digest("hex").slice(0, 16)}`;
+}
+
+const CAGG_STAMP = stampFor(CAGG_SQL);
+
+/**
+ * The stamp the drift check reads. Written on every run, so an aggregate
+ * created before stamping existed adopts one without a rebuild.
+ *
+ * A continuous aggregate's user-facing object is a plain VIEW (relkind 'v')
+ * over the materialized hypertable — COMMENT ON MATERIALIZED VIEW errors with
+ * "is not a materialized view".
+ */
+const STAMP_STATEMENT = {
+  label: "definition stamp",
+  sql: `COMMENT ON VIEW readings_hour_bins IS '${CAGG_STAMP}'`,
+};
+
+/**
+ * Drop the aggregate when its definition no longer matches this file.
  *
  * Every statement below is CREATE ... IF NOT EXISTS, which makes re-running
  * safe but also makes a CHANGED definition a silent no-op: raising the bin
@@ -100,9 +150,9 @@ async function dropIfDefinitionDrifted(prisma: PrismaClient): Promise<void> {
      WHERE c.relname = 'readings_hour_bins' AND n.nspname = 'public'`
   );
   if (rows.length === 0) return; // nothing to drift from
-  if (rows[0].stamp === BIN_STAMP) return;
+  if (rows[0].stamp === CAGG_STAMP) return;
   console.log(
-    `[timescale-objects] bin definition changed (${rows[0].stamp ?? "unstamped"} -> ${BIN_STAMP}) — rebuilding`
+    `[timescale-objects] definition changed (${rows[0].stamp ?? "unstamped"} -> ${CAGG_STAMP}) — rebuilding`
   );
   await prisma.$executeRawUnsafe(`DROP MATERIALIZED VIEW IF EXISTS readings_hour_bins CASCADE`);
 }
@@ -111,7 +161,7 @@ async function main() {
   const prisma = new PrismaClient();
   try {
     await dropIfDefinitionDrifted(prisma);
-    for (const s of STATEMENTS) {
+    for (const s of [STATEMENTS[0], STAMP_STATEMENT, ...STATEMENTS.slice(1)]) {
       try {
         await prisma.$executeRawUnsafe(s.sql);
         console.log(`[timescale-objects] ok: ${s.label}`);
