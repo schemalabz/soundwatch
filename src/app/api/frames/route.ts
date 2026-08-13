@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { PUBLIC_SENSOR_SQL } from "@/lib/server/filterSql";
+import { MAX_EPOCH_MS } from "@/lib/dashboard/filters";
 
 // Batch frame endpoint for map playback: for each requested instant, the
 // energy-averaged LAeq per public sensor over a trailing window ending at
@@ -41,12 +42,17 @@ export async function GET(req: NextRequest) {
     MAX_WINDOW_S,
     Math.max(MIN_WINDOW_S, Number(req.nextUrl.searchParams.get("window")) || 600)
   );
+  // Object.hasOwn, not `?? fallback`: ?? catches null and undefined, and an
+  // INHERITED key is neither. metric=constructor resolved to the Object
+  // constructor, whose source text went into the SELECT list, and Postgres
+  // rejected it — a 500 on a public route. Not injectable (the text is
+  // fixed), just broken.
   const metric = req.nextUrl.searchParams.get("metric") ?? "laeq";
-  const metricSql = METRIC_SQL[metric] ?? METRIC_SQL.laeq;
+  const metricSql = Object.hasOwn(METRIC_SQL, metric) ? METRIC_SQL[metric] : METRIC_SQL.laeq;
   const times = atParam
     .split(",")
     .map(Number)
-    .filter((t) => Number.isFinite(t) && t > 0)
+    .filter((t) => t > 0 && t <= MAX_EPOCH_MS)
     .slice(0, MAX_FRAMES);
   if (times.length === 0) {
     return NextResponse.json({ error: "at= requires epoch-ms times" }, { status: 400 });

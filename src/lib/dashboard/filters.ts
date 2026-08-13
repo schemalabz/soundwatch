@@ -239,6 +239,21 @@ export function monthSelectionMask(f: DashboardFilters): boolean[] {
 }
 
 /**
+ * The latest instant a request may name. Number.isFinite is not a bound:
+ * `from=1e20` is finite, passes every guard we had, and then throws
+ * RangeError inside toISOString() — an unauthenticated 500 produced by a
+ * query string. Anything past 2100 is a typo or a probe, either way not a
+ * question about noise in Athens.
+ */
+export const MAX_EPOCH_MS = Date.UTC(2100, 0, 1);
+
+/** An epoch-ms parameter, or null if it is missing, unparseable or absurd. */
+export function parseEpochMs(raw: string | null | undefined): number | null {
+  const n = Number(raw);
+  return raw != null && raw !== "" && Number.isFinite(n) && n > 0 && n <= MAX_EPOCH_MS ? n : null;
+}
+
+/**
  * The single decoder for the wire format filtersToAggregateQuery emits —
  * every server consumer (JS instantMatches paths AND SQL predicate
  * builders) goes through this, so the two can never drift. Unknown or
@@ -255,7 +270,7 @@ export function parseWireFilters(q: URLSearchParams): DashboardFilters {
     .split(",")
     .filter(Boolean)
     .map((s) => s.split(":").map(Number))
-    .filter((a) => a.length === 2 && a.every((n) => Number.isFinite(n) && n > 0) && a[0] < a[1])
+    .filter((a) => a.length === 2 && a.every((n) => n > 0 && n <= MAX_EPOCH_MS) && a[0] < a[1])
     .map(([startMs, endMs]) => ({ startMs, endMs }));
   const locations = (q.get("loc") ?? "")
     .split(",")
@@ -266,7 +281,10 @@ export function parseWireFilters(q: URLSearchParams): DashboardFilters {
   return {
     period: null, // already folded into from= by the encoder
     days: new Set(days === "weekend" || days === "weekday" ? [days as DayGroup] : []),
-    hours: new Set(hours.filter((h): h is HourPreset => h in HOUR_PRESET_RANGES)),
+    // Object.hasOwn, not `in`: `in` walks the prototype chain, so
+    // hours=toString would pass here and then crash filterSql, which calls
+    // .map() on what it assumes is a range array.
+    hours: new Set(hours.filter((h): h is HourPreset => Object.hasOwn(HOUR_PRESET_RANGES, h))),
     months: new Set(months.map((m) => m - 1)),
     ranges,
     locations,

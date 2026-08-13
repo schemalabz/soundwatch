@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { PUBLIC_SENSOR_SQL, locationSql } from "@/lib/server/filterSql";
 import { BinAccumulator, type LevelSummary } from "@/lib/server/levelBins";
-import { instantMatches, parseWireFilters } from "@/lib/dashboard/filters";
+import { instantMatches, parseEpochMs, parseWireFilters } from "@/lib/dashboard/filters";
 import { athensWallTime } from "@/lib/dashboard/time";
 import { needsRawReadings, resolveBucket } from "@/lib/dashboard/buckets";
 import { BIN_LO, BIN_HI, BIN_COUNT } from "@/lib/server/levelBins";
@@ -68,8 +68,8 @@ const HOUR_S_MS = 3600_000;
 
 export async function GET(req: NextRequest) {
   const q = req.nextUrl.searchParams;
-  const fromMs = Number(q.get("from"));
-  if (!Number.isFinite(fromMs) || fromMs <= 0) {
+  const fromMs = parseEpochMs(q.get("from"));
+  if (fromMs === null) {
     return NextResponse.json({ error: "from= requires epoch ms" }, { status: 400 });
   }
   const filters = parseWireFilters(q);

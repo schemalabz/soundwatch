@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { PUBLIC_SENSOR_SQL, filterSql, locationSql, rangesSql } from "@/lib/server/filterSql";
-import { parseWireFilters } from "@/lib/dashboard/filters";
+import { parseEpochMs, parseWireFilters } from "@/lib/dashboard/filters";
 import { BinAccumulator } from "@/lib/server/levelBins";
 
 // Aggregates over the FILTERED time-set, per sensor: the acoustic summary
@@ -31,8 +31,8 @@ const HOUR_MS = 3600_000;
 
 export async function GET(req: NextRequest) {
   const q = req.nextUrl.searchParams;
-  const fromMs = Number(q.get("from"));
-  if (!Number.isFinite(fromMs) || fromMs <= 0) {
+  const fromMs = parseEpochMs(q.get("from"));
+  if (fromMs === null) {
     return NextResponse.json({ error: "from= requires epoch ms" }, { status: 400 });
   }
 
