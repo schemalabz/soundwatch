@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { PUBLIC_SENSOR_WHERE } from "@/lib/locations";
 import { checkAdminAuth } from "../admin/auth";
+import { READING_SELECT, serializeReading } from "@/lib/api/readings";
 
 export async function GET(request: Request) {
   // Admins may ask to see bench/experimental units too (the map offers this
@@ -16,33 +17,11 @@ export async function GET(request: Request) {
     where: wantsExperimental ? adminWhere : PUBLIC_SENSOR_WHERE,
     include: {
       readings: {
-        orderBy: { recordedAt: "desc" },
+        // receivedAt, not recordedAt: a drifting device clock must not decide
+        // which reading is "latest".
+        orderBy: { receivedAt: "desc" },
         take: 1,
-        select: {
-          recordedAt: true,
-          noiseDba: true,
-          laeq: true,
-          temperature: true,
-          humidity: true,
-          lightLux: true,
-          pressurePa: true,
-          uvA: true,
-          uvB: true,
-          uvC: true,
-          pm1: true,
-          pm25: true,
-          pm4: true,
-          pm10: true,
-          pn05: true,
-          pn10: true,
-          pn25: true,
-          pn40: true,
-          pn100: true,
-          tps: true,
-          battery: true,
-          rssi: true,
-          sdCard: true,
-        },
+        select: READING_SELECT,
       },
     },
     orderBy: { name: "asc" },
@@ -58,16 +37,8 @@ export async function GET(request: Request) {
     isActive: sensor.isActive,
     isExperimental: sensor.isExperimental,
     lastSeenAt: sensor.lastSeenAt,
-    // Soundwatch firmware ships the stock single-snapshot Noise dBA (id 53)
-    // DISABLED and emits continuous accumulators instead, which the ingester
-    // turns into laeq. Surface laeq under the existing noiseDba key so every
-    // noise-facing view keeps working; laeq is the better number anyway (an
-    // energy average over ~650 frames, not one 11.6ms snapshot).
     latestReading: sensor.readings[0]
-      ? {
-          ...sensor.readings[0],
-          noiseDba: sensor.readings[0].noiseDba ?? sensor.readings[0].laeq,
-        }
+      ? serializeReading(sensor.readings[0])
       : null,
   }));
 

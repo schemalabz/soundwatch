@@ -1,8 +1,10 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
+import { checkAdminAuth } from "@/app/api/admin/auth";
+import { READING_SELECT, serializeReading } from "@/lib/api/readings";
 
 export async function GET(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
@@ -11,19 +13,21 @@ export async function GET(
     where: { id },
     include: {
       readings: {
-        orderBy: { recordedAt: "desc" },
+        // receivedAt, not recordedAt: a drifting device clock must not decide
+        // which reading is "latest".
+        orderBy: { receivedAt: "desc" },
         take: 1,
+        select: READING_SELECT,
       },
     },
   });
 
-  if (!sensor) {
+  // Bench units (isExperimental) are not public. 404 rather than 403 so their
+  // existence is not confirmable without admin auth.
+  if (!sensor || (sensor.isExperimental && checkAdminAuth(request) !== null)) {
     return NextResponse.json({ error: "Sensor not found" }, { status: 404 });
   }
 
-  const raw = sensor.readings[0] ?? null;
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const latestReading = raw ? (({ id: _id, sensorId: _sid, ...rest }) => rest)(raw) : null;
   return NextResponse.json({
     id: sensor.id,
     deviceId: sensor.deviceId,
@@ -36,6 +40,8 @@ export async function GET(
     isActive: sensor.isActive,
     lastSeenAt: sensor.lastSeenAt,
     createdAt: sensor.createdAt,
-    latestReading,
+    latestReading: sensor.readings[0]
+      ? serializeReading(sensor.readings[0])
+      : null,
   });
 }
