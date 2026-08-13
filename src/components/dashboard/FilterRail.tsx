@@ -251,6 +251,12 @@ function FilterRail(p: FilterRailProps) {  devRenderCount("FilterRail");
                   <span className="text-[11px] text-muted-foreground">{tr.aggregations[k].hint}</span>
                 </DropdownMenuItem>
               ))}
+              {/* Every one of these is uncalibrated device-dB. The picker is
+                  where a reader decides what number to trust, so it is where
+                  the caveat belongs. */}
+              <p className="border-t px-2 pb-1 pt-2 text-[10px] leading-snug text-muted-foreground/80">
+                {tr.uncalibrated}
+              </p>
             </DropdownMenuContent>
           </DropdownMenu>
         </p>

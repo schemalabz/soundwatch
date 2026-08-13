@@ -98,13 +98,22 @@ export const dashboardStrings = {
    *  metric is referenced outside the picker itself. */
   aggregationFull: (k: "laeq" | "l50" | "l10" | "l90" | "lmax") =>
     `${dashboardStrings.aggregations[k].label} — ${dashboardStrings.aggregations[k].hint}`,
+  // The percentiles here are computed over the LAeq of each interval, not over
+  // the frames inside one interval (which is what the device's own l10/l50/l90
+  // columns are). Same names, different statistic — the hints say "διαστημάτων"
+  // so a reader is not told a stronger claim than we can make.
   aggregations: {
     laeq: { label: "Μέση", hint: "Ενεργειακός μέσος (LAeq)" },
-    l50: { label: "Διάμεσος", hint: "Τυπική στάθμη (L50)" },
-    l10: { label: "Αιχμές", hint: "Στάθμη που ξεπερνιέται το 10% του χρόνου (L10)" },
-    l90: { label: "Υπόβαθρο", hint: "Στάθμη που ξεπερνιέται το 90% του χρόνου (L90)" },
-    lmax: { label: "Μέγιστη", hint: "Δυνατότερη καταγεγραμμένη στιγμή (Lmax)" },
+    l50: { label: "Διάμεσος", hint: "Τυπική στάθμη — διάμεσος των διαστημάτων (L50)" },
+    l10: { label: "Αιχμές", hint: "Ξεπερνιέται στο 10% των διαστημάτων (L10)" },
+    l90: { label: "Υπόβαθρο", hint: "Ξεπερνιέται στο 90% των διαστημάτων (L90)" },
+    lmax: { label: "Μέγιστη", hint: "Δυνατότερο μεμονωμένο καρέ 11,6 ms (Lmax)" },
   },
+  // The one caveat that governs every number on screen. Wording matches the
+  // firmware repo's measurement contract; kept verbatim from the pre-existing
+  // Greek copy so the two never drift.
+  uncalibrated:
+    "Σχετική στάθμη ήχου, χωρίς βαθμονόμηση — χρήσιμη για σύγκριση της ίδιας θέσης με την πάροδο του χρόνου, όχι με όρια θορύβου ή άλλα όργανα.",
   timebar: {
     live: "Μετάβαση στο τώρα",
     freshness: (s: number) => (s === 1 ? "Δεδομένα από πριν 1 δευτερόλεπτο" : `Δεδομένα από πριν ${s} δευτερόλεπτα`),

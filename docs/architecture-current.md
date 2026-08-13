@@ -20,7 +20,7 @@ PostgreSQL (TimescaleDB-capable image, plain PG usage for now)
    ▼  Prisma queries
 Next.js API routes  → /api/sensors, /api/sensors/[id]/readings, admin, firmware
    ▼
-React frontend — Mapbox map, Recharts charts, leaderboard (i18n: el/en)
+React frontend — Mapbox map with time playback, leaderboard, charts (Greek)
 ```
 
 Design principle that got us here: **thinnest vertical slice, validated end-to-end before the next change** — the device side stays as close to stock as each step allows, and all schema/log math lives on the server.
@@ -33,10 +33,10 @@ Design principle that got us here: **thinnest vertical slice, validated end-to-e
 | Firmware | C++ / Arduino, PlatformIO (atmelsam@8.1.0, framework vendored in-repo) | `soundwatch-firmware` fork | base pinned at `baseline/stock-2026-07` (= upstream master + PR#107 WiFi fixes); work happens on `main` — see §6 |
 | Firmware dev env | Nix flake devshell (platformio-core, python3, pyserial) | firmware repo | flash = UF2 drag-copy (SAM) / serial (ESP); headless workflow documented in `docs/soundwatch/tools/` |
 | Broker | Mosquitto 2.x | Docker (prod compose) / nix (bench) | plaintext **1883 (public, ACL `device/sck/%c/#`)** + **1884 (internal, unpublished)** for backend services; token-as-secret, mirrors SmartCitizen; TLS removed — the firmware cannot speak it. See `infrastructure.md` |
-| Ingester | TypeScript, `mqtt` v5, tsx runtime | umbrella repo `mqtt-ingester/` | one subscriber, parse → compute → insert; unit-tested (vitest, 93 tests) |
-| ORM / migrations | Prisma 5.22 | `prisma/` | migrations `0001`–`0015`. The **ingester** runs `prisma migrate deploy` on boot — it is the only writer, so it owns schema convergence |
-| Database | `timescale/timescaledb:latest-pg17` (PG 17) | Docker | **plain Postgres usage today** — hypertables/continuous aggregates/retention are the planned Step 6; the image choice makes that a no-migration switch |
-| Web app | Next.js 16.2, React 19.2, Mapbox GL, Recharts, next-intl | umbrella repo `src/` | map + leaderboard + charts + admin; reads DB via Prisma |
+| Ingester | TypeScript, `mqtt` v5, tsx runtime | umbrella repo `mqtt-ingester/` | one subscriber, parse → compute → insert; row derivation shared with the simulator (`row.ts`) |
+| ORM / migrations | Prisma 5.22 | `prisma/` | migrations `0001`–`0017`. The **ingester** runs `prisma migrate deploy` on boot — it is the only writer, so it owns schema convergence. Continuous-aggregate DDL cannot run inside a migration transaction, so it lives in `scripts/timescale-objects.ts`, chained after `migrate deploy` |
+| Database | `timescale/timescaledb:latest-pg17` (PG 17) | Docker | **Timescale in use** (migration 0016): `readings` is a hypertable in 7-day chunks, and `readings_hour_bins` is a continuous aggregate of per-(sensor, hour, 1-dB bin) counts/energy/Lmax. No retention or compression policy — raw is read at arbitrary depth |
+| Web app | Next.js 16.2, React 19.2, Mapbox GL, Tailwind + shadcn/ui | umbrella repo `src/` | Greek dashboard: map with time playback, leaderboard, charts, plus admin and the install flow; reads DB via Prisma |
 | Prod hosting | Coolify on a DigitalOcean droplet (`188.166.164.198`, `soundwatch.gr` / `mqtt.soundwatch.gr`) | deploys `schemalabz/soundwatch:main` via docker-compose | cutover **done**; a push to `main` deploys. Backup/restore runbook in `infrastructure.md` |
 | Bench pipeline | local Mosquitto + Postgres + ingester + Next dev | dev machine | where all validation happens; prod untouched by the experiments |
 
@@ -64,7 +64,7 @@ Topic: `device/sck/<token>/readings/raw`. The payload is the stock SmartCitizen 
 
 The device is **integer-only per frame** (fixed-point FFT power path); the only float math on-device is one `log10` per band per interval at packing time. All level/statistics math is server-side — that keeps rollups lossless (energies are additive; dB values are not).
 
-## 4. Database schema (Prisma, migrations 0001–0015)
+## 4. Database schema (Prisma, migrations 0001–0017)
 
 **`sensors`** — device registry, identity and lifecycle: `id` (uuid), `device_id` (unique; = MQTT token), `name`, `latitude/longitude/address`, `firmware_version`, `target_firmware_version` (OTA intent), `reading_interval_s`, `is_active`, `last_seen_at`, `created_at`, plus:
 
@@ -89,7 +89,7 @@ The device is **integer-only per frame** (fixed-point FFT power path); the only 
 
 **`frame_log_chunks`** — raw per-frame levels pulled off the SD card, stored as received: `(device_id, day, offset)` unique, `data`, `received_at`. One row per 360-byte wire slice; reassembly is `string_agg(data order by offset)` **within one day**. Not part of the public API, and not interval-shaped — see the frame-log section of the measurement contract before using it.
 
-Index: `(sensor_id, recorded_at DESC)`. Levels are **device-dB (uncalibrated)** until Flavor 3 (calibration vs a reference meter) sets the real offset.
+Indexes: `(sensor_id, recorded_at DESC)` for time-of-day queries and `(sensor_id, received_at DESC)` (migration 0017) for every latest-reading probe — **order by `received_at`, never `recorded_at`**, because device clocks drift forward between NTP syncs and snap back at reboot. Levels are **device-dB (uncalibrated)** until Flavor 3 (calibration vs a reference meter) sets the real offset.
 
 ### 4.1 Environmental measurements — units, cadence, validated ranges
 
@@ -146,7 +146,7 @@ Stock firmware measured one 11.6ms FFT snapshot per interval (~0.02% of the soun
 
 | repo | what lives there |
 |---|---|
-| `soundwatch` (this) | `mqtt-ingester/` the subscriber · `prisma/` schema and migrations · `src/app/api/` routes · `src/` web app · `scripts/` operational tooling |
+| `soundwatch` (this) | `mqtt-ingester/` the subscriber · `simulator/` the 50-sensor fleet simulator (stock dialect, through the real ingester code) · `prisma/` schema and migrations · `src/app/api/` routes · `src/components/dashboard/` the web app · `scripts/` operational tooling |
 | `soundwatch-firmware` | SAM and ESP firmware · `docs/soundwatch/` the measurement contract, release, provisioning and fleet operations · `docs/soundwatch/tools/bench-kit/` flashing and provisioning tooling |
 
 The shipping firmware is release **1.1** = tag `fw/soundwatch-1.1` = `ef1ba3e`; both chips come from that one commit. See `RELEASE.md` in the firmware repo.
@@ -175,4 +175,4 @@ Firmware-side issues live in the firmware repo's `HANDOFF.md`; these are the ser
 **Operational**
 
 - **No silence alerting.** Nothing tells anyone when a deployed unit dies; the only detection is a human opening `/admin`. Cheap to close with a `last_seen_at` query, and urgent once units are somewhere nobody visits.
-- **Timescale features unused.** The image is TimescaleDB but usage is plain Postgres — hypertables, continuous aggregates and retention remain available as a no-migration switch.
+- **Timescale is in use** (migration 0016 + `scripts/timescale-objects.ts`): hypertable, plus a continuous aggregate that serves the dashboard's aggregate endpoints in milliseconds where raw scans took seconds. Retention and compression remain unused.
