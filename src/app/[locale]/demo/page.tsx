@@ -37,7 +37,20 @@ export default function DemoPage() {
 
   const load = useCallback(async () => {
     try {
-      const r = await fetch("/api/demo/live?minutes=30", { cache: "no-store" });
+      // Bench units are gated server-side now. Ask for them with the admin
+      // token the map already stores; without one this degrades to the public
+      // view (field units only) rather than failing.
+      const token =
+        typeof window === "undefined"
+          ? null
+          : localStorage.getItem("sw-admin-token");
+      const r = await fetch(
+        `/api/demo/live?minutes=30${token ? "&includeExperimental=1" : ""}`,
+        {
+          cache: "no-store",
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+        }
+      );
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
       setData(await r.json());
       setError(null);
