@@ -1,5 +1,8 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
+import { checkAdminAuth } from "@/app/api/admin/auth";
+import { READING_SELECT, serializeReading } from "@/lib/api/readings";
+import { ReadingsQuerySchema } from "@/lib/api/schemas";
 
 export async function GET(
   request: Request,
@@ -8,13 +11,27 @@ export async function GET(
   const { id } = await params;
   const url = new URL(request.url);
 
-  const from = url.searchParams.get("from");
-  const to = url.searchParams.get("to");
-  const limitParam = url.searchParams.get("limit");
-  const limit = limitParam ? Math.min(parseInt(limitParam, 10), 10000) : 1000;
+  const parsed = ReadingsQuerySchema.safeParse(
+    Object.fromEntries(url.searchParams)
+  );
+  if (!parsed.success) {
+    return NextResponse.json(
+      {
+        error: "Invalid query",
+        issues: parsed.error.issues.map(
+          (i) => `${i.path.join(".")}: ${i.message}`
+        ),
+      },
+      { status: 400 }
+    );
+  }
+  const { from, to } = parsed.data;
+  const limit = parsed.data.limit ?? 1000;
 
   const sensor = await prisma.sensor.findUnique({ where: { id } });
-  if (!sensor) {
+  // Bench units (isExperimental) are not public. 404 rather than 403 so their
+  // existence is not confirmable without admin auth.
+  if (!sensor || (sensor.isExperimental && checkAdminAuth(request) !== null)) {
     return NextResponse.json({ error: "Sensor not found" }, { status: 404 });
   }
 
@@ -23,6 +40,10 @@ export async function GET(
     recordedAt?: { gte?: Date; lte?: Date };
   } = { sensorId: id };
 
+  // from/to filter on the device clock — that is what a chart x-axis wants —
+  // but ordering must be receivedAt: device clocks run up to ~35 min ahead and
+  // jump back on NTP resync, so sorting on recordedAt silently drops
+  // recently-received rows from a drifting unit.
   if (from || to) {
     where.recordedAt = {};
     if (from) where.recordedAt.gte = new Date(from);
@@ -31,41 +52,15 @@ export async function GET(
 
   const readings = await prisma.reading.findMany({
     where,
-    orderBy: { recordedAt: "desc" },
+    orderBy: { receivedAt: "desc" },
     take: limit,
-    select: {
-      recordedAt: true,
-      noiseDba: true,
-      laeq: true,
-      temperature: true,
-      humidity: true,
-      lightLux: true,
-      pressurePa: true,
-      uvA: true,
-      uvB: true,
-      uvC: true,
-      pm1: true,
-      pm25: true,
-      pm4: true,
-      pm10: true,
-      pn05: true,
-      pn10: true,
-      pn25: true,
-      pn40: true,
-      pn100: true,
-      tps: true,
-      battery: true,
-      rssi: true,
-      sdCard: true,
-    },
+    select: READING_SELECT,
   });
 
   return NextResponse.json({
     sensorId: id,
     deviceId: sensor.deviceId,
     count: readings.length,
-    // See /api/sensors: the Soundwatch firmware disables the stock Noise dBA
-    // sensor, so fall back to laeq to keep existing charts working.
-    readings: readings.map((r) => ({ ...r, noiseDba: r.noiseDba ?? r.laeq })),
+    readings: readings.map(serializeReading),
   });
 }
