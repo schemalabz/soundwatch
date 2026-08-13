@@ -10,19 +10,10 @@ import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { fmtDb } from "@/lib/dashboard/format";
 
-interface StatusSensor {
-  id: string;
-  name: string | null;
-  secondsAgo: number | null;
-  cells: string;
-}
-
-interface StatusResponse {
-  bucketHours: number;
-  windowDays: number;
-  sensors: StatusSensor[];
-  ingest?: { days: number; hours: { t: number; n: number }[] };
-}
+// Shapes come from the route that produces them. These were two hand-written
+// types kept in step by hand, and they had already drifted: `ingest` was
+// optional here and is always present in the response.
+import type { StatusResponse, StatusSensor } from "@/app/api/status/route";
 
 const ONLINE_S = 3600;
 
