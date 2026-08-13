@@ -14,7 +14,8 @@ type Status = {
   token: string; known: boolean; state: "live" | "stale" | "never_seen" | "unknown_token";
   live?: boolean; hasLocation?: boolean;
   sensor?: { name: string | null; hardwareId: string | null; apName: string | null;
-             address: string | null; latitude: number | null; longitude: number | null };
+             address: string | null; latitude: number | null; longitude: number | null;
+             isExperimental?: boolean };
   lastReading?: { secondsAgo: number; laeq: number | null; battery: number | null;
                   rssi: number | null } | null;
 };
@@ -124,11 +125,15 @@ export default function InstallPage({ params }: { params: Promise<{ token: strin
           </button>
           {msg && <p style={{ fontSize: 14, marginTop: 10 }}>{msg}</p>}
         </>
-      ) : (
+      ) : s ? (
+        // Mounted only once the status is known: pinOnly must be right at
+        // mount, because it seeds the picker's initial mode.
         <>
-          <p style={{ fontSize: 14, color: "#444" }}>{tr.pickSite}</p>
-          <SitePicker token={token} onSaved={load} />
+          {!s.sensor?.isExperimental && <p style={{ fontSize: 14, color: "#444" }}>{tr.pickSite}</p>}
+          <SitePicker token={token} onSaved={load} pinOnly={s.sensor?.isExperimental === true} />
         </>
+      ) : (
+        <p style={{ fontSize: 14, color: "#666" }}>{tr.checking}</p>
       )}
 
       <p style={{ fontSize: 13, color: "#666", marginTop: 24 }}>

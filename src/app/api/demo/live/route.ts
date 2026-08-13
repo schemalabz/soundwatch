@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
+import { checkAdminAuth } from "@/app/api/admin/auth";
 
 // Bench demo endpoint: exposes the Soundwatch acoustic measurements that the
 // product API deliberately does not carry yet (it still selects the stock
@@ -17,7 +18,14 @@ export async function GET(request: Request) {
   );
   const since = new Date(Date.now() - minutes * 60_000);
 
+  // Bench units are not public — even on the demo feed. Admins can ask for
+  // them with the same gate the sensor list uses.
+  const wantsExperimental =
+    url.searchParams.get("includeExperimental") === "1" &&
+    checkAdminAuth(request) === null;
+
   const sensors = await prisma.sensor.findMany({
+    where: wantsExperimental ? {} : { isExperimental: false },
     select: { id: true, deviceId: true, lastSeenAt: true },
     orderBy: { deviceId: "asc" },
   });
@@ -25,7 +33,11 @@ export async function GET(request: Request) {
   const readings = await prisma.reading.findMany({
     // receivedAt, not recordedAt: a store-and-forward replay carries an old
     // device clock, and the demo is about what is arriving *now*.
-    where: { receivedAt: { gte: since }, laeq: { not: null } },
+    where: {
+      sensorId: { in: sensors.map((s) => s.id) },
+      receivedAt: { gte: since },
+      laeq: { not: null },
+    },
     orderBy: { receivedAt: "asc" },
     select: {
       sensorId: true,

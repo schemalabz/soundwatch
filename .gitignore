@@ -63,3 +63,6 @@ prisma/*.db
 .superpowers/
 
 /src/generated/prisma
+
+# working docs stay out of source control
+docs/superpowers/

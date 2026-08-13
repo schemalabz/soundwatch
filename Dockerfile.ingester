@@ -16,6 +16,13 @@ COPY src/types ./src/types
 COPY tsconfig.json ./
 COPY vitest.config.ts ./
 
+# The frame-log pacer and probe run as one-shot containers from this same image,
+# so they ship inside it rather than being bind-mounted from the droplet.
+# Mounting meant a deploy updated the ingester's parser but NOT the pacer,
+# letting the two halves of one wire contract drift apart silently — the exact
+# class of failure that produced serve-mute.
+COPY scripts ./scripts
+
 # Apply pending migrations before starting. Without this a deploy brings up code
 # that writes columns the database does not have yet — every insert fails and the
 # ingester silently stores nothing. The ingester is the only writer, so it is the
