@@ -60,6 +60,7 @@ export const dashboardStrings = {
     privacy: "Απόρρητο",
     terms: "Όροι",
     api: "API",
+    apiTitle: "Δημόσιο API — τεκμηρίωση και δοκιμή",
     status: "Κατάσταση",
     soon: "σύντομα",
   },

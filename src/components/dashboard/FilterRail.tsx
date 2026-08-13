@@ -464,11 +464,21 @@ function FilterRail(p: FilterRailProps) {  devRenderCount("FilterRail");
 
       {/* footer */}
       <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 border-t px-5 py-3 text-[10.5px] text-muted-foreground/70">
-        {([tr.footer.about, tr.footer.privacy, tr.footer.terms, tr.footer.api] as string[]).map((label) => (
+        {([tr.footer.about, tr.footer.privacy, tr.footer.terms] as string[]).map((label) => (
           <span key={label} className="cursor-default" title={tr.footer.soon}>
             {label}
           </span>
         ))}
+        {/* The two that actually go somewhere, weighted so they read as links
+            among the placeholders. /api/docs is a route handler serving Scalar,
+            not a page — a plain anchor, not next/link. */}
+        <a
+          href="/api/docs"
+          title={tr.footer.apiTitle}
+          className="font-medium text-muted-foreground transition-colors hover:text-foreground"
+        >
+          {tr.footer.api}
+        </a>
         <Link href="/status" className="font-medium text-muted-foreground transition-colors hover:text-foreground">
           {tr.footer.status}
         </Link>
