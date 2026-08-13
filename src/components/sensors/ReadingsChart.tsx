@@ -35,7 +35,11 @@ export default function ReadingsChart({
         ? (r[metricKey] as number) / 1000
         : (r[metricKey] as number),
     }))
-    .reverse();
+    // Sort on the x value itself rather than assuming the API's order. The
+    // readings endpoint orders by received_at (a drifting device clock must
+    // not decide which rows are latest), so for a unit whose clock has jumped
+    // that order is not the recorded_at order this axis plots.
+    .sort((a, b) => a.time - b.time);
 
   if (data.length === 0) {
     return (
