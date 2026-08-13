@@ -148,6 +148,9 @@ model Reading {
 
   @@id([sensorId, recordedAt])
   @@index([sensorId, recordedAt(sort: Desc)], map: "idx_readings_sensor_time")
+  // Latest-reading probes order on received_at (the device clock drifts) —
+  // without this each one is a sort. See migration 0017.
+  @@index([sensorId, receivedAt(sort: Desc)], map: "idx_readings_sensor_received")
   @@map("readings")
 }
 

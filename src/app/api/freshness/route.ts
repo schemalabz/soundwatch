@@ -25,12 +25,12 @@ interface FreshnessSqlRow {
 export async function GET() {
   const rows = await prisma.$queryRaw<FreshnessSqlRow[]>`
     SELECT s.id, s.device_id, s.name,
-           last.recorded_at AS last_at, last.laeq AS last_laeq,
+           last.received_at AS last_at, last.laeq AS last_laeq,
            first.recorded_at AS first_at
     FROM sensors s
     LEFT JOIN LATERAL (
-      SELECT recorded_at, laeq FROM readings r
-      WHERE r.sensor_id = s.id ORDER BY recorded_at DESC LIMIT 1
+      SELECT received_at, laeq FROM readings r
+      WHERE r.sensor_id = s.id ORDER BY received_at DESC LIMIT 1
     ) last ON true
     LEFT JOIN LATERAL (
       SELECT recorded_at FROM readings r
@@ -38,8 +38,11 @@ export async function GET() {
     ) first ON true
     ORDER BY s.device_id`;
 
-  // recorded_at columns are timestamp-without-tz holding UTC wall time, and
-  // Prisma's engine materializes naive timestamps as UTC — no tz correction.
+  // Staleness reads received_at (server insert time): device clocks drift up to
+  // ~10 min FORWARD between NTP syncs, so recorded_at would report a drifted
+  // unit as fresher than it is and then stale when it resyncs. The history span
+  // still reads recorded_at — "how far back does the sound go" is a question
+  // about the device clock, and its error there is the honest one.
   const nowMs = Date.now();
   const sensors: FreshnessSensor[] = rows.map((r) => {
     const lastMs = r.last_at?.getTime() ?? null;

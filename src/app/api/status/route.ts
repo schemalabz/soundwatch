@@ -32,11 +32,12 @@ export async function GET() {
   const nowMs = Date.now();
   const [meta, buckets, ingest] = await Promise.all([
     prisma.$queryRaw<MetaRow[]>`
-      SELECT s.id, s.device_id, s.name, last.recorded_at AS last_at
+      SELECT s.id, s.device_id, s.name, last.received_at AS last_at
       FROM sensors s
       LEFT JOIN LATERAL (
-        SELECT recorded_at FROM readings r
-        WHERE r.sensor_id = s.id ORDER BY recorded_at DESC LIMIT 1
+        -- received_at: a drifting device clock must not decide liveness.
+        SELECT received_at FROM readings r
+        WHERE r.sensor_id = s.id ORDER BY received_at DESC LIMIT 1
       ) last ON true
       WHERE s.is_active AND NOT s.is_experimental AND s.latitude IS NOT NULL
       ORDER BY s.name NULLS LAST`,
