@@ -25,7 +25,10 @@ import { PrismaClient } from "@prisma/client";
 // Mirrors BIN_LO / BIN_HI / BIN_COUNT in src/lib/server/levelBins.ts —
 // duplicated because this script also runs in the ingester image, which does
 // not ship src/lib.
-export const CAGG_BINS = { lo: 30, hi: 91, count: 61 } as const;
+export const CAGG_BINS = { lo: 30, hi: 128, count: 98 } as const;
+
+/** The bin scheme this file intends, stamped onto the view as a comment. */
+const BIN_STAMP = `sw-bins:${CAGG_BINS.lo}/${CAGG_BINS.hi}/${CAGG_BINS.count}`;
 
 const STATEMENTS: { label: string; sql: string; call?: boolean }[] = [
   {
@@ -44,6 +47,15 @@ const STATEMENTS: { label: string; sql: string; call?: boolean }[] = [
       WHERE laeq IS NOT NULL
       GROUP BY 1, 2, 3
       WITH NO DATA`,
+  },
+  {
+    // The stamp the drift check reads. Written every run so an aggregate
+    // created before stamping existed adopts one without a rebuild.
+    label: "bin-definition stamp",
+    // A continuous aggregate's user-facing object is a plain VIEW (relkind
+    // 'v') over the materialized hypertable — COMMENT ON MATERIALIZED VIEW
+    // errors with "is not a materialized view".
+    sql: `COMMENT ON VIEW readings_hour_bins IS '${BIN_STAMP}'`,
   },
   {
     label: "refresh policy",
@@ -65,9 +77,40 @@ const STATEMENTS: { label: string; sql: string; call?: boolean }[] = [
   },
 ];
 
+/**
+ * Drop the aggregate when its bin definition no longer matches this file.
+ *
+ * Every statement below is CREATE ... IF NOT EXISTS, which makes re-running
+ * safe but also makes a CHANGED definition a silent no-op: raising the bin
+ * ceiling would leave the old bins materialized and every percentile still
+ * clamped, with nothing in the logs to say so.
+ *
+ * The check reads a stamp we write onto the view rather than parsing its
+ * stored SQL — Postgres normalizes that text (`30` becomes
+ * `(30)::double precision`), so matching against it is guesswork that fails
+ * open or, worse, fails closed and rebuilds on every boot.
+ *
+ * Safe to drop: raw readings are retained (no retention policy), so the
+ * refresh rebuilds all history exactly.
+ */
+async function dropIfDefinitionDrifted(prisma: PrismaClient): Promise<void> {
+  const rows = await prisma.$queryRawUnsafe<{ stamp: string | null }[]>(
+    `SELECT obj_description(c.oid, 'pg_class') AS stamp
+     FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+     WHERE c.relname = 'readings_hour_bins' AND n.nspname = 'public'`
+  );
+  if (rows.length === 0) return; // nothing to drift from
+  if (rows[0].stamp === BIN_STAMP) return;
+  console.log(
+    `[timescale-objects] bin definition changed (${rows[0].stamp ?? "unstamped"} -> ${BIN_STAMP}) — rebuilding`
+  );
+  await prisma.$executeRawUnsafe(`DROP MATERIALIZED VIEW IF EXISTS readings_hour_bins CASCADE`);
+}
+
 async function main() {
   const prisma = new PrismaClient();
   try {
+    await dropIfDefinitionDrifted(prisma);
     for (const s of STATEMENTS) {
       try {
         await prisma.$executeRawUnsafe(s.sql);

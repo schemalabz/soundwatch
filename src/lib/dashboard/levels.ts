@@ -11,14 +11,20 @@ export interface LevelStops {
   maxScale: number;
 }
 
+// Anchored to the range firmware 1.1 actually produces. Before the
+// level-linearity fix the fleet clamped at ~68 device-dB and never exceeded
+// 65.8, so 42/62/82 spanned the whole observable world; post-fix the measured
+// range is 33.8 → 97.7 and those anchors pinned every loud sensor to max-red,
+// max-size. These are arbitrary VISUAL thresholds on an uncalibrated scale —
+// they mean "quiet/busy/loud here", never an absolute level or a legal limit.
 export const DEFAULT_STOPS: LevelStops = {
   colors: [
-    [42, [79, 93, 117]], // quiet — slate
-    [62, [239, 131, 84]], // busy — sound accent
-    [82, [179, 54, 42]], // loud — alert red
+    [45, [79, 93, 117]], // quiet — slate
+    [68, [239, 131, 84]], // busy — sound accent
+    [90, [179, 54, 42]], // loud — alert red
   ],
-  minDb: 38,
-  maxDb: 88,
+  minDb: 35,
+  maxDb: 100,
   minScale: 0.4,
   maxScale: 1.55,
 };

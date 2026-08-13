@@ -63,16 +63,34 @@ describe("FrameStore", () => {
 });
 
 describe("level encoding", () => {
+  // Anchored to DEFAULT_STOPS rather than to literal dB values: the stops are
+  // arbitrary visual thresholds and get retuned when the fleet's range moves
+  // (it did, when firmware 1.1 lifted the ~68 dB clamp). What must hold is the
+  // encoding's behaviour, not the numbers it happens to use today.
+  const [quiet, sound, loud] = DEFAULT_STOPS.colors;
+  const rgb = (c: [number, number, number]) => `rgb(${c[0]},${c[1]},${c[2]})`;
+
   it("interpolates color between stops and clamps at the ends", () => {
-    expect(levelColor(30, DEFAULT_STOPS)).toBe("rgb(79,93,117)");
-    expect(levelColor(95, DEFAULT_STOPS)).toBe("rgb(179,54,42)");
-    const mid = levelColor(52, DEFAULT_STOPS); // halfway quiet->sound
-    expect(mid).toBe(`rgb(${Math.round((79 + 239) / 2)},${Math.round((93 + 131) / 2)},${Math.round((117 + 84) / 2)})`);
+    expect(levelColor(quiet[0] - 10, DEFAULT_STOPS)).toBe(rgb(quiet[1]));
+    expect(levelColor(loud[0] + 10, DEFAULT_STOPS)).toBe(rgb(loud[1]));
+    const midDb = (quiet[0] + sound[0]) / 2;
+    expect(levelColor(midDb, DEFAULT_STOPS)).toBe(
+      `rgb(${Math.round((quiet[1][0] + sound[1][0]) / 2)},${Math.round((quiet[1][1] + sound[1][1]) / 2)},${Math.round((quiet[1][2] + sound[1][2]) / 2)})`
+    );
   });
 
   it("scales monotonically with level", () => {
-    expect(levelScale(30)).toBe(DEFAULT_STOPS.minScale);
-    expect(levelScale(95)).toBeCloseTo(DEFAULT_STOPS.maxScale, 10);
+    expect(levelScale(DEFAULT_STOPS.minDb - 5)).toBe(DEFAULT_STOPS.minScale);
+    expect(levelScale(DEFAULT_STOPS.maxDb)).toBeCloseTo(DEFAULT_STOPS.maxScale, 10);
+    expect(levelScale(DEFAULT_STOPS.maxDb + 20)).toBeCloseTo(DEFAULT_STOPS.maxScale, 10);
     expect(levelScale(70)).toBeGreaterThan(levelScale(50));
+  });
+
+  it("covers the range firmware 1.1 actually produces (33.8 - 97.7 device-dB)", () => {
+    // The old 42/62/82 + maxDb 88 anchors saturated here: every level above 82
+    // was the same red at the same size.
+    expect(levelColor(97.7, DEFAULT_STOPS)).not.toBe(levelColor(85, DEFAULT_STOPS));
+    expect(levelScale(97.7)).toBeGreaterThan(levelScale(85));
+    expect(levelScale(33.8)).toBe(DEFAULT_STOPS.minScale);
   });
 });

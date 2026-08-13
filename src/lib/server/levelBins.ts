@@ -8,7 +8,12 @@
 // numbers in SQL; levelBins.test.ts pins the two together.
 
 export const BIN_LO = 30;
-export const BIN_HI = 91;
+// 128 mirrors the frame log's own byte ceiling (254 = 127 device-dB). At 91 —
+// chosen when the fleet clamped at ~68 — every interval above it fell into the
+// overflow bin and binLow() returned 91, so our percentiles reproduced the
+// firmware's histogram clamp inside our own aggregate. Post-1.1 the fleet
+// reaches 97.7.
+export const BIN_HI = 128;
 export const BIN_COUNT = BIN_HI - BIN_LO; // 1-dB bins
 
 /** Low dB edge of a width_bucket bin (0 = underflow, BIN_COUNT+1 = overflow). */
