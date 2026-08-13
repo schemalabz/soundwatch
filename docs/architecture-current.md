@@ -30,7 +30,7 @@ Design principle that got us here: **thinnest vertical slice, validated end-to-e
 | Layer | Technology | Where | Notes |
 |---|---|---|---|
 | Sensor hardware | SmartCitizen Kit 2.3 (SAMD21 Cortex-M0+ 48MHz 32KB RAM + ESP8266) | bench units | hardware is fixed — no Path-B/other-chip plans |
-| Firmware | C++ / Arduino, PlatformIO (atmelsam@8.1.0, framework vendored in-repo) | `soundwatch-firmware` fork | base pinned at `baseline/stock-2026-07` (= upstream master + PR#107 WiFi fixes); feature work in `flavor-*` branches |
+| Firmware | C++ / Arduino, PlatformIO (atmelsam@8.1.0, framework vendored in-repo) | `soundwatch-firmware` fork | base pinned at `baseline/stock-2026-07` (= upstream master + PR#107 WiFi fixes); work happens on `main` — see §6 |
 | Firmware dev env | Nix flake devshell (platformio-core, python3, pyserial) | firmware repo | flash = UF2 drag-copy (SAM) / serial (ESP); headless workflow documented in `docs/soundwatch/tools/` |
 | Broker | Mosquitto 2.x | Docker (prod compose) / nix (bench) | plaintext **1883 (public, ACL `device/sck/%c/#`)** + **1884 (internal, unpublished)** for backend services; token-as-secret, mirrors SmartCitizen; TLS removed — the firmware cannot speak it. See `infrastructure.md` |
 | Ingester | TypeScript, `mqtt` v5, tsx runtime | umbrella repo `mqtt-ingester/` | one subscriber, parse → compute → insert; unit-tested (vitest, 93 tests) |
@@ -162,7 +162,7 @@ Firmware-side issues live in the firmware repo's `HANDOFF.md`; these are the ser
 
 **API**
 
-- The readings endpoints expose almost none of what is measured — no percentiles, bands, histogram, duty, `payload_version` or saturation counter — and blend stock firmware's unvalidated `noise_dba` with our `laeq` under a field name that implies calibrated dB(A). Being addressed; see `docs/superpowers/specs/2026-08-12-readings-api-design.md`.
+- The readings endpoints expose almost none of what is measured — no percentiles, bands, histogram, duty, `payload_version` or saturation counter — and blend stock firmware's unvalidated `noise_dba` with our `laeq` under a field name that implies calibrated dB(A). Being addressed in a parallel workstream.
 - No OpenAPI/Swagger yet.
 
 **Frame log** (`frame_log_chunks`, nightly pull via `scripts/framelog-pull.sh`)

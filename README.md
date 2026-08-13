@@ -15,9 +15,23 @@ The system spans two repos, and a doc lives with the code that would invalidate 
 |---|---|---|
 | owns | ingester, database, API, web app, deployment | device firmware, what the sensor measures, fleet operations |
 | read for | how a reading becomes a row, what the API serves, how prod runs | **what a number means**, release/flashing, provisioning, field gotchas |
-| index | this file → [`docs/`](docs/) | [`docs/soundwatch/README.md`](https://github.com/schemalabz/soundwatch-firmware/blob/main/docs/soundwatch/README.md) |
+| index | this file → [`docs/`](docs/) | [its README](https://github.com/schemalabz/soundwatch-firmware) → [`docs/soundwatch/README.md`](https://github.com/schemalabz/soundwatch-firmware/blob/main/docs/soundwatch/README.md) |
 
 The measurement contract lives *there* because its claims break when firmware changes — bin edges, sentinels and clamps are device behaviour. The server-side formulas are in it too, because on this system **the device ships raw integers and the server does all the maths**, so the formulas are the definition rather than a reimplementation.
+
+## Building the frontend?
+
+Read the measurement contract above first — the whole of "Read this first" and "Known distortions". Then, concretely:
+
+- **Never label an axis dB(A)** or compare a value to a legal limit. Uncalibrated device-dB, arbitrary zero. Within-unit comparison over time is the strongest honest claim; between-unit spread is ~1.8 dB before any calibration.
+- **`l10` is censored at the top.** Histogram bin 29 is `[88, ∞)`, so a loud interval reports ~88.7 whatever the truth — measured up to 12 dB low. Render it as "≥88" when the top bin is occupied rather than as a confident number.
+- **Never average percentiles** across time buckets. Sum the `hist_raw` bin counts and recompute.
+- **`lmax_est` is one 11.6 ms frame**, not a standards Fast maximum — it overstates by 2.3–4.7 dB.
+- **The 21 bands are un-weighted** while LAeq and the histogram are A-weighted. Never plot a band against LAeq; the top bands are largely the sensor's own noise floor.
+- **Exclude `is_experimental` sensors** from anything public or aggregate.
+- `payload_version` **below 4** is a lower bound above ~65 device-dB — those readings were captured before the level-clamp fix.
+
+The readings API does not yet expose most of this (no percentiles, bands, histogram or duty) and is being widened, with OpenAPI, in parallel. Until that lands, read the schema in `prisma/schema.prisma` — the column comments are informative — and query with `scripts/prod-sql.sh`.
 
 ## The shape of it
 
