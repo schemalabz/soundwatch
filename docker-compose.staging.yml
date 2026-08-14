@@ -1,0 +1,155 @@
+# Staging: the full production stack, plus a 50-sensor simulator standing in
+# for a fleet that does not exist yet.
+#
+# Production today has ONE public sited sensor. The dashboard is built for a
+# city, and there is no way to see whether it works at that scale by looking at
+# soundwatch.gr. This stack is how we look.
+#
+# It is a copy of docker-compose.yml with three deliberate differences, and
+# every one of them is a safety property:
+#
+#   1. ITS OWN VOLUMES. pgdata_staging, never pgdata. Nothing here can reach
+#      production's 142k real readings.
+#   2. NO PUBLISHED MQTT PORT. Production's mosquitto owns :1883 on this host
+#      and every real device publishes to it. A staging broker on that port
+#      would either fail to bind or — worse, on a host where prod is down —
+#      silently accept live device traffic into the simulated database.
+#      Staging's broker is reachable only from inside this compose network,
+#      which is all the simulator needs.
+#   3. SIMULATED DATA, MARKED AS SUCH. Put HTTP basic auth in front of it in
+#      Coolify. Uncredentialed simulated noise levels for real Athens
+#      addresses are exactly the kind of thing that gets screenshotted.
+#
+# Deploy: a second Coolify resource on the same repo and branch, compose file
+# `docker-compose.staging.yml`, domain staging.soundwatch.gr.
+
+x-bounded-logging: &bounded-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+  app:
+    logging: *bounded-logging
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      # 3001, not 3000: production's app has that one. Coolify routes by FQDN
+      # regardless; this is for reaching it directly over SSH.
+      - "${APP_PORT:-3001}:3000"
+    environment:
+      # postgres here is THIS stack's postgres — compose networks are per
+      # project, so the name cannot resolve to production's.
+      - DATABASE_URL=postgresql://soundwatch:${POSTGRES_PASSWORD}@postgres:5432/soundwatch
+      - MQTT_BROKER_URL=mqtt://mosquitto:1884
+      - NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN=${NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN}
+      - NEXT_PUBLIC_BASE_URL=${NEXT_PUBLIC_BASE_URL:-https://staging.soundwatch.gr}
+      # MUST differ from production's. It is the only thing standing between a
+      # visitor and the bench-unit data and the sensor-delete endpoint.
+      - ADMIN_TOKEN=${ADMIN_TOKEN}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mosquitto:
+        condition: service_started
+    restart: unless-stopped
+
+  mqtt-ingester:
+    logging: *bounded-logging
+    build:
+      context: .
+      dockerfile: Dockerfile.ingester
+    environment:
+      - DATABASE_URL=postgresql://soundwatch:${POSTGRES_PASSWORD}@postgres:5432/soundwatch
+      - MQTT_BROKER_URL=mqtt://mosquitto:1884
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mosquitto:
+        condition: service_started
+    restart: unless-stopped
+
+  mosquitto:
+    logging: *bounded-logging
+    build:
+      context: .
+      dockerfile: Dockerfile.mosquitto
+    # NO `ports:`. See the header. Do not add one to "test a device against
+    # staging" — point the device at a tunnel instead.
+    volumes:
+      - mosquitto_data_staging:/mosquitto/data
+    restart: unless-stopped
+
+  postgres:
+    logging: *bounded-logging
+    image: timescale/timescaledb:latest-pg17
+    # Explicit, not inherited from how the volume happened to be created.
+    # See docker-compose.yml for the full story.
+    command: postgres -c shared_preload_libraries=timescaledb
+    environment:
+      POSTGRES_USER: soundwatch
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: soundwatch
+    volumes:
+      - pgdata_staging:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U soundwatch"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  sim-backfill:
+    logging: *bounded-logging
+    # One-shot: seed the 50-sensor fleet and fill history up to now. Idempotent,
+    # so a redeploy only fills the gap since the last run rather than starting
+    # over. ~6.6 GB and several minutes at the default 90 days; drop
+    # SIM_BACKFILL_DAYS if the droplet is tight.
+    build:
+      context: .
+      dockerfile: Dockerfile.simulator
+    # timescale-objects runs AFTER the backfill: its initial refresh is what
+    # materializes the aggregate, and running it against an empty table leaves
+    # every dashboard query merging millions of raw rows until the refresh
+    # policy catches up.
+    command:
+      [
+        "sh",
+        "-c",
+        "npx prisma migrate deploy && npx tsx simulator/index.ts backfill && exec npx tsx scripts/timescale-objects.ts",
+      ]
+    environment:
+      - DATABASE_URL=postgresql://soundwatch:${POSTGRES_PASSWORD}@postgres:5432/soundwatch
+      - SIM_BACKFILL_DAYS=${SIM_BACKFILL_DAYS:-90}
+      - SIM_BACKFILL_INTERVAL_S=${SIM_BACKFILL_INTERVAL_S:-60}
+      - SIM_SEED=${SIM_SEED:-soundwatch}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  sim-live:
+    logging: *bounded-logging
+    build:
+      context: .
+      dockerfile: Dockerfile.simulator
+    # Through the same listener and ACL a real device uses, with
+    # clientId = deviceId. Staging exercises the ingest path, not a shortcut
+    # into the database.
+    command: ["npx", "tsx", "simulator/index.ts", "live"]
+    environment:
+      - SIM_MQTT_URL=mqtt://mosquitto:1883
+      - SIM_INTERVAL_S=${SIM_INTERVAL_S:-5}
+      - SIM_SEED=${SIM_SEED:-soundwatch}
+    depends_on:
+      mosquitto:
+        condition: service_started
+      sim-backfill:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+volumes:
+  pgdata_staging:
+  mosquitto_data_staging:
