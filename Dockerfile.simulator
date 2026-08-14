@@ -1,0 +1,25 @@
+# Simulator image: backfill (one-shot) and live streamer share it, the
+# compose command picks the mode. Modeled on Dockerfile.ingester — the
+# simulator reuses the ingester's parser/flavor code at runtime (tsx).
+
+FROM node:22-bookworm-slim
+
+RUN apt-get update -y && apt-get install -y openssl && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+COPY package.json package-lock.json ./
+RUN npm ci
+
+COPY prisma ./prisma
+RUN npx prisma generate
+
+COPY mqtt-ingester ./mqtt-ingester
+COPY simulator ./simulator
+COPY scripts ./scripts
+COPY src/types ./src/types
+# tsconfig.json is required at runtime: tsx resolves the @/* path alias
+# (used by mqtt-ingester/parser.ts) from it.
+COPY tsconfig.json ./
+
+CMD ["npx", "tsx", "simulator/index.ts", "live"]

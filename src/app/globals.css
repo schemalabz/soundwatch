@@ -1,0 +1,174 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+@custom-variant dark (&:is(.dark *));
+
+/* =========================================================================
+   Soundwatch palette — THE single source of truth. Swap these five values
+   and the whole interface (shadcn tokens included) follows: every other
+   color below is derived from them with color-mix.
+
+   The rule that keeps the UI calm: --sw-sound (the warm accent) may only
+   mean sound activity, selection, or liveness — never decoration.
+   ========================================================================= */
+:root {
+  --sw-ink: #2d3142; /* gunmetal — text, primary surfaces */
+  --sw-slate: #4f5d75; /* supporting text, rings, quiet emphasis */
+  --sw-silver: #bfc0c0; /* hairlines, rails, disabled */
+  --sw-paper: #ffffff; /* base surface (always tinted in use) */
+  --sw-sound: #ef8354; /* sound levels · selection · live */
+  /* data-viz level ramp endpoints (circles on the map) */
+  --sw-quiet: var(--sw-slate);
+  --sw-loud: #b3362a;
+  /* status green — "operating normally", used only for health indicators
+     (never for noise levels, where green would read as "quiet") */
+  --sw-ok: #4d8f66;
+}
+
+/* ----- semantic tokens (shadcn contract), derived from the palette ----- */
+:root {
+  --background: color-mix(in oklab, var(--sw-paper) 98%, var(--sw-slate));
+  --foreground: var(--sw-ink);
+  --card: var(--sw-paper);
+  --card-foreground: var(--sw-ink);
+  --popover: var(--sw-paper);
+  --popover-foreground: var(--sw-ink);
+  --primary: var(--sw-ink);
+  --primary-foreground: color-mix(in oklab, var(--sw-paper) 96%, var(--sw-ink));
+  --secondary: color-mix(in oklab, var(--sw-silver) 26%, var(--sw-paper));
+  --secondary-foreground: var(--sw-ink);
+  --muted: color-mix(in oklab, var(--sw-silver) 20%, var(--sw-paper));
+  --muted-foreground: var(--sw-slate);
+  --accent: color-mix(in oklab, var(--sw-silver) 24%, var(--sw-paper));
+  --accent-foreground: var(--sw-ink);
+  --destructive: oklch(0.577 0.215 27);
+  --border: color-mix(in oklab, var(--sw-silver) 52%, var(--sw-paper));
+  --input: color-mix(in oklab, var(--sw-silver) 52%, var(--sw-paper));
+  --ring: color-mix(in oklab, var(--sw-slate) 70%, var(--sw-paper));
+  --chart-1: var(--sw-sound);
+  --chart-2: var(--sw-slate);
+  --chart-3: var(--sw-ink);
+  --chart-4: color-mix(in oklab, var(--sw-sound) 55%, var(--sw-paper));
+  --chart-5: var(--sw-silver);
+  --radius: 0.5rem;
+  --sidebar: color-mix(in oklab, var(--sw-paper) 99%, var(--sw-slate));
+  --sidebar-foreground: var(--sw-ink);
+  --sidebar-primary: var(--sw-ink);
+  --sidebar-primary-foreground: var(--sw-paper);
+  --sidebar-accent: color-mix(in oklab, var(--sw-silver) 24%, var(--sw-paper));
+  --sidebar-accent-foreground: var(--sw-ink);
+  --sidebar-border: color-mix(in oklab, var(--sw-silver) 45%, var(--sw-paper));
+  --sidebar-ring: color-mix(in oklab, var(--sw-slate) 70%, var(--sw-paper));
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  /* direct palette utilities: bg-sound/10, text-ink, border-silver, ... */
+  --color-sound: var(--sw-sound);
+  --color-ink: var(--sw-ink);
+  --color-slate: var(--sw-slate);
+  --color-silver: var(--sw-silver);
+  --color-paper: var(--sw-paper);
+  --font-heading: var(--font-sans);
+  --font-sans: var(--font-sans);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+  html {
+    @apply font-sans;
+  }
+}
+
+/* Hide mapbox chrome (wordmark + attribution button). NOTE: most Mapbox
+   plans contractually require visible attribution — revisit before launch. */
+.mapboxgl-ctrl-logo,
+.mapboxgl-ctrl-attrib {
+  display: none !important;
+}
+
+/* VHS dressing for the time-jump hold: rolling tracking band + jitter. */
+@keyframes sw-vhs-roll {
+  0% {
+    top: -18%;
+  }
+  100% {
+    top: 108%;
+  }
+}
+@keyframes sw-vhs-jitter {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  92% {
+    transform: translateX(0);
+  }
+  94% {
+    transform: translateX(2px);
+  }
+  96% {
+    transform: translateX(-1.5px);
+  }
+  98% {
+    transform: translateX(1px);
+  }
+}
+.sw-vhs-band {
+  animation: sw-vhs-roll 1.6s linear infinite;
+}
+.sw-vhs-jitter {
+  animation: sw-vhs-jitter 900ms steps(1) infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .sw-vhs-band,
+  .sw-vhs-jitter {
+    animation: none;
+  }
+}
+
+/* Liveness underline: a quiet breathing line under the live timestamp. */
+

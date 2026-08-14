@@ -19,7 +19,7 @@ model Sensor {
   targetFirmwareVersion String? @map("target_firmware_version")
   readingIntervalS  Int       @default(60) @map("reading_interval_s")
   isActive          Boolean   @default(true) @map("is_active")
-  lastSeenAt        DateTime? @map("last_seen_at")
+  lastSeenAt        DateTime? @map("last_seen_at") @db.Timestamptz(3)
   // Unique SAMD21 chip id, self-reported on device/inventory. Survives reflash,
   // token change and relocation — the only identifier that answers "which
   // physical box is this?". Used to catch units swapped during installation.
@@ -28,8 +28,8 @@ model Sensor {
   // because it cannot be derived from anything else, and the installer needs it
   // to join the right box when several are on a table.
   apName            String?   @map("ap_name")
-  provisionedAt     DateTime? @map("provisioned_at")
-  installedAt       DateTime? @map("installed_at")
+  provisionedAt     DateTime? @map("provisioned_at") @db.Timestamptz(3)
+  installedAt       DateTime? @map("installed_at") @db.Timestamptz(3)
   // Which planned site this unit was confirmed at. Null + coordinates set
   // means an unplanned install (recorded, flagged in admin). Copy-on-bind:
   // name/address are copied at install time, not read through this relation.
@@ -37,7 +37,7 @@ model Sensor {
   plannedLocation   PlannedLocation? @relation(fields: [plannedLocationId], references: [id])
   // Bench/experimental units: keep them out of public maps and aggregates.
   isExperimental    Boolean   @default(false) @map("is_experimental")
-  createdAt         DateTime  @default(now()) @map("created_at")
+  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
 
   readings Reading[]
 
@@ -57,21 +57,24 @@ model PlannedLocation {
   address   String?
   notes     String?
   isActive  Boolean  @default(true) @map("is_active")
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
   sensors   Sensor[]
 
   @@map("planned_locations")
 }
 
+// Timescale hypertable (migration 0016): partitioned on recorded_at in 7-day
+// chunks. Hypertables require the partition column in every unique
+// constraint, hence the composite PK and no surrogate id — which also matches
+// the only real access pattern (one sensor over time).
 model Reading {
-  id          BigInt   @id @default(autoincrement())
   sensorId    String   @map("sensor_id")
   // recordedAt: device clock — when the sound actually happened (may be old on a
   // store-and-forward replay). receivedAt: server insert time — lets us tell a
   // buffered-backlog replay apart from live data.
-  recordedAt  DateTime @map("recorded_at")
-  receivedAt  DateTime @default(now()) @map("received_at")
+  recordedAt  DateTime @map("recorded_at") @db.Timestamptz(3)
+  receivedAt  DateTime @default(now()) @map("received_at") @db.Timestamptz(3)
   noiseDba    Float?   @map("noise_dba")
   temperature Float?
   humidity    Float?
@@ -143,8 +146,11 @@ model Reading {
 
   sensor Sensor @relation(fields: [sensorId], references: [id])
 
-  @@unique([sensorId, recordedAt], map: "readings_sensor_id_recorded_at_key")
+  @@id([sensorId, recordedAt])
   @@index([sensorId, recordedAt(sort: Desc)], map: "idx_readings_sensor_time")
+  // Latest-reading probes order on received_at (the device clock drifts) —
+  // without this each one is a sort. See migration 0017.
+  @@index([sensorId, receivedAt(sort: Desc)], map: "idx_readings_sensor_received")
   @@map("readings")
 }
 
@@ -156,7 +162,7 @@ model FrameLogChunk {
   day        String   @default("") // "yymmdd" for rotated files; "" = legacy FRAMELOG.CSV namespace
   offset     Int
   data       String
-  receivedAt DateTime @default(now()) @map("received_at") @db.Timestamp(3)
+  receivedAt DateTime @default(now()) @map("received_at") @db.Timestamptz(3)
 
   @@unique([deviceId, day, offset])
   @@map("frame_log_chunks")

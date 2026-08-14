@@ -233,14 +233,12 @@ export const READINGS_QUERY_PARAMETERS = [
 
 export const ReadingsResponseSchema = z.object({
   sensorId: z.string(),
-  deviceId: z.string(),
   count: z.number().int(),
   readings: z.array(ReadingSchema),
 });
 
 export const SensorListItemSchema = z.object({
   id: z.string(),
-  deviceId: z.string(),
   name: z.string().nullable(),
   latitude: z.number().nullable(),
   longitude: z.number().nullable(),

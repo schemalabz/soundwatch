@@ -1,9 +1,7 @@
 import mqtt from "mqtt";
 import { PrismaClient } from "@prisma/client";
 import { extractDeviceId, parseSensorPayload } from "./parser";
-import { computeFlavor1 } from "./flavor1";
-import { computePercentiles, decodeBandsDb } from "./flavor2";
-import { decodeDiagnostics } from "./diagnostics";
+import { deriveReadingRow } from "./row";
 import { parseFrameLogChunk } from "./framelog";
 
 const MQTT_BROKER_URL = process.env.MQTT_BROKER_URL || "mqtt://localhost:1883";
@@ -53,21 +51,9 @@ async function handleMessage(topic: string, message: Buffer): Promise<void> {
     return;
   }
 
-  // Payload v3 (id 235 >= 3): id 238 carries MILLISECONDS; v2 carried whole
-  // seconds. Normalize once here so everything downstream is exact.
-  const intervalMs =
-    reading.intervalS == null
-      ? null
-      : (reading.payloadVersion ?? 2) >= 3
-        ? reading.intervalS
-        : reading.intervalS * 1000;
-  // Flavor 1 (Step 4): turn raw accumulators into LAeq / realized_duty / Lmax-Lmin.
-  const f1 = computeFlavor1({ ...reading, intervalMs });
-  // Flavor 2: percentiles from the level histogram + band dB from the packed spectrum.
-  const pct = reading.histRaw ? computePercentiles(reading.histRaw) : null;
-  const bandsDb = reading.bandsRaw ? decodeBandsDb(reading.bandsRaw) : null;
-  // Device health telemetry (id 243) — uptime, heap, reset cause, churn counters.
-  const diag = decodeDiagnostics(reading.diagRaw);
+  // All derivation (v2/v3 interval normalization, flavor 1/2 math, diag
+  // decode) lives in row.ts, shared with the simulator's bulk backfill.
+  const row = deriveReadingRow(reading, new Date());
 
   try {
     const sensorId = await upsertSensor(deviceId);
@@ -75,70 +61,17 @@ async function handleMessage(topic: string, message: Buffer): Promise<void> {
     // Replays are exact duplicates by (sensor, recorded_at); the unique
     // constraint rejects them and P2002 is the expected, silent outcome.
     await prisma.reading.create({
-      data: {
-        sensorId,
-        recordedAt: reading.recordedAt, // device clock (when the sound happened)
-        receivedAt: new Date(), // server clock (when we persisted it)
-        noiseDba: reading.noiseDba,
-        temperature: reading.temperature,
-        humidity: reading.humidity,
-        lightLux: reading.lightLux,
-        pressurePa: reading.pressurePa,
-        uvA: reading.uvA,
-        uvB: reading.uvB,
-        uvC: reading.uvC,
-        pm1: reading.pm1,
-        pm25: reading.pm25,
-        pm4: reading.pm4,
-        pm10: reading.pm10,
-        pn05: reading.pn05,
-        pn10: reading.pn10,
-        pn25: reading.pn25,
-        pn40: reading.pn40,
-        pn100: reading.pn100,
-        tps: reading.tps,
-        battery: reading.battery,
-        rssi: reading.rssi,
-        sdCard: reading.sdCard,
-        // Flavor 1: raw accumulators + computed levels (null on stock firmware).
-        payloadVersion: reading.payloadVersion,
-        energySum: reading.energySum,
-        frameCount: reading.frameCount,
-        intervalS: intervalMs != null ? Math.round(intervalMs / 1000) : reading.intervalS,
-        intervalMs,
-        maxEnergy: reading.maxEnergy,
-        minEnergy: reading.minEnergy,
-        laeq: f1?.laeq ?? null,
-        realizedDuty: f1?.realizedDuty ?? null,
-        lmaxEst: f1?.lmaxEst ?? null,
-        lminEst: f1?.lminEst ?? null,
-        histRaw: reading.histRaw,
-        bandsRaw: reading.bandsRaw,
-        l10: pct?.l10 ?? null,
-        l50: pct?.l50 ?? null,
-        l90: pct?.l90 ?? null,
-        bandsDb: bandsDb ?? undefined,
-        deviceUptimeS: diag?.deviceUptimeS ?? null,
-        freeHeapBytes: diag?.freeHeapBytes ?? null,
-        resetCause: diag?.resetCause ?? null,
-        wifiConnects: diag?.wifiConnects ?? null,
-        publishFails: diag?.publishFails ?? null,
-        captureFails: diag?.captureFails ?? null,
-        i2sReinits: diag?.i2sReinits ?? null,
-        ghostRefusals: diag?.ghostRefusals ?? null,
-        soundwatchRelease: diag?.soundwatchRelease ?? null,
-        samGitHash: diag?.samGitHash ?? null,
-        espGitHash: diag?.espGitHash ?? null,
-        energySaturations: diag?.energySaturations ?? null,
-      },
+      data: { sensorId, ...row, bandsDb: row.bandsDb ?? undefined },
     });
 
     console.log(
-      f1 && f1.laeq != null
-        ? `Stored reading from ${deviceId}: LAeq=${f1.laeq.toFixed(1)} dB, ` +
-          `duty=${((f1.realizedDuty ?? 0) * 100).toFixed(1)}% ` +
-          `(frames=${reading.frameCount}, ${intervalMs != null ? (intervalMs / 1000).toFixed(1) : reading.intervalS}s)`
-        : `Stored reading from ${deviceId}: noise=${reading.noiseDba} dBA`
+      row.laeq != null
+        ? `Stored reading from ${deviceId}: LAeq=${row.laeq.toFixed(1)} dB, ` +
+          `duty=${((row.realizedDuty ?? 0) * 100).toFixed(1)}% ` +
+          `(frames=${row.frameCount}, ${row.intervalMs != null ? (row.intervalMs / 1000).toFixed(1) : row.intervalS}s)`
+        // Stock firmware's field. Its unit claim is the vendor's and has never
+        // been validated, so we log the number without endorsing a unit.
+        : `Stored reading from ${deviceId}: noise=${row.noiseDba} (stock, uncalibrated)`
     );
   } catch (err) {
     // P2002 = the (sensor_id, recorded_at) unique constraint rejecting a

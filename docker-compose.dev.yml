@@ -4,6 +4,8 @@ services:
     # PLAIN Postgres usage for now — no hypertables/continuous aggregates yet
     # (Step 6). timescaledb extension is available but not activated.
     image: timescale/timescaledb:latest-pg17
+    # Explicit, not inherited from a freshly-tuned volume. See docker-compose.yml.
+    command: postgres -c shared_preload_libraries=timescaledb
     environment:
       POSTGRES_USER: soundwatch
       POSTGRES_PASSWORD: soundwatch

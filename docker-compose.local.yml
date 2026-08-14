@@ -1,0 +1,136 @@
+# The full pipeline on one machine, no hardware and no .env required:
+#   npm run local:up
+# postgres + mosquitto (prod image: ACL on 1883, open 1884 internal) +
+# mqtt-ingester + app + a 50-sensor simulator (90-day backfill, then live).
+#
+# docker-compose.dev.yml stays the infra-only file for host-mode `next dev`;
+# docker-compose.yml stays prod-shaped. This file is self-contained: fixed
+# local-only credentials, every knob overridable from the environment.
+#
+# Startup order: the backfill (one-shot) seeds sensors and tops up history —
+# ~3-4 min on first run, seconds on re-up — then sim-live starts streaming.
+# The ingester and backfill both run `prisma migrate deploy`; it takes an
+# advisory lock, so racing is safe.
+
+# The ingester logs one line per stored reading (~10/s at the default
+# cadence); without limits Docker's json-file logs grow unbounded over days.
+x-logging: &bounded-logging
+  driver: json-file
+  options:
+    max-size: "20m"
+    max-file: "3"
+
+services:
+  app:
+    logging: *bounded-logging
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      # 3005 by default: dev machines tend to have another next dev server
+      # squatting on 3000, and a half-bound port (IPv4 vs IPv6) is confusing.
+      - "${APP_PORT:-3005}:3000"
+    environment:
+      - DATABASE_URL=postgresql://soundwatch:soundwatch@postgres:5432/soundwatch
+      - MQTT_BROKER_URL=mqtt://mosquitto:1884
+      - NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN=${NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN:-}
+      - NEXT_PUBLIC_BASE_URL=${NEXT_PUBLIC_BASE_URL:-http://localhost:3005}
+      - ADMIN_TOKEN=${ADMIN_TOKEN:-admin-local}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mosquitto:
+        condition: service_started
+    restart: unless-stopped
+
+  mqtt-ingester:
+    logging: *bounded-logging
+    build:
+      context: .
+      dockerfile: Dockerfile.ingester
+    environment:
+      - DATABASE_URL=postgresql://soundwatch:soundwatch@postgres:5432/soundwatch
+      - MQTT_BROKER_URL=mqtt://mosquitto:1884
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mosquitto:
+        condition: service_started
+    restart: unless-stopped
+
+  mosquitto:
+    # Prod image on purpose: the ACL (client-id = token, confined to its own
+    # subtree) is part of what the simulator exercises.
+    build:
+      context: .
+      dockerfile: Dockerfile.mosquitto
+    ports:
+      - "${MQTT_PORT:-1883}:1883"
+    volumes:
+      - mosquitto_data_local:/mosquitto/data
+    restart: unless-stopped
+
+  postgres:
+    image: timescale/timescaledb:latest-pg17
+    # Explicit, not inherited from a freshly-tuned volume. See docker-compose.yml.
+    command: postgres -c shared_preload_libraries=timescaledb
+    environment:
+      POSTGRES_USER: soundwatch
+      POSTGRES_PASSWORD: soundwatch
+      POSTGRES_DB: soundwatch
+    ports:
+      # Published for host-side psql spelunking; local-only credentials.
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - pgdata_local:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U soundwatch"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  sim-backfill:
+    # One-shot: seed the 50-sensor fleet + top up history to now. Idempotent —
+    # re-running only fills the gap since the last run.
+    build:
+      context: .
+      dockerfile: Dockerfile.simulator
+    # timescale-objects runs AFTER the backfill: its initial refresh is what
+    # materializes the aggregate, and running it first (over an empty table)
+    # left every dashboard query merging 6M raw rows until the 15-minute
+    # refresh policy caught up. The ingester creates the aggregate on its own
+    # boot regardless, so nothing depends on it existing before this point.
+    command: ["sh", "-c", "npx prisma migrate deploy && npx tsx simulator/index.ts backfill && exec npx tsx scripts/timescale-objects.ts"]
+    environment:
+      - DATABASE_URL=postgresql://soundwatch:soundwatch@postgres:5432/soundwatch
+      - SIM_BACKFILL_DAYS=${SIM_BACKFILL_DAYS:-90}
+      - SIM_BACKFILL_INTERVAL_S=${SIM_BACKFILL_INTERVAL_S:-60}
+      - SIM_SEED=${SIM_SEED:-soundwatch}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  sim-live:
+    logging: *bounded-logging
+    build:
+      context: .
+      dockerfile: Dockerfile.simulator
+    # Through the PUBLIC listener with clientId = deviceId — the same path and
+    # ACL a real device uses.
+    command: ["npx", "tsx", "simulator/index.ts", "live"]
+    environment:
+      - SIM_MQTT_URL=mqtt://mosquitto:1883
+      - SIM_INTERVAL_S=${SIM_INTERVAL_S:-5}
+      - SIM_SEED=${SIM_SEED:-soundwatch}
+    depends_on:
+      mosquitto:
+        condition: service_started
+      sim-backfill:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+volumes:
+  pgdata_local:
+  mosquitto_data_local:

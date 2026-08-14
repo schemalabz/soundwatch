@@ -45,10 +45,23 @@ services:
     restart: unless-stopped
 
   postgres:
-    # TimescaleDB-capable, drop-in for postgres:17 (same data dir). PLAIN usage
-    # for now — no hypertables/continuous aggregates yet (Step 6). Forward-compat
-    # so Step 6 needs no DB migration/move. Pin a concrete version for prod.
+    # TimescaleDB, drop-in for postgres:17 (same data dir).
     image: timescale/timescaledb:latest-pg17
+    # The extension cannot load without a preload entry, and the entry is NOT
+    # implied by the image. timescaledb-tune writes it into postgresql.conf at
+    # initdb — on FIRST initialization only. Production's pgdata was created
+    # before this image was adopted, so its conf still reads
+    # `#shared_preload_libraries = ''` and `SHOW shared_preload_libraries`
+    # returns empty. Locally the volume was created fresh, so it was tuned and
+    # everything worked: the two environments were identical in configuration
+    # and different in history, which is the worst way for a difference to hide.
+    #
+    # Without this, `CREATE EXTENSION timescaledb` in migration 0016 fails, the
+    # migration transaction rolls back, `prisma migrate deploy` exits non-zero
+    # and the container does not start.
+    #
+    # Declaring it here makes it true regardless of how the volume was born.
+    command: postgres -c shared_preload_libraries=timescaledb
     environment:
       POSTGRES_USER: soundwatch
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}

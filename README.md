@@ -31,7 +31,7 @@ Read the measurement contract above first — the whole of "Read this first" and
 - **Exclude `is_experimental` sensors** from anything public or aggregate.
 - `payload_version` **below 4** is a lower bound above ~65 device-dB — those readings were captured before the level-clamp fix.
 
-The readings API does not yet expose most of this (no percentiles, bands, histogram or duty) and is being widened, with OpenAPI, in parallel. Until that lands, read the schema in `prisma/schema.prisma` — the column comments are informative — and query with `scripts/prod-sql.sh`.
+The public readings API is served and documented: **`/api/docs`** (Scalar UI over `/api/openapi.json`), generated from the zod schemas in `src/lib/api/schemas.ts`.
 
 ## The shape of it
 
@@ -43,44 +43,113 @@ Mosquitto                              1883 public (ACL, token-as-secret) · 188
    ▼
 mqtt-ingester/                         parse → compute levels → insert. The only writer.
    ▼
-PostgreSQL (Prisma)                    sensors · readings · planned_locations · frame_log_chunks
+PostgreSQL + TimescaleDB               sensors · readings (hypertable) · readings_hour_bins
+   ▼                                   planned_locations · frame_log_chunks
+src/app/api/                           Next.js App Router — public API + dashboard endpoints
    ▼
-src/app/api/                           Next.js App Router
-   ▼
-src/                                   map, charts, admin
+src/components/dashboard/              map, timebar playback, leaderboard, charts
 ```
 
 ## Running it
 
-```sh
-nix develop                            # or use your own node 22
-docker compose -f docker-compose.dev.yml up -d   # postgres + mosquitto
-npx prisma migrate dev
-npm run dev                            # web app
-npm run ingester                       # subscriber, in a second shell
-npm run seed                           # 15 Athens sensor rows (locations only, no readings)
-npm test                               # vitest
+The whole pipeline, no hardware needed — Postgres, Mosquitto (prod config, ACL
+included), the ingester, the web app, and a 50-sensor simulator that backfills 90 days
+of history and then streams live readings:
+
+```bash
+npm run local:up
 ```
+
+First run builds images and backfills ~6M readings (~5-6 min; the command streams
+backfill progress and exits when it completes — the stack keeps running). Then:
+
+- http://localhost:3005 — the dashboard
+- http://localhost:3005/status — network status
+- http://localhost:3005/admin — admin (token `admin-local`)
+- `psql postgresql://soundwatch:soundwatch@localhost:5432/soundwatch`
+
+Re-running `local:up` is cheap: the backfill is idempotent and only tops up the gap
+since the last run. Other commands: `npm run local:logs`, `local:down`, `local:nuke`
+(also deletes data).
+
+Knobs (env vars): `SIM_INTERVAL_S` (live cadence, default 5s), `SIM_BACKFILL_DAYS`
+(default 90), `SIM_BACKFILL_INTERVAL_S` (default 60), `SIM_SEED` (change all
+randomness), `NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN` (needed for the map).
+
+### Host-mode development
+
+```bash
+docker compose -f docker-compose.dev.yml up -d   # postgres + mosquitto only
+npx prisma migrate deploy
+npm run db:timescale   # continuous aggregate (cannot run inside a migration)
+npm run sim:backfill   # seed + backfill (idempotent)
+npm run ingester       # terminal 2
+npm run sim:live       # terminal 3
+npm run dev            # terminal 4 -> localhost:3000
+```
+
+`.env` is loaded by all tsx scripts if present (see `.env.example`).
 
 ### Getting data to look at
 
-`npm run seed` gives you sensors on the map but **no readings**, so charts, the leaderboard and sensor detail render empty. There are three ways to fix that, and the first one is currently broken:
+`npm run seed` gives you sensors on the map but **no readings**, so every view renders
+empty. Three ways to fix that:
 
-- **`npm run simulate` does not work.** It publishes the pre-rebuild dialect (`soundwatch/sensors/<id>/readings`, JSON) and the ingester now speaks only the stock firmware dialect (`device/sck/<token>/readings/raw`, non-JSON). The messages are silently ignored — nothing errors, nothing lands. Its own header says so. Making it emit the stock format again (see `mqtt-ingester/parser.ts` and `STOCK_SENSOR_ID_MAP`) is the cleanest fix and unblocks all local frontend work.
-- **A sanitised database dump.** Workable, but see the warning below — a raw dump is a credential leak.
-- **Point a real bench unit at your machine.** Highest fidelity, needs hardware and the unit reconfigured to your broker.
+- **`simulator/` — the default, and what `npm run local:up` runs.** It speaks the stock
+  firmware dialect (`device/sck/<token>/readings/raw`, non-JSON) and builds rows through
+  the *real* ingester code, so simulated and field rows are derived by the same
+  functions. The data is deterministic and realistic: per-neighborhood base levels,
+  archetype diurnal curves (nightlife/commercial/arterial/residential), weekday/weekend
+  contrast, sporadic loud events, sensor outages (units go dark for 1 minute to 10
+  days), a per-unit calibration offset and device clock drift. It emits firmware 1.1's
+  `payload_version` 4.
+- **A sanitised database dump.** Workable, but see the warning below — a raw dump is a
+  credential leak.
+- **Point a real bench unit at your machine.** Highest fidelity, needs hardware and the
+  unit reconfigured to your broker.
 
 > **A production dump is not safe to hand out as-is.** `sensors.device_id` **is** the device's MQTT credential — the broker authorises on it (`token-as-secret`, ACL `device/sck/%c/#`). Anyone holding it can publish as that sensor. Rewrite `device_id` to synthetic values before sharing a dump, the same reason `provisioning-log.csv` is gitignored.
+
+## TimescaleDB
+
+`readings` is a Timescale hypertable (7-day chunks), and the dashboard's heavy
+endpoints read `readings_hour_bins` — a continuous aggregate of per-(sensor, hour, 1-dB
+bin) counts/energy/Lmax that serves `/api/series`, `/api/aggregate` and `/api/status` in
+milliseconds where raw scans took seconds. Split in two because Prisma wraps migrations
+in a transaction and continuous-aggregate DDL refuses to run in one:
+
+- `prisma/migrations/..._0016_timescale_hypertable` — extension, composite PK
+  `(sensor_id, recorded_at)`, `timestamptz` conversion, hypertable.
+- `scripts/timescale-objects.ts` — the aggregate + refresh policy (Timescale's own job
+  scheduler; no external cron). Idempotent, and it **rebuilds the aggregate when its bin
+  definition changes**. Runs automatically after `prisma migrate deploy` in the ingester
+  and sim-backfill startup commands, or by hand: `npm run db:timescale`.
+
+The database image must ship the extension (`timescale/timescaledb`, as in all compose
+files). Raw readings are kept indefinitely (no retention or compression policy yet): at
+~1 row/sensor-minute raw is small, and playback frames + the sensor pane read it at
+arbitrary depths.
 
 ## Layout
 
 | path | what |
 |---|---|
-| `mqtt-ingester/` | The subscriber. `parser.ts` tokenises the non-JSON payload; `flavor1.ts` computes LAeq and duty; `flavor2.ts` percentiles and bands; `diagnostics.ts` unpacks device health; `framelog.ts` the SD-card frame-log chunks |
+| `mqtt-ingester/` | The subscriber. `parser.ts` tokenises the non-JSON payload; `row.ts` derives a full row (shared with the simulator); `flavor1.ts` computes LAeq and duty; `flavor2.ts` percentiles and bands; `diagnostics.ts` unpacks device health; `framelog.ts` the SD-card frame-log chunks |
+| `simulator/` | The 50-sensor fleet simulator: `model.ts` the acoustic model, `payload.ts` the stock wire dialect, `backfill.ts` bulk history, `live.ts` the MQTT streamer |
 | `prisma/` | Schema and migrations. The ingester applies pending migrations on boot — it is the only writer, so it owns schema convergence |
-| `src/app/api/` | Public and admin routes |
-| `scripts/` | `prod-sql.sh` read-only production queries · `framelog-pull.sh` nightly frame-log collection (cron) · `fetch-framelog.ts` the pull pacer · `framelog-probe.ts` device throughput measurement · `prod-backup.sh` |
+| `src/app/api/` | Public routes (`sensors`, `openapi.json`, `docs`) and dashboard endpoints (`frames`, `series`, `aggregate`, `status`, `freshness`) |
+| `src/components/dashboard/` | The dashboard: map + timebar playback, leaderboard, charts, sensor pane |
+| `src/lib/api/` | zod schemas, the shared reading serializer, the OpenAPI document |
+| `scripts/` | `prod-sql.sh` read-only production queries · `framelog-pull.sh` nightly frame-log collection (cron) · `fetch-framelog.ts` the pull pacer · `framelog-probe.ts` device throughput measurement · `prod-backup.sh` · `timescale-objects.ts` |
 | `docs/` | [`architecture-current.md`](docs/architecture-current.md) pipeline, wire contract, schema · [`infrastructure.md`](docs/infrastructure.md) deployment, broker, identity · `installation/` hardware BOM and wiring |
+
+## Tests
+
+```bash
+npm test         # vitest: ingester parsers, simulator model, dashboard math, API schemas
+npm run lint
+npx tsc --noEmit
+```
 
 ## Production
 
@@ -92,7 +161,7 @@ scripts/prod-sql.sh "select count(*) from readings;"
 
 Two rules that have each cost real time:
 
-- **Order by `received_at`, never `recorded_at`.** Device clocks run *ahead* — measured up to 35 minutes — and jump back on NTP resync, so sorting by device time manufactures phantom duplicate devices and reboots.
+- **Order by `received_at`, never `recorded_at`.** Device clocks run *ahead* — measured up to 35 minutes — and jump back on NTP resync, so sorting by device time manufactures phantom duplicate devices and reboots. (Filtering a window on `recorded_at` is correct — that is when the sound happened. Only *ordering* must use `received_at`.)
 - **Bench units carry `sensors.is_experimental = true`** and must be excluded from anything public or aggregate.
 
 Deployment topology, the two-listener broker model and the backup runbook are in [`docs/infrastructure.md`](docs/infrastructure.md).
