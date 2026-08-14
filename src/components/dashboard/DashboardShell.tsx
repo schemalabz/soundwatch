@@ -10,7 +10,12 @@ import { dashboardStrings as tr, LOCALE } from "@/lib/strings/dashboard";
 import { SlidersHorizontal } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
+import {
+  Sheet,
+  SheetContent,
+  SheetTitle,
+  SheetTrigger,
+} from "@/components/ui/sheet";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { useIsMobile } from "@/hooks/use-mobile";
 import {
@@ -23,7 +28,11 @@ import {
   selectedSegments,
   type DashboardFilters,
 } from "@/lib/dashboard/filters";
-import { frameWindowS, quantizeFrameMs, type FrameData } from "@/lib/dashboard/frames";
+import {
+  frameWindowS,
+  quantizeFrameMs,
+  type FrameData,
+} from "@/lib/dashboard/frames";
 import type { FreshnessResponse } from "@/types/freshness";
 import { reverseGeocode } from "@/lib/dashboard/geocode";
 import FilterRail from "./FilterRail";
@@ -31,6 +40,7 @@ import SensorLayer, { type SensorMeta } from "./SensorLayer";
 import LocationLayer from "./LocationLayer";
 import SensorPane from "./SensorPane";
 import CurrentDate from "./CurrentDate";
+import SimulatedBanner from "./SimulatedBanner";
 import SkipFlash, { SKIP_HOLD_MS, type SkipEvent } from "./SkipFlash";
 import Timebar, { PLAYBACK_SPEEDS, type BarMode } from "./Timebar";
 import { type AggKey } from "@/lib/dashboard/metrics";
@@ -43,7 +53,8 @@ const MapCanvas = dynamic(() => import("./MapCanvas"), { ssr: false });
 
 const FALLBACK_SPAN_DAYS = 90;
 
-export default function DashboardShell() {  devRenderCount("DashboardShell");
+export default function DashboardShell() {
+  devRenderCount("DashboardShell");
 
   const locale = LOCALE;
   const isMobile = useIsMobile();
@@ -67,13 +78,18 @@ export default function DashboardShell() {  devRenderCount("DashboardShell");
   // A metric mention elsewhere is being hovered — the rail picker lights up.
   const [metricGlow, setMetricGlow] = useState(false);
   const [aggKey, setAggKey] = useState<AggKey>("laeq");
-  const [aggData, setAggData] = useState<Record<string, Record<AggKey, number> & { n: number }> | null>(null);
+  const [aggData, setAggData] = useState<Record<
+    string,
+    Record<AggKey, number> & { n: number }
+  > | null>(null);
   const skipSeq = useRef(0);
   const skipHoldUntilRef = useRef(0);
   // Stable identity: MapCanvas keys its (create/destroy!) effect on the
   // onReady callback, and the shell re-renders every second — an inline
   // arrow here would tear the map down each tick. setState is stable.
-  const [mapInstance, setMapInstance] = useState<import("mapbox-gl").Map | null>(null);
+  const [mapInstance, setMapInstance] = useState<
+    import("mapbox-gl").Map | null
+  >(null);
 
   // Wall clock: the live edge of the rail creeps forward once a second.
   useEffect(() => {
@@ -87,14 +103,30 @@ export default function DashboardShell() {  devRenderCount("DashboardShell");
     let cancelled = false;
     fetch("/api/sensors", { cache: "no-store" })
       .then((r) => r.json())
-      .then((list: { id: string; name: string | null; address: string | null; latitude: number | null; longitude: number | null }[]) => {
-        if (cancelled) return;
-        setSensorList(
-          list
-            .filter((s) => s.latitude != null && s.longitude != null)
-            .map((s) => ({ id: s.id, name: s.name, address: s.address, latitude: s.latitude!, longitude: s.longitude! }))
-        );
-      })
+      .then(
+        (
+          list: {
+            id: string;
+            name: string | null;
+            address: string | null;
+            latitude: number | null;
+            longitude: number | null;
+          }[],
+        ) => {
+          if (cancelled) return;
+          setSensorList(
+            list
+              .filter((s) => s.latitude != null && s.longitude != null)
+              .map((s) => ({
+                id: s.id,
+                name: s.name,
+                address: s.address,
+                latitude: s.latitude!,
+                longitude: s.longitude!,
+              })),
+          );
+        },
+      )
       .catch(() => {});
     return () => {
       cancelled = true;
@@ -107,7 +139,8 @@ export default function DashboardShell() {  devRenderCount("DashboardShell");
     const load = async () => {
       try {
         const res = await fetch("/api/freshness", { cache: "no-store" });
-        if (res.ok && !cancelled) setFreshness((await res.json()) as FreshnessResponse);
+        if (res.ok && !cancelled)
+          setFreshness((await res.json()) as FreshnessResponse);
       } catch {
         // Non-fatal: the bar falls back to a 90-day window.
       }
@@ -133,7 +166,9 @@ export default function DashboardShell() {  devRenderCount("DashboardShell");
   // 90 days; an hour of quantization is invisible. Plain arithmetic on
   // quantized inputs — number props memo-compare by value, no useMemo needed.
   const spanDays = freshness?.fleet.oldestDataDays ?? FALLBACK_SPAN_DAYS;
-  const rangeStartMs = Math.floor(nowMs / 3600_000) * 3600_000 - Math.round(spanDays * 24) * 3600_000;
+  const rangeStartMs =
+    Math.floor(nowMs / 3600_000) * 3600_000 -
+    Math.round(spanDays * 24) * 3600_000;
 
   // Segments are memoized on the minute-quantized clock: recomputing the
   // 90-day Athens-wall-time walk every second would be wasted work.
@@ -141,10 +176,13 @@ export default function DashboardShell() {  devRenderCount("DashboardShell");
   const rangeStartMinute = Math.floor(effectiveStartMs / 60_000) * 60_000;
   const segments = useMemo(
     () => selectedSegments(filters, rangeStartMinute, nowMinute),
-    [filters, rangeStartMinute, nowMinute]
+    [filters, rangeStartMinute, nowMinute],
   );
   const filtered = !isUnfiltered(filters);
-  const liveAllowed = useMemo(() => instantMatches(filters, nowMinute), [filters, nowMinute]);
+  const liveAllowed = useMemo(
+    () => instantMatches(filters, nowMinute),
+    [filters, nowMinute],
+  );
 
   // Filter changes flow through here so a live cursor that the new filters
   // exclude gets parked at the end of the last selected segment (an event-
@@ -155,11 +193,16 @@ export default function DashboardShell() {  devRenderCount("DashboardShell");
       setCursor((prev) => {
         if (prev !== "live") return prev;
         if (instantMatches(next, Date.now())) return prev;
-        const segs = selectedSegments(next, Math.floor(periodStartMs(next, rangeStartMs, Date.now()) / 60_000) * 60_000, nowMinute);
+        const segs = selectedSegments(
+          next,
+          Math.floor(periodStartMs(next, rangeStartMs, Date.now()) / 60_000) *
+            60_000,
+          nowMinute,
+        );
         return segs.length > 0 ? segs[segs.length - 1].endMs - 1 : prev;
       });
     },
-    [rangeStartMs, nowMinute]
+    [rangeStartMs, nowMinute],
   );
 
   // Playback is a FRAME clock, not an animation: one discrete step per real
@@ -180,7 +223,11 @@ export default function DashboardShell() {  devRenderCount("DashboardShell");
       // A skip is a held beat: the clock stands still on the landing frame
       // while the jump cut plays, then stepping resumes.
       if (Date.now() < skipHoldUntilRef.current) return;
-      const { segments: segs, liveAllowed: allowed, rangeStartMs: start } = playbackInputs.current;
+      const {
+        segments: segs,
+        liveAllowed: allowed,
+        rangeStartMs: start,
+      } = playbackInputs.current;
       setCursor((prev) => {
         const from = prev === "live" ? (segs[0]?.startMs ?? start) : prev;
         const next = advanceCursor(segs, from, stepMs);
@@ -210,9 +257,13 @@ export default function DashboardShell() {  devRenderCount("DashboardShell");
     let cancelled = false;
     fetch(`/api/aggregate?${aggQuery}`, { cache: "no-store" })
       .then((r) => r.json())
-      .then((body: { sensors: Record<string, Record<AggKey, number> & { n: number }> }) => {
-        if (!cancelled) setAggData(body.sensors);
-      })
+      .then(
+        (body: {
+          sensors: Record<string, Record<AggKey, number> & { n: number }>;
+        }) => {
+          if (!cancelled) setAggData(body.sensors);
+        },
+      )
       .catch(() => {});
     return () => {
       cancelled = true;
@@ -222,7 +273,8 @@ export default function DashboardShell() {  devRenderCount("DashboardShell");
   const overrideFrame: FrameData | null = useMemo(() => {
     if (mode !== "aggregate" || !aggData) return null;
     const out: FrameData = {};
-    for (const [id, v] of Object.entries(aggData)) out[id] = { laeq: v[aggKey], n: v.n };
+    for (const [id, v] of Object.entries(aggData))
+      out[id] = { laeq: v[aggKey], n: v.n };
     return out;
   }, [mode, aggData, aggKey]);
 
@@ -254,7 +306,9 @@ export default function DashboardShell() {  devRenderCount("DashboardShell");
       if (!label) return;
       setFilters((prev) => ({
         ...prev,
-        locations: prev.locations.map((p) => (p.lng === lng && p.lat === lat ? { ...p, label } : p)),
+        locations: prev.locations.map((p) =>
+          p.lng === lng && p.lat === lat ? { ...p, label } : p,
+        ),
       }));
     });
   }, []);
@@ -262,14 +316,25 @@ export default function DashboardShell() {  devRenderCount("DashboardShell");
   // Address search picks arrive labeled; show the new pin when the map is up.
   const onAddPin = useCallback(
     (lng: number, lat: number, label: string) => {
-      setFilters((prev) => ({ ...prev, locations: [...prev.locations, { lng, lat, radiusM: 500, label }] }));
-      if (view === "map") mapInstance?.flyTo({ center: [lng, lat], zoom: Math.max(mapInstance.getZoom(), 12.5), duration: 1200 });
+      setFilters((prev) => ({
+        ...prev,
+        locations: [...prev.locations, { lng, lat, radiusM: 500, label }],
+      }));
+      if (view === "map")
+        mapInstance?.flyTo({
+          center: [lng, lat],
+          zoom: Math.max(mapInstance.getZoom(), 12.5),
+          duration: 1200,
+        });
     },
-    [view, mapInstance]
+    [view, mapInstance],
   );
 
   const onRemovePin = useCallback((index: number) => {
-    setFilters((prev) => ({ ...prev, locations: prev.locations.filter((_, i) => i !== index) }));
+    setFilters((prev) => ({
+      ...prev,
+      locations: prev.locations.filter((_, i) => i !== index),
+    }));
   }, []);
 
   const onClosePane = useCallback(() => setSelectedSensorId(null), []);
@@ -279,7 +344,7 @@ export default function DashboardShell() {  devRenderCount("DashboardShell");
       setView("map");
       mapInstance?.flyTo({ center: [lng, lat], zoom: 13.5, duration: 1400 });
     },
-    [mapInstance]
+    [mapInstance],
   );
 
   const onPlayToggle = useCallback(() => {
@@ -288,7 +353,10 @@ export default function DashboardShell() {  devRenderCount("DashboardShell");
         const lastEnd = segments[segments.length - 1]?.endMs ?? nowMs;
         // Play from live, or from a cursor parked at the very end, means
         // replaying the selection from its start.
-        if (cursor === "live" || (typeof cursor === "number" && cursor >= lastEnd - 60_000)) {
+        if (
+          cursor === "live" ||
+          (typeof cursor === "number" && cursor >= lastEnd - 60_000)
+        ) {
           setCursor(segments[0]?.startMs ?? rangeStartMs);
         }
       }
@@ -306,7 +374,11 @@ export default function DashboardShell() {  devRenderCount("DashboardShell");
   // highlights only exist to mark a selection inside a larger domain.
   const singleInterval = segments.length === 1;
   const domainStartMs = singleInterval ? segments[0].startMs : effectiveStartMs;
-  const domainEndMs = singleInterval ? (liveAllowed ? nowMs : segments[0].endMs) : nowMs;
+  const domainEndMs = singleInterval
+    ? liveAllowed
+      ? nowMs
+      : segments[0].endMs
+    : nowMs;
 
   const timebarProps = {
     rangeStartMs: domainStartMs,
@@ -322,16 +394,24 @@ export default function DashboardShell() {  devRenderCount("DashboardShell");
     labels: tr.timebar,
     onCursorChange,
     onPlayToggle,
-    onSpeedSelect: (i: number) => setSpeedIndex(Math.max(0, Math.min(PLAYBACK_SPEEDS.length - 1, i))),
+    onSpeedSelect: (i: number) =>
+      setSpeedIndex(Math.max(0, Math.min(PLAYBACK_SPEEDS.length - 1, i))),
   };
 
   const activeFilterCount =
-    (filters.period ? 1 : 0) + filters.days.size + filters.hours.size + filters.months.size;
+    (filters.period ? 1 : 0) +
+    filters.days.size +
+    filters.hours.size +
+    filters.months.size;
   // The rail's snapshot super-title: the exact frame span on display, as
   // primitives so the rail's memo only fires when the frame really moves.
   const showSnapshot = view === "map" && mode === "instants";
-  const snapshotWindowS = frameWindowS(PLAYBACK_SPEEDS[speedIndex].simSecondsPerRealSecond * 1000);
-  const snapshotEndMs = showSnapshot ? quantizeFrameMs(cursor === "live" ? nowMinute : cursor) : null;
+  const snapshotWindowS = frameWindowS(
+    PLAYBACK_SPEEDS[speedIndex].simSecondsPerRealSecond * 1000,
+  );
+  const snapshotEndMs = showSnapshot
+    ? quantizeFrameMs(cursor === "live" ? nowMinute : cursor)
+    : null;
 
   const railProps = {
     filters,
@@ -351,7 +431,8 @@ export default function DashboardShell() {  devRenderCount("DashboardShell");
     onAddPin,
     metricGlow,
     snapshotLive: showSnapshot && cursor === "live",
-    snapshotStartMs: snapshotEndMs == null ? null : snapshotEndMs - snapshotWindowS * 1000,
+    snapshotStartMs:
+      snapshotEndMs == null ? null : snapshotEndMs - snapshotWindowS * 1000,
     snapshotEndMs,
   };
 
@@ -359,117 +440,130 @@ export default function DashboardShell() {  devRenderCount("DashboardShell");
 
   return (
     <TooltipProvider delayDuration={250}>
-      <div className="flex h-full min-h-0">
-        {/* desktop filter rail */}
-        {isMobile === false && (
-          <aside className="w-[19rem] shrink-0 border-r bg-sidebar">
-            <FilterRail {...railProps} />
-          </aside>
-        )}
+      {/* Renders only where NEXT_PUBLIC_DATA_SOURCE=simulated, i.e. staging. */}
+      <div className="flex h-full min-h-0 flex-col">
+        <SimulatedBanner />
+        <div className="flex min-h-0 flex-1">
+          {/* desktop filter rail */}
+          {isMobile === false && (
+            <aside className="w-[19rem] shrink-0 border-r bg-sidebar">
+              <FilterRail {...railProps} />
+            </aside>
+          )}
 
-        {/* map + overlays */}
-        <div className="relative min-w-0 flex-1">
-          <MapCanvas onReady={setMapInstance} />
-          <SensorLayer
-            map={mapInstance}
-            sensors={sensorList}
-            cursor={cursor}
-            stepMs={PLAYBACK_SPEEDS[speedIndex].simSecondsPerRealSecond * 1000}
-            segments={segments}
-            playing={playing}
-            metric={aggKey}
-            onSensorClick={setSelectedSensorId}
-            overrideFrame={overrideFrame}
-            locations={filters.locations}
-            clickThrough={placingPin}
-          />
-          <LocationLayer
-            map={mapInstance}
-            locations={filters.locations}
-            placing={placingPin}
-            onPlace={onPlacePin}
-            onRemove={onRemovePin}
-          />
-          {view === "board" && (
-            <Leaderboard
-              aggData={aggData}
-              metric={aggKey}
+          {/* map + overlays */}
+          <div className="relative min-w-0 flex-1">
+            <MapCanvas onReady={setMapInstance} />
+            <SensorLayer
+              map={mapInstance}
               sensors={sensorList}
-              onSensorClick={setSelectedSensorId}
-              onMetricRefHover={setMetricGlow}
-            />
-          )}
-          {view === "charts" && (
-            <ChartsView
-              aggQuery={aggQuery}
+              cursor={cursor}
+              stepMs={
+                PLAYBACK_SPEEDS[speedIndex].simSecondsPerRealSecond * 1000
+              }
+              segments={segments}
+              playing={playing}
               metric={aggKey}
-              filters={filters}
-              domainStartMs={rangeStartMinute}
-              nowMs={nowMinute}
-              onMetricRefHover={setMetricGlow}
+              onSensorClick={setSelectedSensorId}
+              overrideFrame={overrideFrame}
+              locations={filters.locations}
+              clickThrough={placingPin}
             />
-          )}
-          {selectedSensorId && (
-            <SensorPane
-              sensorId={selectedSensorId}
-              windowS={frameWindowS(PLAYBACK_SPEEDS[speedIndex].simSecondsPerRealSecond * 1000)}
-              onClose={onClosePane}
-              onGoToMap={view !== "map" ? onGoToMap : undefined}
+            <LocationLayer
+              map={mapInstance}
+              locations={filters.locations}
+              placing={placingPin}
+              onPlace={onPlacePin}
+              onRemove={onRemovePin}
             />
-          )}
-          {view === "map" && <SkipFlash skip={skip} />}
-          {view === "map" && mode === "instants" && (
-            <CurrentDate
-              cursorMs={cursor === "live" ? nowMinute : cursor}
-              windowS={frameWindowS(PLAYBACK_SPEEDS[speedIndex].simSecondsPerRealSecond * 1000)}
-              skip={skip}
-            />
-          )}
+            {view === "board" && (
+              <Leaderboard
+                aggData={aggData}
+                metric={aggKey}
+                sensors={sensorList}
+                onSensorClick={setSelectedSensorId}
+                onMetricRefHover={setMetricGlow}
+              />
+            )}
+            {view === "charts" && (
+              <ChartsView
+                aggQuery={aggQuery}
+                metric={aggKey}
+                filters={filters}
+                domainStartMs={rangeStartMinute}
+                nowMs={nowMinute}
+                onMetricRefHover={setMetricGlow}
+              />
+            )}
+            {selectedSensorId && (
+              <SensorPane
+                sensorId={selectedSensorId}
+                windowS={frameWindowS(
+                  PLAYBACK_SPEEDS[speedIndex].simSecondsPerRealSecond * 1000,
+                )}
+                onClose={onClosePane}
+                onGoToMap={view !== "map" ? onGoToMap : undefined}
+              />
+            )}
+            {view === "map" && <SkipFlash skip={skip} />}
+            {view === "map" && mode === "instants" && (
+              <CurrentDate
+                cursorMs={cursor === "live" ? nowMinute : cursor}
+                windowS={frameWindowS(
+                  PLAYBACK_SPEEDS[speedIndex].simSecondsPerRealSecond * 1000,
+                )}
+                skip={skip}
+              />
+            )}
 
-          {/* view switcher: the top-level lens */}
-          <div className="pointer-events-none absolute left-1/2 top-3 z-10 -translate-x-1/2 md:top-4">
-            <ViewSwitcher
-              view={view}
-              mode={mode}
-              compact={isMobile === true}
-              onViewChange={onViewChange}
-              onModeChange={onModeChange}
-            />
+            {/* view switcher: the top-level lens */}
+            <div className="pointer-events-none absolute left-1/2 top-3 z-10 -translate-x-1/2 md:top-4">
+              <ViewSwitcher
+                view={view}
+                mode={mode}
+                compact={isMobile === true}
+                onViewChange={onViewChange}
+                onModeChange={onModeChange}
+              />
+            </div>
+
+            {/* mobile: filter sheet trigger */}
+            {isMobile === true && (
+              <Sheet>
+                <SheetTrigger asChild>
+                  <Button
+                    variant="outline"
+                    className="absolute left-3 top-3 z-10 h-9 gap-2 bg-card/95 shadow-sm backdrop-blur-sm"
+                  >
+                    <SlidersHorizontal className="size-3.5" />
+                    {tr.filters}
+                    {activeFilterCount > 0 && (
+                      <Badge className="size-4 justify-center rounded-full bg-sound p-0 text-[10px] text-white">
+                        {activeFilterCount}
+                      </Badge>
+                    )}
+                  </Button>
+                </SheetTrigger>
+                <SheetContent side="left" className="w-[19rem] p-0">
+                  <SheetTitle className="sr-only">{tr.filters}</SheetTitle>
+                  <FilterRail {...railProps} />
+                </SheetContent>
+              </Sheet>
+            )}
+
+            {/* the timebar — instants scope on the map lens only */}
+            {view === "map" &&
+              mode === "instants" &&
+              (isMobile === true ? (
+                <div className="pointer-events-none absolute bottom-24 right-2 top-16 z-10 flex">
+                  <Timebar {...timebarProps} orientation="vertical" />
+                </div>
+              ) : (
+                <div className="pointer-events-none absolute inset-x-0 bottom-4 z-10 flex px-4">
+                  <Timebar {...timebarProps} orientation="horizontal" />
+                </div>
+              ))}
           </div>
-
-          {/* mobile: filter sheet trigger */}
-          {isMobile === true && (
-            <Sheet>
-              <SheetTrigger asChild>
-                <Button variant="outline" className="absolute left-3 top-3 z-10 h-9 gap-2 bg-card/95 shadow-sm backdrop-blur-sm">
-                  <SlidersHorizontal className="size-3.5" />
-                  {tr.filters}
-                  {activeFilterCount > 0 && (
-                    <Badge className="size-4 justify-center rounded-full bg-sound p-0 text-[10px] text-white">
-                      {activeFilterCount}
-                    </Badge>
-                  )}
-                </Button>
-              </SheetTrigger>
-              <SheetContent side="left" className="w-[19rem] p-0">
-                <SheetTitle className="sr-only">{tr.filters}</SheetTitle>
-                <FilterRail {...railProps} />
-              </SheetContent>
-            </Sheet>
-          )}
-
-          {/* the timebar — instants scope on the map lens only */}
-          {view === "map" &&
-            mode === "instants" &&
-            (isMobile === true ? (
-              <div className="pointer-events-none absolute bottom-24 right-2 top-16 z-10 flex">
-                <Timebar {...timebarProps} orientation="vertical" />
-              </div>
-            ) : (
-              <div className="pointer-events-none absolute inset-x-0 bottom-4 z-10 flex px-4">
-                <Timebar {...timebarProps} orientation="horizontal" />
-              </div>
-            ))}
         </div>
       </div>
     </TooltipProvider>
