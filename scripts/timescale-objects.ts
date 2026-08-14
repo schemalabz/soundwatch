@@ -115,6 +115,26 @@ export function stampFor(sql: string): string {
 const CAGG_STAMP = stampFor(CAGG_SQL);
 
 /**
+ * The stamp scheme this file used before the hash: it encoded the three bin
+ * numbers and nothing else.
+ */
+const LEGACY_STAMP = `sw-bins:${CAGG_BINS.lo}/${CAGG_BINS.hi}/${CAGG_BINS.count}`;
+
+/**
+ * The hash of the definition that was live while LEGACY_STAMP was being
+ * written. Production carries `sw-bins:30/128/98` today, and the CREATE
+ * statement is byte-identical to the one that stamp described — so without
+ * this, merging would find a mismatch that reflects no definitional change,
+ * DROP the live rollup and rebuild from empty, while start.sh holds the deploy
+ * behind it and any still-serving instance loses its aggregate mid-request.
+ *
+ * Pinned to a literal rather than computed, so it EXPIRES on its own: change
+ * the view and CAGG_STAMP stops matching this, the compatibility branch stops
+ * applying, and a real definitional change rebuilds as it should.
+ */
+const LEGACY_EQUIVALENT_STAMP = "sw-cagg:30d2e014d00d12ea";
+
+/**
  * The stamp the drift check reads. Written on every run, so an aggregate
  * created before stamping existed adopts one without a rebuild.
  *
@@ -150,45 +170,71 @@ async function dropIfDefinitionDrifted(prisma: PrismaClient): Promise<boolean> {
      WHERE c.relname = 'readings_hour_bins' AND n.nspname = 'public'`
   );
   if (rows.length === 0) return false; // nothing to drift from
-  if (rows[0].stamp === CAGG_STAMP) return false;
+  const stamp = rows[0].stamp;
+  if (stamp === CAGG_STAMP) return false;
+
+  // The rename from the bin-triple scheme to the hash is not a definitional
+  // change. Re-stamp, do not rebuild.
+  if (stamp === LEGACY_STAMP && CAGG_STAMP === LEGACY_EQUIVALENT_STAMP) {
+    console.log(`[timescale-objects] adopting the hash stamp (${stamp} -> ${CAGG_STAMP}); definition unchanged`);
+    return false;
+  }
+
   console.log(
-    `[timescale-objects] definition changed (${rows[0].stamp ?? "unstamped"} -> ${CAGG_STAMP}) — rebuilding`
+    `[timescale-objects] definition changed (${stamp ?? "unstamped"} -> ${CAGG_STAMP}) — rebuilding`
   );
   await prisma.$executeRawUnsafe(`DROP MATERIALIZED VIEW IF EXISTS readings_hour_bins CASCADE`);
   return true;
 }
 
-/** Wait out whoever holds the refresh, then take our turn. */
-async function retryRefresh(prisma: PrismaClient, sql: string): Promise<void> {
-  for (let attempt = 1; attempt <= 10; attempt++) {
-    await new Promise((r) => setTimeout(r, Math.min(30_000, 2_000 * attempt)));
-    try {
-      await prisma.$executeRawUnsafe(sql);
-      console.log(`[timescale-objects] refresh succeeded on attempt ${attempt + 1}`);
-      return;
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      if (!/concurrent refresh/i.test(msg)) throw err;
-    }
-  }
-  // Do not start the service on an empty aggregate pretending to be a full one.
-  throw new Error(
-    "could not refresh readings_hour_bins after rebuilding it — it is EMPTY and " +
-      "every rollup endpoint would serve near-nothing"
+/**
+ * Is the aggregate actually covering the history it claims to?
+ *
+ * The previous check asked whether OUR refresh call returned without error,
+ * which answers a question about this process rather than about the database.
+ * Two states it cannot tell apart:
+ *
+ *   EMPTY is correct and merely slower — materialized_only = false unions
+ *   straight from raw readings, so queries return the right numbers.
+ *
+ *   PARTIAL is silently wrong. A refresh interrupted part-way leaves a
+ *   watermark reading fully current over a fraction of the history: measured
+ *   on a fixture, 1,054,421 raw readings rendered as 0 rows, and 73% of hours
+ *   became invisible with nothing in the database saying so. That, not
+ *   emptiness, is what turns 168 bars into 4.
+ *
+ * Comparing the aggregate's earliest bucket against the earliest bucket in raw
+ * readings is correct in BOTH states, because on a truly empty aggregate the
+ * real-time union makes the two agree.
+ */
+async function coverageIsComplete(prisma: PrismaClient): Promise<boolean> {
+  const rows = await prisma.$queryRawUnsafe<{ ok: boolean | null }[]>(
+    `SELECT (
+       SELECT min(bucket) FROM readings_hour_bins
+     ) <= (
+       SELECT time_bucket('1 hour', min(recorded_at)) FROM readings WHERE laeq IS NOT NULL
+     ) AS ok`
   );
+  // No readings at all -> nothing to cover, which is complete.
+  const raw = await prisma.$queryRawUnsafe<{ n: bigint }[]>(
+    `SELECT count(*) AS n FROM readings WHERE laeq IS NOT NULL`
+  );
+  if (Number(raw[0].n) === 0) return true;
+  return rows[0]?.ok === true;
 }
 
 async function main() {
   const prisma = new PrismaClient();
   try {
-    // A rebuild leaves the aggregate EMPTY until the catch-up refresh runs, so
-    // losing the race for it is not the harmless outcome it is on a normal
-    // boot: /api/series and /api/aggregate would serve almost nothing, and the
-    // live-edge policy only reaches back three hours. (Observed exactly this
-    // locally — 4 of 168 hourly buckets survived a rebuild whose refresh was
-    // skipped.) The late-data policy would repair it, a day later.
-    const rebuilt = await dropIfDefinitionDrifted(prisma);
-    for (const s of [STATEMENTS[0], STAMP_STATEMENT, ...STATEMENTS.slice(1)]) {
+    await dropIfDefinitionDrifted(prisma);
+
+    // The stamp is written LAST, after coverage is confirmed. It used to be
+    // second — [CREATE, STAMP, ...rest] — with the catch-up refresh in `rest`,
+    // so any interruption between them left a matching stamp sitting over a
+    // partial aggregate. The next boot saw the match, concluded nothing had
+    // drifted, and never repaired it; the late-data policy reaches back 30
+    // days, so anything older was gone for good.
+    for (const s of STATEMENTS) {
       try {
         await prisma.$executeRawUnsafe(s.sql);
         console.log(`[timescale-objects] ok: ${s.label}`);
@@ -197,23 +243,46 @@ async function main() {
         if (/already exists/i.test(msg)) {
           console.log(`[timescale-objects] exists: ${s.label}`);
         } else if (/concurrent refresh/i.test(msg)) {
-          // The app, the ingester and sim-backfill all run this on boot and can
-          // reach the refresh together (Postgres 55P03). On a normal boot the
-          // aggregate is already populated and whoever got there first is doing
-          // the work, so losing the race is not a failure.
-          //
-          // After a rebuild it is. Wait for the other party and try again.
-          if (rebuilt && s.call) {
-            console.log(`[timescale-objects] refresh contended after a rebuild; retrying: ${s.label}`);
-            await retryRefresh(prisma, s.sql);
-          } else {
-            console.log(`[timescale-objects] already running elsewhere: ${s.label}`);
-          }
+          // The app, the ingester and sim-backfill all run this on boot and
+          // can reach the refresh together (Postgres 55P03). Whether losing
+          // that race matters is not knowable from the error — it depends on
+          // what the winner leaves behind, which the coverage probe below
+          // asks the database directly.
+          console.log(`[timescale-objects] refresh contended: ${s.label}`);
         } else {
           throw err;
         }
       }
     }
+
+    // Decided from the database, not from this process's exit status. The old
+    // `rebuilt` flag was a per-process local: the peer that lost the DROP race
+    // got `false`, logged "already running elsewhere", and went on to exec the
+    // server against an aggregate that might be partly filled — the exact case
+    // the retry was added to close.
+    const refresh = STATEMENTS.find((x) => x.call)!;
+    for (let attempt = 1; ; attempt++) {
+      if (await coverageIsComplete(prisma)) break;
+      if (attempt > 10) {
+        throw new Error(
+          "readings_hour_bins does not cover the history in readings after " +
+            "10 refresh attempts. It is PARTIAL, which is silently wrong rather " +
+            "than merely slow, and every rollup endpoint would under-report."
+        );
+      }
+      console.log(`[timescale-objects] coverage incomplete; refreshing (attempt ${attempt})`);
+      await new Promise((r) => setTimeout(r, Math.min(30_000, 2_000 * attempt)));
+      try {
+        await prisma.$executeRawUnsafe(refresh.sql);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        if (!/concurrent refresh/i.test(msg)) throw err;
+      }
+    }
+    console.log("[timescale-objects] coverage complete");
+
+    await prisma.$executeRawUnsafe(STAMP_STATEMENT.sql);
+    console.log(`[timescale-objects] ok: ${STAMP_STATEMENT.label}`);
   } finally {
     await prisma.$disconnect();
   }
