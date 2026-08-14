@@ -72,6 +72,8 @@ services:
 
   postgres:
     image: timescale/timescaledb:latest-pg17
+    # Explicit, not inherited from a freshly-tuned volume. See docker-compose.yml.
+    command: postgres -c shared_preload_libraries=timescaledb
     environment:
       POSTGRES_USER: soundwatch
       POSTGRES_PASSWORD: soundwatch
