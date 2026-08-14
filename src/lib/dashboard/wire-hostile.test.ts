@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { MAX_EPOCH_MS, parseEpochMs, parseWireFilters } from "./filters";
-import { filterSql, rangesSql } from "@/lib/server/filterSql";
+import { filterSql, locationSql, rangesSql } from "@/lib/server/filterSql";
 
 // Every one of these produced a 500 on an unauthenticated route. None is an
 // injection — the SQL is built only from validated enums and numbers — but a
@@ -51,6 +51,46 @@ describe("hostile wire params", () => {
     it("MAX_EPOCH_MS is a date toISOString can actually format", () => {
       expect(() => new Date(MAX_EPOCH_MS).toISOString()).not.toThrow();
       expect(new Date(MAX_EPOCH_MS).getUTCFullYear()).toBe(2100);
+    });
+  });
+
+  describe("location bounds", () => {
+    // locationSql inlines Math.round(radiusM ** 2) into SQL. Above ~1e155 that
+    // overflows to Infinity, renders as a bare `Infinity` token, and Postgres
+    // answers `column "infinity" does not exist` — a 500 from a query string.
+    // Verified against a live server: 500 before, 200 after.
+    for (const bad of [
+      "23.7:37.9:1e155", // radius overflows the square
+      "23.7:37.9:1e300",
+      "23.7:1e300:500", // latitude off the planet
+      "1e300:37.9:500", // longitude off the planet
+      "23.7:37.9:0", // zero radius
+      "23.7:37.9:-500", // negative radius
+      "23.7:37.9:250000", // beyond MAX_RADIUS_M
+      "23.7:37.9", // not a triple
+      "abc:def:ghi",
+    ]) {
+      it(`drops loc=${bad}`, () => {
+        const f = parseWireFilters(new URLSearchParams(`loc=${bad}`));
+        expect(f.locations).toHaveLength(0);
+        expect(locationSql(f)).toBe("");
+      });
+    }
+
+    it("keeps a real pin, and renders finite SQL for it", () => {
+      const f = parseWireFilters(new URLSearchParams("loc=23.7275:37.9838:500"));
+      expect(f.locations).toHaveLength(1);
+      const sql = locationSql(f);
+      expect(sql).toContain("power(");
+      expect(sql).not.toMatch(/Infinity|NaN/);
+    });
+
+    it("keeps the good pin and drops the bad one from the same list", () => {
+      const f = parseWireFilters(
+        new URLSearchParams("loc=23.7275:37.9838:500,23.7:37.9:1e155")
+      );
+      expect(f.locations).toHaveLength(1);
+      expect(f.locations[0].radiusM).toBe(500);
     });
   });
 });

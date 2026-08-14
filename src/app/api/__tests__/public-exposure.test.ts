@@ -1,108 +1,226 @@
-import { describe, expect, it } from "vitest";
-import { readFileSync, readdirSync } from "node:fs";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { NextRequest } from "next/server";
+import { PUBLIC_SENSOR_WHERE } from "@/lib/locations";
+import { readdirSync } from "node:fs";
 import { join } from "node:path";
-import { PUBLIC_SENSOR_SQL } from "@/lib/server/filterSql";
 
-// Two rules about what an unauthenticated route may do, enforced over source
-// text rather than over responses — because the failure they guard against is
-// a route that FORGETS, and you cannot write a response assertion for a route
-// nobody remembered to write assertions for.
+// What an unauthenticated route may do, enforced by INVOKING it.
 //
-// /api/freshness shipped with the sensor filter simply absent: no is_active,
-// no is_experimental, no latitude. It served the whole fleet — bench units,
-// units that were never installed — to any visitor, polled every 5 s from the
-// home page. Seven other routes had the clause; the eighth did not; nothing
-// noticed. That is what a copy-pasted predicate buys you.
+// The previous version of this file read route source text and asked whether
+// certain identifiers appeared in it. That is not a check, it is a spelling
+// test, and it failed the one case it existed for: deleting
+// `WHERE ${PUBLIC_SENSOR_RAW}` from /api/freshness — the original leak,
+// reintroduced verbatim — passed all four tests. Three independent reasons,
+// all of them fatal:
+//
+//   - The detector matched /FROM sensors/, and /api/aggregate and /api/series
+//     say `JOIN sensors s`. Neither was ever in scope.
+//   - "Filtered" meant "the identifier occurs somewhere in the file", which an
+//     orphaned import satisfies. eslint reports that as a warning, so CI stays
+//     green.
+//   - It only walked files named exactly `route.ts`, and its skip-list matched
+//     a bare directory name at any depth.
+//
+// So: mock the database, call each route's GET, and look at the SQL that
+// actually reached Prisma. A route cannot spell its way past that.
 
-const API_ROOT = join(process.cwd(), "src/app/api");
+const queries: string[] = [];
 
-// Routes behind a credential. admin checks a bearer token; install is
-// deliberately open but is the thing being protected, not a leak of it;
-// firmware reads a device's own id from a request header.
-const AUTHENTICATED = ["admin", "install", "firmware"];
+function record(sql: unknown, ...values: unknown[]): [] {
+  // $queryRawUnsafe gets a finished string. $queryRaw is a tagged template:
+  // (strings, ...values), and a Prisma.raw() value carries real SQL rather
+  // than a bind parameter — PUBLIC_SENSOR_RAW arrives that way, so rendering
+  // every interpolation as "?" would hide the very predicate under test.
+  if (typeof sql === "string") {
+    queries.push(sql);
+  } else if (Array.isArray(sql)) {
+    const rendered = sql.reduce((acc: string, part: string, i: number) => {
+      if (i === 0) return part;
+      const v = values[i - 1] as { strings?: string[]; sql?: string } | undefined;
+      const inlined =
+        typeof v?.sql === "string"
+          ? v.sql
+          : Array.isArray(v?.strings)
+            ? v.strings.join(" ? ")
+            : "?";
+      return acc + inlined + part;
+    }, "");
+    queries.push(rendered);
+  }
+  return [];
+}
 
-function publicRoutes(dir: string, out: string[] = []): string[] {
-  for (const entry of readdirSync(dir, { withFileTypes: true })) {
-    if (entry.isDirectory()) {
-      if (AUTHENTICATED.includes(entry.name)) continue;
-      if (entry.name === "__tests__") continue;
-      publicRoutes(join(dir, entry.name), out);
-    } else if (entry.name === "route.ts") {
-      out.push(join(dir, entry.name));
+// Realistic rows. With [] the routes serialize nothing and every assertion
+// about a RESPONSE passes without exercising anything — the same vacuous-pass
+// trap this file exists to avoid.
+const SENSOR_ROW = {
+  id: "s1",
+  deviceId: "tok123",
+  name: "Sim Kypseli",
+  latitude: 37.99,
+  longitude: 23.73,
+  address: "Πατησίων 1",
+  isActive: true,
+  isExperimental: false,
+  lastSeenAt: new Date(),
+  hardwareId: null,
+  createdAt: new Date(),
+  updatedAt: new Date(),
+};
+
+const findMany = vi.fn(() => [SENSOR_ROW] as unknown[]);
+const findUnique = vi.fn(() => null as unknown);
+
+vi.mock("@/lib/db", () => ({
+  prisma: {
+    $queryRaw: vi.fn(record),
+    $queryRawUnsafe: vi.fn(record),
+    sensor: {
+      findMany: (...a: unknown[]) => findMany(...(a as [])),
+      findUnique: (...a: unknown[]) => findUnique(...(a as [])),
+      count: vi.fn(() => 0),
+    },
+    reading: { findMany: vi.fn(() => []), aggregate: vi.fn(() => ({ _max: {} })) },
+  },
+}));
+
+const NOW = Date.now();
+
+/**
+ * Every route module under src/app/api that is not behind a credential.
+ *
+ * Discovered by walking, not listed — a listed set cannot notice a new route,
+ * which is exactly how /api/freshness came to be the one endpoint without the
+ * filter. Next resolves route.{js,jsx,ts,tsx}, so all four are matched.
+ */
+const AUTHENTICATED = new Set(["admin", "install", "firmware"]);
+
+function routeFiles(dir: string, rel = "", out: { rel: string; abs: string }[] = []) {
+  for (const e of readdirSync(dir, { withFileTypes: true })) {
+    const next = rel ? `${rel}/${e.name}` : e.name;
+    if (e.isDirectory()) {
+      // Match the FIRST path segment only. A bare-name match at any depth would
+      // skip api/sensors/admin/route.ts, which is not an authenticated route.
+      if (!rel && AUTHENTICATED.has(e.name)) continue;
+      if (e.name === "__tests__") continue;
+      routeFiles(join(dir, e.name), next, out);
+    } else if (/^route\.(t|j)sx?$/.test(e.name)) {
+      out.push({ rel: next, abs: join(dir, e.name) });
     }
   }
   return out;
 }
 
-/** Comments explain why deviceId is dangerous; they must not trip the check. */
-function stripComments(src: string): string {
-  return src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
-}
+const ROUTES = routeFiles(join(process.cwd(), "src/app/api"));
 
-const ROUTES = publicRoutes(API_ROOT).map((path) => {
-  const raw = readFileSync(path, "utf8");
-  return {
-    path,
-    rel: path.slice(process.cwd().length + 1),
-    raw,
-    src: stripComments(raw),
-  };
+/** Dynamic-segment context. Routes that take no params ignore the argument. */
+type Ctx = { params: Promise<{ id: string; token: string }> };
+const ctx = (): Ctx => ({ params: Promise.resolve({ id: "s1", token: "tok123" }) });
+
+/** Query-string arguments that make each route do its work. */
+const ARGS: Record<string, string> = {
+  "aggregate/route.ts": `?from=${NOW - 86_400_000}`,
+  "series/route.ts": `?from=${NOW - 86_400_000}`,
+  "frames/route.ts": `?at=${NOW}`,
+};
+
+beforeEach(() => {
+  queries.length = 0;
+  vi.clearAllMocks();
+  findMany.mockReturnValue([SENSOR_ROW]);
+  findUnique.mockReturnValue(null);
+  delete process.env.ADMIN_TOKEN;
 });
 
 describe("unauthenticated API surface", () => {
-  it("finds the routes to check", () => {
+  it("discovers every public route", () => {
+    expect(ROUTES.map((r) => r.rel).sort()).toContain("freshness/route.ts");
     expect(ROUTES.length).toBeGreaterThanOrEqual(8);
   });
 
-  it("never publishes deviceId", () => {
+  describe.each(ROUTES.map((r) => [r.rel, r.abs] as const))("%s", (rel, abs) => {
+    it("filters sensors to the public set, or never reads them", async () => {
+      const mod = (await import(abs)) as { GET?: (req: NextRequest, ctx: Ctx) => Promise<Response> };
+      if (typeof mod.GET !== "function") return; // POST-only route
+
+      // NextRequest, not Request: these routes read req.nextUrl.searchParams,
+      // and a plain Request has no nextUrl. The first version of this file
+      // passed a Request, so /api/aggregate, /api/series and /api/frames threw
+      // on line one, the catch swallowed it, and all three "passed" having run
+      // no query at all. A guard that cannot reach a route must say so.
+      let threw: unknown = null;
+      try {
+        await mod.GET(new NextRequest(`http://test/api/x${ARGS[rel] ?? ""}`), ctx());
+      } catch (err) {
+        threw = err;
+      }
+      expect(threw, `${rel} threw before reaching the database: ${threw}`).toBeNull();
+
+      const touching = queries.filter((q) => /\bsensors\b/i.test(q));
+      for (const q of touching) {
+        // Whitespace-insensitive: the clause is written across lines.
+        const flat = q.replace(/\s+/g, " ");
+        expect(
+          /is_active AND NOT s\.is_experimental AND s\.latitude IS NOT NULL/.test(flat),
+          `${rel} runs a query naming sensors without the public predicate:\n${flat.slice(0, 400)}`
+        ).toBe(true);
+      }
+
+      // Prisma-side reads must carry the SAME restriction, all three parts of
+      // it. An `||` here would accept any one of them, which is how
+      // /api/demo/live shipped filtering on the bench flag alone — serving
+      // deactivated and never-sited units on a public feed, while looking
+      // filtered.
+      for (const call of findMany.mock.calls as unknown as [{ where?: Record<string, unknown> }][]) {
+        const where = call[0]?.where ?? {};
+        expect(
+          where,
+          `${rel} calls sensor.findMany without the full public where-clause`
+        ).toMatchObject({
+          isActive: PUBLIC_SENSOR_WHERE.isActive,
+          isExperimental: PUBLIC_SENSOR_WHERE.isExperimental,
+          latitude: PUBLIC_SENSOR_WHERE.latitude,
+        });
+      }
+    });
+  });
+
+  it("never publishes deviceId", async () => {
     // deviceId IS the install credential: POST /api/install/{token}/location
     // resolves its sensor with findUnique({ where: { deviceId: token } }) and
-    // authenticates with nothing else. The stated security model is "you are
-    // holding the box". Returning deviceId from a public route hands that key
-    // to anyone who can GET, and with force:true they can relocate a sensor
-    // that is already installed.
-    const leaking = ROUTES.filter((r) => /\bdeviceId\b|\bdevice_id\b/.test(r.src));
-    expect(leaking.map((r) => r.rel)).toEqual([]);
+    // authenticates with nothing else.
+    for (const { rel, abs } of ROUTES) {
+      const mod = (await import(abs)) as { GET?: (req: NextRequest, ctx: Ctx) => Promise<Response> };
+      if (typeof mod.GET !== "function") continue;
+      const res = await mod.GET(new NextRequest(`http://test/api/x${ARGS[rel] ?? ""}`), ctx());
+      const body = await res.text();
+      expect(body, `${rel} returned a deviceId`).not.toMatch(/"deviceId"/);
+    }
   });
 
-  it("filters sensors to the public set wherever it reads them", () => {
-    const readsSensors = ROUTES.filter(
-      (r) => /FROM sensors|prisma\.sensor\./.test(r.src)
-    );
-    expect(readsSensors.length).toBeGreaterThanOrEqual(6);
+  it("404s an id-addressed bench unit", async () => {
+    // These routes fetch by id and then decide, so there is no where-clause to
+    // inspect — the assertion has to be on the answer.
+    const byId = ROUTES.filter((r) => r.rel.includes("[id]"));
+    expect(byId.length).toBeGreaterThan(0);
 
-    // Either the shared SQL fragment, the shared Prisma where-clause, or —
-    // for a $queryRaw template, which cannot interpolate an identifier — the
-    // clause written out verbatim. The verbatim case is pinned to the constant
-    // below so the two cannot drift.
-    const unfiltered = readsSensors.filter(
-      (r) =>
-        !r.src.includes("PUBLIC_SENSOR_SQL") &&
-        !r.src.includes("PUBLIC_SENSOR_RAW") &&
-        !r.src.includes("PUBLIC_SENSOR_WHERE") &&
-        !r.src.includes(PUBLIC_SENSOR_SQL) &&
-        !r.src.includes("isExperimental: false") &&
-        // Single-sensor routes gate differently: fetch by id, then 404 if it
-        // turns out to be a bench unit and the caller is not an admin.
-        !/isExperimental && checkAdminAuth/.test(r.src)
-    );
-    expect(unfiltered.map((r) => r.rel)).toEqual([]);
-  });
-
-  it("uses the Prisma.raw form inside $queryRaw tagged templates", () => {
-    // A tagged template BINDS its interpolations. `WHERE ${PUBLIC_SENSOR_SQL}`
-    // compiles to `WHERE $1` with the clause passed as a string parameter, and
-    // Postgres answers "argument of WHERE must be type boolean, not text" — a
-    // 500. This was introduced by the refactor that created the constant, and
-    // /api/status served 500 until it was caught. $queryRawUnsafe takes a
-    // JS-built string and wants the plain form; the two are not interchangeable.
-    const wrong = ROUTES.filter(
-      (r) => /\$queryRaw</.test(r.src) && /\$\{PUBLIC_SENSOR_SQL\}/.test(r.src)
-    );
-    expect(wrong.map((r) => r.rel)).toEqual([]);
-
-    for (const r of ROUTES.filter((x) => /\$queryRaw</.test(x.src) && /FROM sensors/.test(x.src))) {
-      expect(r.src, r.rel).toContain("PUBLIC_SENSOR_RAW");
+    for (const { rel, abs } of byId) {
+      findUnique.mockReturnValue({
+        id: "s1",
+        deviceId: "secret",
+        name: "bench",
+        isExperimental: true,
+        isActive: true,
+        latitude: 37.9,
+        longitude: 23.7,
+        readings: [],
+      });
+      const mod = (await import(abs)) as {
+        GET?: (req: NextRequest, c: Ctx) => Promise<Response>;
+      };
+      if (typeof mod.GET !== "function") continue;
+      const res = await mod.GET(new NextRequest("http://test/api/x"), ctx());
+      expect(res.status, `${rel} served a bench unit`).toBe(404);
     }
   });
 });

@@ -247,6 +247,9 @@ export function monthSelectionMask(f: DashboardFilters): boolean[] {
  */
 export const MAX_EPOCH_MS = Date.UTC(2100, 0, 1);
 
+/** The widest location radius a request may name: 200 km, a generous Athens. */
+export const MAX_RADIUS_M = 200_000;
+
 /** An epoch-ms parameter, or null if it is missing, unparseable or absurd. */
 export function parseEpochMs(raw: string | null | undefined): number | null {
   const n = Number(raw);
@@ -272,11 +275,29 @@ export function parseWireFilters(q: URLSearchParams): DashboardFilters {
     .map((s) => s.split(":").map(Number))
     .filter((a) => a.length === 2 && a.every((n) => n > 0 && n <= MAX_EPOCH_MS) && a[0] < a[1])
     .map(([startMs, endMs]) => ({ startMs, endMs }));
+  // Bounded, not merely finite. locationSql inlines Math.round(radiusM ** 2)
+  // into SQL, and that overflows to Infinity above ~1e155 — which renders as a
+  // bare `Infinity` token and makes Postgres answer "column \"infinity\" does
+  // not exist". An unauthenticated 500 from a query string, same class as the
+  // three closed in 781086b, which bounded from/ranges/hours and missed loc.
+  //
+  // The bounds are the domain's own: a longitude, a latitude, and a radius no
+  // larger than a very generous Athens.
   const locations = (q.get("loc") ?? "")
     .split(",")
     .filter(Boolean)
     .map((s) => s.split(":").map(Number))
-    .filter((a) => a.length === 3 && a.every(Number.isFinite) && a[2] > 0)
+    .filter(
+      (a) =>
+        a.length === 3 &&
+        a.every(Number.isFinite) &&
+        a[0] >= -180 &&
+        a[0] <= 180 &&
+        a[1] >= -90 &&
+        a[1] <= 90 &&
+        a[2] > 0 &&
+        a[2] <= MAX_RADIUS_M
+    )
     .map(([lng, lat, radiusM]) => ({ lng, lat, radiusM, label: null }));
   return {
     period: null, // already folded into from= by the encoder

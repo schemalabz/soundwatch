@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { checkAdminAuth } from "@/app/api/admin/auth";
+import { PUBLIC_SENSOR_WHERE } from "@/lib/locations";
 
 // Bench demo endpoint: exposes the Soundwatch acoustic measurements that the
 // product API deliberately does not carry yet (it still selects the stock
@@ -25,7 +26,12 @@ export async function GET(request: Request) {
     checkAdminAuth(request) === null;
 
   const sensors = await prisma.sensor.findMany({
-    where: wantsExperimental ? {} : { isExperimental: false },
+    // PUBLIC_SENSOR_WHERE, not just isExperimental — it also requires
+    // isActive and a location. Filtering on the bench flag alone served
+    // deactivated units and units that were never sited, on a public feed.
+    where: wantsExperimental
+      ? { isActive: PUBLIC_SENSOR_WHERE.isActive, latitude: PUBLIC_SENSOR_WHERE.latitude }
+      : PUBLIC_SENSOR_WHERE,
     // deviceId is the install credential (POST /api/install/{token}/location
     // authenticates with nothing else), so it never leaves an unauthenticated
     // route. The public id keys this feed instead.
