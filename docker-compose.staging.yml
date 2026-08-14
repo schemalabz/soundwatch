@@ -46,6 +46,10 @@ services:
       - MQTT_BROKER_URL=mqtt://mosquitto:1884
       - NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN=${NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN}
       - NEXT_PUBLIC_BASE_URL=${NEXT_PUBLIC_BASE_URL:-https://staging.soundwatch.gr}
+      # Renders the "these numbers are invented" banner. NEXT_PUBLIC_* is
+      # inlined at BUILD time, so this is decided when the image is built and
+      # cannot be flipped by a runtime mistake. Production never sets it.
+      - NEXT_PUBLIC_DATA_SOURCE=simulated
       # MUST differ from production's. It is the only thing standing between a
       # visitor and the bench-unit data and the sensor-delete endpoint.
       - ADMIN_TOKEN=${ADMIN_TOKEN}
