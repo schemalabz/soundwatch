@@ -105,10 +105,17 @@ export function paletteStops(): LevelStops {
 // handful of loud sensors covered whole districts and the map read as four
 // circles rather than fifty. Scaling all three together keeps the ratios —
 // the only honest part — exactly intact.
+//
+// Halved alongside the metresPerPixel correction below. That function returned
+// exactly 2x the true value, so every circle has been drawn at half its stated
+// radius since it was written — the "55 device-dB gives 33 m" example above was
+// 16.5 m on screen. Correcting the constant alone would have doubled every
+// circle and undone what was tuned by eye; halving these three preserves what
+// is on screen today and makes the numbers finally describe it.
 const ANCHOR_DB = 55;
-const ANCHOR_M = 33;
-const MIN_RADIUS_M = 5;
-const MAX_RADIUS_M = 1330;
+const ANCHOR_M = 16.5;
+const MIN_RADIUS_M = 2.5;
+const MAX_RADIUS_M = 665;
 
 /** Illustrative audible radius in metres for a level. See the caveats above. */
 export function audibleRadiusM(laeq: number): number {
@@ -116,7 +123,23 @@ export function audibleRadiusM(laeq: number): number {
   return Math.min(MAX_RADIUS_M, Math.max(MIN_RADIUS_M, r));
 }
 
-/** Metres per screen pixel at a given latitude and zoom (Web Mercator). */
+/**
+ * Metres per screen pixel at a given latitude and zoom (Web Mercator).
+ *
+ * The constant is the equator's circumference divided by the TILE SIZE, and
+ * mapbox-gl uses 512-pixel tiles — the bundled 3.24.0 has nine literal
+ * `tileSize=512` assignments and none for 256. The familiar 156543.03392 is
+ * the 256-pixel figure, so using it returned exactly twice the true
+ * metres-per-pixel and `diameterPx = 2 * R / mPerPx` came out half. Both
+ * clamps bound an octave away from where they read.
+ *
+ * A test asserting only that this halves per zoom level cannot catch that:
+ * a ratio is preserved by any scalar error. levels.test.ts now pins an
+ * absolute value at a known latitude and zoom.
+ */
+const EQUATOR_M = 40_075_016.686;
+const TILE_PX = 512;
+
 export function metersPerPixel(lat: number, zoom: number): number {
-  return (156543.03392 * Math.cos((lat * Math.PI) / 180)) / Math.pow(2, zoom);
+  return ((EQUATOR_M / TILE_PX) * Math.cos((lat * Math.PI) / 180)) / Math.pow(2, zoom);
 }

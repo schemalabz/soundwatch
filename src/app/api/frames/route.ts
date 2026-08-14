@@ -77,7 +77,33 @@ export async function GET(req: NextRequest) {
   // ending at now — it vanishes from the map while reporting perfectly. Live
   // therefore windows on received_at, "what we have heard recently", which is
   // what live means and is immune to the drift.
-  const timeCol = req.nextUrl.searchParams.get("by") === "received" ? "r.received_at" : "r.recorded_at";
+  const byReceived = req.nextUrl.searchParams.get("by") === "received";
+  const timeCol = byReceived ? "r.received_at" : "r.recorded_at";
+
+  // received_at alone is not enough, for two independent reasons, and one
+  // extra predicate fixes both.
+  //
+  // COST: `readings` is partitioned on recorded_at, so a predicate naming only
+  // received_at permits no chunk exclusion — every (sensor, frame) probes
+  // every chunk's index. Measured on the local stack: 294.9 ms across all
+  // chunks, against 2.5 ms with the bound. The hypertable gains ~52 chunks a
+  // year and 0016 deliberately sets no retention, so this only worsens. This
+  // is the endpoint every open map polls every five seconds.
+  //
+  // CORRECTNESS: devices store-and-forward. Every replayed reading is inserted
+  // with received_at = now(), so a unit reconnecting after an outage folds its
+  // entire buffered backlog into the live frame — its circle showing the
+  // energy mean of hours of history, and n jumping. Under recorded_at that was
+  // structurally impossible.
+  //
+  // Bounding recorded_at to the window plus the contract's drift cap keeps the
+  // genuinely-live readings (whose clocks may be up to ~35 min out) and
+  // excludes the backlog (whose recorded_at is hours old).
+  const DRIFT_CAP_S = 35 * 60;
+  const driftBound = byReceived
+    ? `AND r.recorded_at > f.t - make_interval(secs => ${Math.floor(windowS) + DRIFT_CAP_S})
+        AND r.recorded_at <= f.t + make_interval(secs => ${DRIFT_CAP_S})`
+    : "";
 
   const rows = await prisma.$queryRawUnsafe<FrameSqlRow[]>(`
     SELECT f.t, s.id AS sensor_id, agg.laeq, agg.n
@@ -89,6 +115,7 @@ export async function GET(req: NextRequest) {
       WHERE r.sensor_id = s.id
         AND ${timeCol} > f.t - make_interval(secs => ${Math.floor(windowS)})
         AND ${timeCol} <= f.t
+        ${driftBound}
         AND r.laeq IS NOT NULL
       HAVING count(*) > 0
     ) agg ON true

@@ -95,6 +95,14 @@ function makeMarkerElement(): { root: HTMLDivElement; circle: HTMLSpanElement; l
     `width:${MARKER_PX}px`,
     `height:${MARKER_PX}px`,
     "border-radius:9999px",
+    // The ring is decoration; the 30 px root is the click target, as it always
+    // was. Without this the span is hit-tested over its full transformed box —
+    // MAX_PX is 900, so a loud sensor at zoom 17 puts a 900x900 target on the
+    // map. The root handler calls stopPropagation, so a click anywhere inside
+    // it selects that sensor rather than what was aimed at, and a mousedown
+    // there never reaches the canvas, making the map undraggable from a wide
+    // stretch of itself.
+    "pointer-events:none",
     "border:1.5px solid rgba(191,192,192,0.55)", // silver — the no-data state
     "transform:scale(0.35)",
     "opacity:0.6",

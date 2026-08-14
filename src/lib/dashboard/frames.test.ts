@@ -112,6 +112,32 @@ describe("level encoding", () => {
     expect(metersPerPixel(60, 12)).toBeLessThan(metersPerPixel(0, 12));
   });
 
+  it("metres-per-pixel is right in absolute terms, not just in ratio", () => {
+    // The assertions above are both ratios, and a ratio survives any scalar
+    // error. This function shipped using 156543.03392 — the constant for
+    // 256-pixel tiles — while mapbox-gl uses 512, so it returned exactly
+    // double and every circle drew at half its stated radius. Both tests above
+    // passed throughout.
+    //
+    // At the equator, zoom 0, the whole world spans one 512-pixel tile:
+    // 40,075,016.686 / 512 = 78,271.517 m per pixel, by definition.
+    expect(metersPerPixel(0, 0)).toBeCloseTo(40_075_016.686 / 512, 3);
+    expect(metersPerPixel(0, 0)).not.toBeCloseTo(156_543.03392, 3);
+
+    // And at the latitude and zoom the map actually opens at.
+    expect(metersPerPixel(37.9838, 15)).toBeCloseTo(1.8828, 3);
+  });
+
+  it("draws a loud sensor at the size it did before the constant was fixed", () => {
+    // Correcting metersPerPixel alone would have doubled every circle on
+    // screen and undone what 902ee8e tuned by eye. ANCHOR_M and both clamps
+    // were halved with it, so the rendered geometry is unchanged: 75 device-dB
+    // at Athens latitude, zoom 15, is 175 px across before and after.
+    const diameterPx = (2 * audibleRadiusM(75)) / metersPerPixel(37.9838, 15);
+    expect(diameterPx).toBeGreaterThan(170);
+    expect(diameterPx).toBeLessThan(180);
+  });
+
   it("covers the range firmware 1.1 actually produces (33.8 - 97.7 device-dB)", () => {
     // The old 42/62/82 + maxDb 88 anchors saturated here: every level above 82
     // was the same red at the same size.

@@ -40,12 +40,30 @@ export function needsRawReadings(seconds: number): boolean {
 const MIN_POINTS = 6;
 const MAX_POINTS = 2000;
 
+/**
+ * The longest domain the raw path may serve.
+ *
+ * MAX_POINTS bounds OUTPUT rows; the raw scan costs domain x sensors, and the
+ * two come apart badly. Because defaultBucket picks the finest viable width,
+ * every domain up to 20.8 days defaulted to raw `readings` — and the 7-day
+ * period, two clicks from the default, is only 672 points but scans seven days
+ * of raw rows: ~500k at the fleet's real cadence and ~6M at the simulator's,
+ * re-issued every 30 seconds while the live gate is on. The rollup answers the
+ * same question for a fraction of that.
+ *
+ * 36 hours keeps the workflow this was built for — last 24 h, live, one-minute
+ * intervals — with headroom, and hands 7d and 30d to the aggregate.
+ */
+export const MAX_RAW_DOMAIN_MS = 36 * 3600 * 1000;
+
 export function pointCount(domainMs: number, seconds: number): number {
   return Math.ceil(domainMs / (seconds * 1000));
 }
 
-/** Would this bucket produce a chart worth drawing over this domain? */
+/** Would this bucket produce a chart worth drawing over this domain, at a cost
+ *  we are willing to pay for it? */
 export function bucketViable(domainMs: number, seconds: number): boolean {
+  if (needsRawReadings(seconds) && domainMs > MAX_RAW_DOMAIN_MS) return false;
   const n = pointCount(domainMs, seconds);
   return n >= MIN_POINTS && n <= MAX_POINTS;
 }
@@ -59,7 +77,14 @@ export function bucketById(id: string | null | undefined): BucketDef | undefined
  * readable, so a 24-hour domain lands on minutes rather than on 24 flat hours.
  */
 export function defaultBucket(domainMs: number): BucketDef {
-  return BUCKETS.find((b) => bucketViable(domainMs, b.seconds)) ?? BUCKETS[BUCKETS.length - 1];
+  const viable = BUCKETS.find((b) => bucketViable(domainMs, b.seconds));
+  if (viable) return viable;
+  // Nothing viable means the domain is too SHORT far more often than too long
+  // — a few minutes of data, where even 1m gives fewer than MIN_POINTS. Handing
+  // back the coarsest bucket there draws a single point. The finest is the
+  // useful answer, and it is also the cheap one, because a domain that short
+  // costs nothing to scan.
+  return BUCKETS[0];
 }
 
 /**
