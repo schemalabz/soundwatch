@@ -18,7 +18,7 @@ export const dynamic = "force-dynamic";
 // camelCase field -> snake_case column. `Record<keyof ReadingRow, string>` is a
 // compile-time exhaustiveness check: if READING_SELECT gains a field, this stops
 // compiling rather than silently dropping it from the API.
-const READING_COLUMNS: Record<keyof ReadingRow, string> = {
+export const READING_COLUMNS = {
   recordedAt: "recorded_at",
   receivedAt: "received_at",
   noiseDba: "noise_dba",
@@ -56,7 +56,7 @@ const READING_COLUMNS: Record<keyof ReadingRow, string> = {
   battery: "battery",
   rssi: "rssi",
   sdCard: "sd_card",
-};
+} as const satisfies Record<keyof ReadingRow, string>;
 
 void READING_SELECT; // the shape above is pinned to it by the Record type
 

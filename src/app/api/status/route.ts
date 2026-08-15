@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import type { Jsonified } from "@/lib/api/json";
 import { prisma } from "@/lib/db";
 import { PUBLIC_SENSOR_RAW } from "@/lib/server/filterSql";
 
@@ -117,13 +118,30 @@ export async function GET() {
     };
   });
 
-  return NextResponse.json({
+  return NextResponse.json(
+    buildPayload(sensors, ingest.map((r) => ({ t: Number(r.h) * 3600_000, n: Number(r.n) })))
+  );
+}
+
+// The response shape is defined by this function, and StatusResponse is derived
+// from it. The status page imports that type instead of restating the shape.
+// Jsonified applies what JSON does to any Date on the way out.
+function buildPayload(
+  sensors: {
+    id: string;
+    name: string | null;
+    secondsAgo: number | null;
+    cells: string;
+  }[],
+  hours: { t: number; n: number }[]
+) {
+  return {
     bucketHours: BUCKET_S / 3600,
     windowDays: WINDOW_DAYS,
     sensors,
-    ingest: {
-      days: INGEST_DAYS,
-      hours: ingest.map((r) => ({ t: Number(r.h) * 3600_000, n: Number(r.n) })),
-    },
-  });
+    ingest: { days: INGEST_DAYS, hours },
+  };
 }
+
+export type StatusResponse = Jsonified<ReturnType<typeof buildPayload>>;
+export type StatusSensor = StatusResponse["sensors"][number];
