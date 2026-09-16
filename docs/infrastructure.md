@@ -151,19 +151,52 @@ Direction of travel: physical device (hardware id) / credential (token, rotatabl
 - **Devices buffer and replay.** If the broker is unreachable a device stores
   readings to flash and replays on reconnect — so `received_at` can be far later
   than `recorded_at`.
-- **Headroom is tight.** ~870 MB free of 1967 MB. Next.js builds are the pressure.
-- **Nightly DB backups run on the droplet** — 03:15 UTC, `-Fc` dumps, 14-day
-  rotation, installed and driven by `scripts/prod-backup.sh` (install/run/
-  status/fetch). Dumps live on the droplet only; fetch them periodically.
+- **Two stacks share this droplet.** Production is the Coolify resource
+  `soundwatch`; staging is `staging-soundwatch-app`. Both run a container named
+  `postgres-*`, so **anything that selects "the postgres container" by name is
+  wrong**. Select on the `coolify.resourceName` label. `scripts/prod-sql.sh
+  --containers` lists what is there.
+- **Disk: 154 GB, ~60 % used** (checked 2026-09-16). Most of the usage is the
+  backup directory.
+- **Nightly DB backups** — 03:15 UTC via `/etc/cron.d/soundwatch-db-backup`,
+  which runs `/root/db-backup.sh` (installed by `scripts/prod-backup.sh
+  install`; editing the repo script changes nothing until you re-run `install`).
+  `-Fc` dumps into `/root/db-backups`, 14-day rotation, one line per run in
+  `backup.log`. That line now records the resource and its row counts —
+  `OK 261M … [soundwatch: 24 sensors / 634254 readings]` — so a dump of the
+  wrong database is visible as wrong numbers, not just an odd file size. The
+  script refuses to run unless exactly one container carries the expected label.
+  Dumps stay on the droplet: run `scripts/prod-backup.sh fetch` periodically.
 - **Tokens are minted server-side** in the admin provisioning flow (16-char);
   `onboard.sh` registers every unit with the backend before flashing.
+
+### Restoring a backup
+
+Verified end-to-end on 2026-09-16: a production dump restored into a scratch
+database matched the source exactly — 634,155 readings, 24 sensors, 1 hypertable,
+14 chunks, 1 continuous aggregate.
+
+```sh
+createdb restored
+psql -d restored -c 'CREATE EXTENSION IF NOT EXISTS timescaledb'
+psql -d restored -c 'SELECT timescaledb_pre_restore()'
+pg_restore -d restored --no-owner <dump>
+psql -d restored -c 'SELECT timescaledb_post_restore()'
+```
+
+The `pre_restore`/`post_restore` calls are **required**. `pg_dump` warns about
+circular foreign keys on TimescaleDB's `continuous_agg` catalog; a plain
+`pg_restore` leaves the hypertable and the aggregate broken. Restore into a
+scratch database first — never straight over a live one.
 
 ## Not yet built
 
 - Alerting when a device goes silent (`last_seen_at` exists; nothing watches it)
-- Timescale hypertables / continuous aggregates / retention
-- Frame-log retention — nothing expires `frame_log_chunks`; at fleet scale it
-  grows ~13.6 GB/month against 38 GB free. Decide before the fleet grows,
-  not at 90 % full
+- **Backup verification in the job.** The restore above was done by hand. Nothing
+  checks that last night's dump is restorable.
+- **Off-droplet backups are manual.** `fetch` is a command someone has to
+  remember; before 2026-09-16 the newest local copy was six weeks old. DO droplet
+  Backups or an object-store push would remove the human.
+- Frame-log retention — nothing expires `frame_log_chunks`
 - `laeq` named as `laeq` in the UI (currently surfaced under the legacy
   `noiseDba` key so existing views keep working)
