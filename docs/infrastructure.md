@@ -170,6 +170,27 @@ Direction of travel: physical device (hardware id) / credential (token, rotatabl
 - **Tokens are minted server-side** in the admin provisioning flow (16-char);
   `onboard.sh` registers every unit with the backend before flashing.
 
+### Verifying a backup
+
+`scripts/verify-backup.sh` restores the newest dump into a **disposable**
+postgres container and compares it against the live database — sensors,
+readings, hypertables, chunks and continuous aggregates. It runs nightly at
+04:15 via `/etc/cron.d/soundwatch-verify-backup`, an hour after the backup, and
+appends to `/root/db-backups/verify.log`:
+
+```
+OK soundwatch-2026-09-16.dump sensors=24 readings=634254 hypertables=1 chunks=14 continuous_aggregates=1
+```
+
+It exits non-zero and logs `FAIL` when a dump does not restore — proven against
+a deliberately truncated dump, which reports `sensors=0/live=24`. Nothing it
+does touches production beyond two read-only counts.
+
+One trap worth knowing if you change it: the postgres image runs a temporary
+server during `initdb` that listens on the unix socket only. Polling
+`pg_isready` without `-h 127.0.0.1` returns ready against that temporary server,
+and the connection then dies mid-restore when init tears it down.
+
 ### Restoring a backup
 
 Verified end-to-end on 2026-09-16: a production dump restored into a scratch
@@ -192,8 +213,6 @@ scratch database first — never straight over a live one.
 ## Not yet built
 
 - Alerting when a device goes silent (`last_seen_at` exists; nothing watches it)
-- **Backup verification in the job.** The restore above was done by hand. Nothing
-  checks that last night's dump is restorable.
 - **Off-droplet backups are manual.** `fetch` is a command someone has to
   remember; before 2026-09-16 the newest local copy was six weeks old. DO droplet
   Backups or an object-store push would remove the human.
