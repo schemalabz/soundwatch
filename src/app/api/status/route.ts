@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import type { StatusResponse } from "@/lib/api/dashboard";
 import { prisma } from "@/lib/db";
 import { PUBLIC_SENSOR_RAW } from "@/lib/server/filterSql";
 
@@ -129,20 +130,4 @@ export async function GET() {
     },
   };
   return NextResponse.json(payload);
-}
-
-export type StatusSensor = {
-  id: string;
-  name: string | null;
-  /** Age of this sensor's newest reading; null when it has never reported. */
-  secondsAgo: number | null;
-  /** Bitstring, one char per 6h bucket: "1" = at least one reading. */
-  cells: string;
-};
-
-export interface StatusResponse {
-  bucketHours: number;
-  windowDays: number;
-  sensors: StatusSensor[];
-  ingest: { days: number; hours: { t: number; n: number }[] };
 }

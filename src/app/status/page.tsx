@@ -10,10 +10,10 @@ import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { fmtDb } from "@/lib/dashboard/format";
 
-// Shapes come from the route that produces them. These were two hand-written
-// types kept in step by hand, and they had already drifted: `ingest` was
-// optional here and is always present in the response.
-import type { StatusResponse, StatusSensor } from "@/app/api/status/route";
+// Shapes come from the shared contract the route is annotated against. These
+// were two hand-written types kept in step by hand, and they had already
+// drifted: `ingest` was optional here and is always present in the response.
+import type { StatusResponse, StatusSensor } from "@/lib/api/dashboard";
 
 const ONLINE_S = 3600;
 

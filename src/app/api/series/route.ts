@@ -6,7 +6,7 @@ import { instantMatches, parseEpochMs, parseWireFilters } from "@/lib/dashboard/
 import { athensWallTime } from "@/lib/dashboard/time";
 import { needsRawReadings, resolveBucket } from "@/lib/dashboard/buckets";
 import { BIN_LO, BIN_HI, BIN_COUNT } from "@/lib/server/levelBins";
-import type { SeriesResponse } from "@/components/dashboard/charts/types";
+import type { SeriesResponse } from "@/lib/api/dashboard";
 
 // Grouped series over the FILTERED time-set, network-wide, for the charts
 // view: hour-of-day (24), day-of-week (7), month (12), and a time series at

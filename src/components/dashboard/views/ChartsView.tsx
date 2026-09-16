@@ -21,7 +21,7 @@ import type { AggKey } from "@/lib/dashboard/metrics";
 import MetricMention from "../MetricMention";
 import RadialChart, { type RadialSlice } from "../charts/RadialChart";
 import TimelineChart from "../charts/TimelineChart";
-import type { SeriesBucketData, SeriesResponse } from "../charts/types";
+import type { SeriesBucketData, SeriesResponse } from "@/lib/api/dashboard";
 import { BUCKETS, bucketViable, defaultBucket } from "@/lib/dashboard/buckets";
 import { devRenderCount } from "@/lib/dashboard/devtools";
 

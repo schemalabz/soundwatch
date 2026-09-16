@@ -14,7 +14,7 @@ import { fmtDb, fmtInt } from "@/lib/dashboard/format";
 import { LOCALE, dashboardStrings as tr } from "@/lib/strings/dashboard";
 import type { AggKey } from "@/lib/dashboard/metrics";
 import MetricMention from "../MetricMention";
-import type { SeriesPoint } from "./types";
+import type { SeriesPoint } from "@/lib/api/dashboard";
 
 const DEFAULT_H = 200;
 
