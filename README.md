@@ -24,7 +24,7 @@ The measurement contract lives *there* because its claims break when firmware ch
 Read the measurement contract above first — the whole of "Read this first" and "Known distortions". Then, concretely:
 
 - **Never label an axis dB(A)** or compare a value to a legal limit. Uncalibrated device-dB, arbitrary zero. Within-unit comparison over time is the strongest honest claim; between-unit spread is ~1.8 dB before any calibration.
-- **`l10` is censored at the top.** Histogram bin 29 is `[88, ∞)`, so a loud interval reports ~88.7 whatever the truth — measured up to 12 dB low. Render it as "≥88" when the top bin is occupied rather than as a confident number.
+- **`l10` is censored at the top.** Histogram bin 29 is `[88, ∞)`, so a loud interval reports ~88.7 whatever the truth — measured up to 12 dB low. Render it as "≥88" rather than as a confident number when the top bin is occupied *and the percentile actually lands in it* — `top_bin_censored` alone only says the interval contained loud frames, and in 1,607 of 66k production intervals the flag is set while `l10` sits well below 88. `describeLevel()` in `src/lib/api/levels.ts` is this rule as code.
 - **Never average percentiles** across time buckets. Sum the `hist_raw` bin counts and recompute.
 - **`lmax_est` is one 11.6 ms frame**, not a standards Fast maximum — it overstates by 2.3–4.7 dB.
 - **The 21 bands are un-weighted** while LAeq and the histogram are A-weighted. Never plot a band against LAeq; the top bands are largely the sensor's own noise floor.
@@ -139,7 +139,7 @@ arbitrary depths.
 | `prisma/` | Schema and migrations. The ingester applies pending migrations on boot — it is the only writer, so it owns schema convergence |
 | `src/app/api/` | Public routes (`sensors`, `openapi.json`, `docs`) and dashboard endpoints (`frames`, `series`, `aggregate`, `status`, `freshness`) |
 | `src/components/dashboard/` | The dashboard: map + timebar playback, leaderboard, charts, sensor pane |
-| `src/lib/api/` | zod schemas, the shared reading serializer, the OpenAPI document |
+| `src/lib/api/` | zod schemas, the shared reading serializer, the OpenAPI document · `contract.ts` compile-time guards binding the API surface to the database · `levels.ts` honest rendering of censored percentiles |
 | `scripts/` | `prod-sql.sh` read-only production queries · `framelog-pull.sh` nightly frame-log collection (cron) · `fetch-framelog.ts` the pull pacer · `framelog-probe.ts` device throughput measurement · `prod-backup.sh` · `timescale-objects.ts` |
 | `docs/` | [`architecture-current.md`](docs/architecture-current.md) pipeline, wire contract, schema · [`infrastructure.md`](docs/infrastructure.md) deployment, broker, identity · `installation/` hardware BOM and wiring |
 

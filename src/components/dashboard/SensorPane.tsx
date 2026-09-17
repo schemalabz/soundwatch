@@ -20,7 +20,7 @@ import { fmtDb } from "@/lib/dashboard/format";
 import { quantizeFrameMs, type FrameData } from "@/lib/dashboard/frames";
 import { dashboardStrings as tr } from "@/lib/strings/dashboard";
 import TimelineChart from "./charts/TimelineChart";
-import type { SeriesResponse } from "./charts/types";
+import type { SeriesResponse } from "@/lib/api/dashboard";
 import { devRenderCount } from "@/lib/dashboard/devtools";
 
 interface SensorDetail {

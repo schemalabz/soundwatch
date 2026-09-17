@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { PUBLIC_SENSOR_WHERE } from "@/lib/locations";
 import { checkAdminAuth } from "../admin/auth";
-import { READING_SELECT, serializeReading, type ReadingRow } from "@/lib/api/readings";
+import { READING_COLUMNS, serializeReading, type ReadingRow } from "@/lib/api/readings";
 import { PUBLIC_SENSOR_SQL } from "@/lib/server/filterSql";
 
 export const dynamic = "force-dynamic";
@@ -15,50 +15,6 @@ export const dynamic = "force-dynamic";
 // (SensorListItemSchema), because the columns are aliased back to camelCase and
 // handed to the shared serializer.
 
-// camelCase field -> snake_case column. `Record<keyof ReadingRow, string>` is a
-// compile-time exhaustiveness check: if READING_SELECT gains a field, this stops
-// compiling rather than silently dropping it from the API.
-const READING_COLUMNS: Record<keyof ReadingRow, string> = {
-  recordedAt: "recorded_at",
-  receivedAt: "received_at",
-  noiseDba: "noise_dba",
-  laeq: "laeq",
-  l10: "l10",
-  l50: "l50",
-  l90: "l90",
-  lmaxEst: "lmax_est",
-  lminEst: "lmin_est",
-  histRaw: "hist_raw",
-  bandsDb: "bands_db",
-  realizedDuty: "realized_duty",
-  frameCount: "frame_count",
-  intervalMs: "interval_ms",
-  intervalS: "interval_s",
-  payloadVersion: "payload_version",
-  energySaturations: "energy_saturations",
-  temperature: "temperature",
-  humidity: "humidity",
-  lightLux: "light_lux",
-  pressurePa: "pressure_pa",
-  uvA: "uv_a",
-  uvB: "uv_b",
-  uvC: "uv_c",
-  pm1: "pm1",
-  pm25: "pm25",
-  pm4: "pm4",
-  pm10: "pm10",
-  pn05: "pn_05",
-  pn10: "pn_10",
-  pn25: "pn_25",
-  pn40: "pn_40",
-  pn100: "pn_100",
-  tps: "tps",
-  battery: "battery",
-  rssi: "rssi",
-  sdCard: "sd_card",
-};
-
-void READING_SELECT; // the shape above is pinned to it by the Record type
 
 const LATEST_READING_SQL = Object.entries(READING_COLUMNS)
   .map(([field, col]) => `r.${col} AS "${field}"`)

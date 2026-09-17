@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import type { StatusResponse } from "@/lib/api/dashboard";
 import { prisma } from "@/lib/db";
 import { PUBLIC_SENSOR_RAW } from "@/lib/server/filterSql";
 
@@ -117,7 +118,9 @@ export async function GET() {
     };
   });
 
-  return NextResponse.json({
+  // Annotated with the type the page imports, so the two cannot drift: a field
+  // renamed here fails to compile rather than arriving as undefined.
+  const payload: StatusResponse = {
     bucketHours: BUCKET_S / 3600,
     windowDays: WINDOW_DAYS,
     sensors,
@@ -125,5 +128,6 @@ export async function GET() {
       days: INGEST_DAYS,
       hours: ingest.map((r) => ({ t: Number(r.h) * 3600_000, n: Number(r.n) })),
     },
-  });
+  };
+  return NextResponse.json(payload);
 }
