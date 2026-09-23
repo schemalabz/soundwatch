@@ -34,5 +34,6 @@ describe("buildOpenApiDocument", () => {
   it("documents the readings query parameters", () => {
     expect(text).toContain('"name":"limit"');
     expect(text).toContain('"name":"from"');
+    expect(text).toContain('"name":"k"');
   });
 });

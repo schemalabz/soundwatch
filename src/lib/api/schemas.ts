@@ -188,23 +188,72 @@ export const ReadingSchema = z.object({
 
 export type ApiReading = z.infer<typeof ReadingSchema>;
 
-const isParsableDate = (s: string) => !Number.isNaN(Date.parse(s));
+// Date.parse accepts the whole ECMAScript range, ±8.64e15 ms — year -271821
+// to +275760. Parsing is not the bar: those instants get past the refine,
+// reach Prisma as a Date and throw inside the driver, and the throw becomes
+// Next's OWN 500 — an empty body carrying neither `cache-control: no-store`
+// nor `vary: authorization`, which is precisely the guarantee the readings
+// route's header comment makes about every response it sends. A framework
+// error path cannot be handed headers, so the only fix is to never reach it:
+// an out-of-range instant has to fail here and come back as the route's
+// ordinary 400.
+//
+// The bound is the data's rather than the column's. Postgres timestamptz
+// spans 4713 BC to 294276 AD, wide enough to still admit values Prisma
+// rejects; the fleet's readings start in 2025 and no window a caller can
+// legitimately ask for reaches past the next century. [1970, 2200) rejects
+// everything the driver would choke on, with room to spare, and states an
+// interval a reader of the 400 can act on.
+const MIN_QUERY_MS = Date.UTC(1970, 0, 1);
+const MAX_QUERY_MS = Date.UTC(2200, 0, 1);
+
+const isParsableDate = (s: string) => {
+  const ms = Date.parse(s);
+  return !Number.isNaN(ms) && ms >= MIN_QUERY_MS && ms < MAX_QUERY_MS;
+};
+
+const DATE_MESSAGE =
+  "must be an ISO 8601 date-time between 1970-01-01 and 2200-01-01";
+
+/** The same bound, said to the reader of the OpenAPI document. */
+const DATE_RANGE_NOTE =
+  "Must fall between 1970-01-01 and 2200-01-01; anything outside answers 400.";
+
+/** Query parameter carrying a sensor's share key. Named once; the server gate,
+ *  the OpenAPI parameter and the client URL builder all import this. */
+export const SHARE_KEY_PARAM = "k";
 
 export const ReadingsQuerySchema = z.object({
-  from: z.string().refine(isParsableDate, "not a parsable date").optional(),
-  to: z.string().refine(isParsableDate, "not a parsable date").optional(),
+  from: z.string().refine(isParsableDate, DATE_MESSAGE).optional(),
+  to: z.string().refine(isParsableDate, DATE_MESSAGE).optional(),
+  receivedFrom: z.string().refine(isParsableDate, DATE_MESSAGE).optional(),
   limit: z
     .string()
     .regex(/^\d+$/, "must be a positive integer")
     .transform(Number)
     .refine((n) => n >= 1 && n <= 10000, "must be between 1 and 10000")
     .optional(),
+  // Per-sensor share key (see src/lib/server/sensorAccess.ts). Validated by
+  // the gate, not here: an unknown key must 404 like an unknown sensor.
+  [SHARE_KEY_PARAM]: z.string().optional(),
+  format: z.enum(["json", "csv"]).optional(),
 });
 
 // OpenAPI parameter objects for the query above. Hand-written because
 // z.toJSONSchema of a transform pipeline documents the wire type poorly; they
 // sit here, next to the schema they describe, so a change to one is a change
 // to the other in the same diff.
+export const SHARE_KEY_PARAMETER = {
+  name: SHARE_KEY_PARAM,
+  in: "query",
+  required: false,
+  schema: { type: "string" },
+  description:
+    "Per-sensor share key. Bench/experimental units are only served to an " +
+    "admin bearer token or to the key an admin generated for that sensor; " +
+    "a wrong or missing key answers 404, exactly like an unknown sensor.",
+} as const;
+
 export const READINGS_QUERY_PARAMETERS = [
   {
     name: "from",
@@ -213,14 +262,26 @@ export const READINGS_QUERY_PARAMETERS = [
     schema: { type: "string", format: "date-time" },
     description:
       "Return readings with recordedAt >= from (ISO 8601). Filters on the " +
-      "device clock — see the recordedAt caveat.",
+      "device clock — see the recordedAt caveat. " +
+      DATE_RANGE_NOTE,
   },
   {
     name: "to",
     in: "query",
     required: false,
     schema: { type: "string", format: "date-time" },
-    description: "Return readings with recordedAt <= to (ISO 8601).",
+    description: `Return readings with recordedAt <= to (ISO 8601). ${DATE_RANGE_NOTE}`,
+  },
+  {
+    name: "receivedFrom",
+    in: "query",
+    required: false,
+    schema: { type: "string", format: "date-time" },
+    description:
+      "Return readings with receivedAt >= this instant (ISO 8601). Filters on " +
+      "the SERVER clock — use this, not `from`, when you need 'everything that " +
+      "has arrived since X', because a device clock can lag its arrival by hours. " +
+      DATE_RANGE_NOTE,
   },
   {
     name: "limit",
@@ -228,6 +289,21 @@ export const READINGS_QUERY_PARAMETERS = [
     required: false,
     schema: { type: "integer", minimum: 1, maximum: 10000, default: 1000 },
     description: "Maximum rows returned, newest first by receivedAt.",
+  },
+  SHARE_KEY_PARAMETER,
+  {
+    name: "format",
+    in: "query",
+    required: false,
+    schema: { type: "string", enum: ["json", "csv"], default: "json" },
+    description:
+      "csv returns one row per interval, oldest first, 74 columns, with the 21 " +
+      "bands and the 30 histogram bins expanded into columns (text/csv, " +
+      "attachment). `l10_bound`/`l50_bound`/`l90_bound` carry the censoring " +
+      "conclusion for the percentile beside them — empty (exact), `lower` or " +
+      "`upper`. Read those, not `top_bin_censored`, which only says the " +
+      "interval contained frames in the open-ended top bin and is true far " +
+      "more often than a percentile is actually censored.",
   },
 ] as const;
 
@@ -249,9 +325,9 @@ export const SensorListItemSchema = z.object({
   latestReading: ReadingSchema.nullable(),
 });
 
-export const SensorDetailSchema = SensorListItemSchema.omit({
-  isExperimental: true,
-}).extend({
+// The detail carries isExperimental too: the sensor page shows a "bench
+// unit" badge, and the flag is already public on the list endpoint.
+export const SensorDetailSchema = SensorListItemSchema.extend({
   firmwareVersion: z.string().nullable(),
   readingIntervalS: z.number().int(),
   createdAt: z.string(),

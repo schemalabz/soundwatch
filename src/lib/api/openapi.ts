@@ -5,6 +5,7 @@ import {
   READINGS_QUERY_PARAMETERS,
   SensorDetailSchema,
   SensorListItemSchema,
+  SHARE_KEY_PARAMETER,
 } from "./schemas";
 
 // The document is built from the same zod objects the routes validate and type
@@ -66,7 +67,7 @@ export function buildOpenApiDocument() {
       "/api/sensors/{id}": {
         get: {
           summary: "One sensor with its latest reading",
-          parameters: [idParam],
+          parameters: [idParam, SHARE_KEY_PARAMETER],
           responses: {
             "200": {
               description: "The sensor.",
@@ -86,8 +87,18 @@ export function buildOpenApiDocument() {
           parameters: [idParam, ...READINGS_QUERY_PARAMETERS],
           responses: {
             "200": {
-              description: "Readings, newest first by receivedAt.",
-              content: json(ReadingsResponseSchema),
+              description:
+                "JSON readings are newest first by receivedAt; the CSV is the " +
+                "same rows oldest first, so the file reads downwards like a log.",
+              content: {
+                ...json(ReadingsResponseSchema),
+                "text/csv": {
+                  schema: { type: "string" },
+                  example:
+                    "recorded_at,received_at,laeq,l10,l50,l90,l10_bound,l50_bound,l90_bound,top_bin_censored,...\n" +
+                    "2026-09-22T09:29:39.000Z,2026-09-22T09:27:54.523Z,77.9,79.7,77.5,75.8,,,,false,...",
+                },
+              },
             },
             "400": {
               description: "Invalid query.",
