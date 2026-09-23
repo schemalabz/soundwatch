@@ -62,6 +62,7 @@ const SENSOR_ROW = {
   address: "Πατησίων 1",
   isActive: true,
   isExperimental: false,
+  shareKey: "x7Qd9pLm2vRt4wYz8nBk3c",
   lastSeenAt: new Date(),
   hardwareId: null,
   createdAt: new Date(),
@@ -195,6 +196,43 @@ describe("unauthenticated API surface", () => {
       const res = await mod.GET(new NextRequest(`http://test/api/x${ARGS[rel] ?? ""}`), ctx());
       const body = await res.text();
       expect(body, `${rel} returned a deviceId`).not.toMatch(/"deviceId"/);
+    }
+  });
+
+  it("never publishes shareKey", async () => {
+    // The share key is a read credential for one sensor. Only the admin list
+    // (behind the admin token) may return it.
+    for (const { rel, abs } of ROUTES) {
+      const mod = (await import(abs)) as { GET?: (req: NextRequest, ctx: Ctx) => Promise<Response> };
+      if (typeof mod.GET !== "function") continue;
+      const res = await mod.GET(new NextRequest(`http://test/api/x${ARGS[rel] ?? ""}`), ctx());
+      const body = await res.text();
+      expect(body, `${rel} returned a shareKey`).not.toMatch(/"shareKey"/);
+      expect(body, `${rel} returned the share key value`).not.toContain("x7Qd9pLm2vRt4wYz8nBk3c");
+    }
+  });
+
+  it("serves a bench unit's detail and readings to its key holder only", async () => {
+    findUnique.mockReturnValue({ ...SENSOR_ROW, isExperimental: true, readings: [] });
+    const detail = (await import(join(process.cwd(), "src/app/api/sensors/[id]/route.ts"))) as {
+      GET: (req: NextRequest, ctx: Ctx) => Promise<Response>;
+    };
+    const readings = (await import(join(process.cwd(), "src/app/api/sensors/[id]/readings/route.ts"))) as {
+      GET: (req: NextRequest, ctx: Ctx) => Promise<Response>;
+    };
+    for (const route of [detail, readings]) {
+      expect((await route.GET(new NextRequest("http://test/api/x"), ctx())).status).toBe(404);
+      expect((await route.GET(new NextRequest("http://test/api/x?k=wrong"), ctx())).status).toBe(404);
+      const okRes = await route.GET(new NextRequest("http://test/api/x?k=x7Qd9pLm2vRt4wYz8nBk3c"), ctx());
+      expect(okRes.status).toBe(200);
+      const okBody = await okRes.text();
+      expect(okBody).not.toMatch(/"shareKey"/);
+      expect(okBody).not.toContain("x7Qd9pLm2vRt4wYz8nBk3c");
+      process.env.ADMIN_TOKEN = "secret";
+      expect(
+        (await route.GET(new NextRequest("http://test/api/x", { headers: { authorization: "Bearer secret" } }), ctx())).status
+      ).toBe(200);
+      delete process.env.ADMIN_TOKEN;
     }
   });
 

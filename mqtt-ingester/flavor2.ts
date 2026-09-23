@@ -9,11 +9,17 @@ export const HIST_MIN_DB = 30; // bin i covers [30+2i, 30+2(i+1)) device-dB
 
 // Band slot labels (documenting the firmware LUT): LOW = ~86-258 Hz (512-pt FFT
 // cannot resolve third-octaves below a 250 Hz centre), then 250 Hz..20 kHz.
+// `as const` on purpose: a consumer looks a band up BY LABEL
+// (NOISE_FLOOR_FROM_BAND in src/lib/sensor/live.ts). Against a plain string[]
+// a relabelled band would answer -1 and go unnoticed; against the literal
+// tuple the lookup does not compile.
 export const BAND_LABELS = [
   "low", "250", "315", "400", "500", "630", "800", "1000", "1250", "1600",
   "2000", "2500", "3150", "4000", "5000", "6300", "8000", "10000", "12500",
   "16000", "20000",
-];
+] as const;
+
+export type BandLabel = (typeof BAND_LABELS)[number];
 
 export interface Percentiles {
   l10: number; // level exceeded 10% of the time (90th percentile)
