@@ -53,7 +53,8 @@ export function buildPayload(r: SimReading): string {
   parts.push(`239:${r.maxEnergy}`);
   parts.push(`240:${r.minEnergy}`);
 
-  // Flavor 2 + diagnostics (242/243 alternate per interval, see model.ts).
+  // Flavor 2 + diagnostics (242/243 on every interval, as the fleet sends
+  // them — see model.ts; the null guards cover firmware that omits them).
   parts.push(`241:${r.histCounts.join("-")}`);
   if (r.bandsDb10) parts.push(`242:${r.bandsDb10.join("-")}`);
   if (r.diagString) parts.push(`243:${r.diagString}`);

@@ -102,19 +102,20 @@ describe("round-trip through the real ingester code", () => {
     }
   });
 
-  it("alternates bands and diagnostics across intervals, both decodable", () => {
-    const r0 = generateReading(exarchia, TUESDAY_UTC, 60); // even interval index
-    const r1 = generateReading(exarchia, TUESDAY_UTC + 60, 60);
-    const withBands = r0.bandsDb10 ? r0 : r1;
-    const withDiag = r0.diagString ? r0 : r1;
-    expect(withBands.bandsDb10).toHaveLength(21);
-    const bandsRow = payloadToRow(buildPayload(withBands), withBands.recordedAt)!;
-    expect(bandsRow.bandsDb).toHaveLength(21);
-    const diagRow = payloadToRow(buildPayload(withDiag), withDiag.recordedAt)!;
-    expect(diagRow.deviceUptimeS).not.toBeNull();
-    expect(diagRow.samGitHash).toBe("ef1ba3e");
-    expect(diagRow.soundwatchRelease).toBe("1.1");
-    expect(diagRow.energySaturations).toBe(0); // healthy 1.1 unit
+  it("sends bands and diagnostics every interval, both decodable", () => {
+    // The fleet sends both every time: on the production dump 242 is present
+    // on 574,449/574,449 payload-v4 readings and 243 on 574,448/574,449.
+    for (let k = 0; k < 4; k++) {
+      const r = generateReading(exarchia, TUESDAY_UTC + k * 60, 60);
+      expect(r.bandsDb10).toHaveLength(21);
+      expect(r.diagString).not.toBeNull();
+      const row = payloadToRow(buildPayload(r), r.recordedAt)!;
+      expect(row.bandsDb).toHaveLength(21);
+      expect(row.deviceUptimeS).not.toBeNull();
+      expect(row.samGitHash).toBe("ef1ba3e");
+      expect(row.soundwatchRelease).toBe("1.1");
+      expect(row.energySaturations).toBe(0); // healthy 1.1 unit
+    }
   });
 
   it("events fatten the tail: lmaxEst well above laeq", () => {
