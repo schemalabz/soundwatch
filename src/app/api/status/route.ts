@@ -114,6 +114,7 @@ export async function GET() {
       id: m.id,
       name: m.name,
       secondsAgo: m.last_at ? Math.max(0, Math.round((nowMs - m.last_at.getTime()) / 1000)) : null,
+      lastSeenAt: m.last_at ? m.last_at.toISOString() : null,
       cells,
     };
   });

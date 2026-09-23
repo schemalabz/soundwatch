@@ -16,7 +16,8 @@ import { BatteryMedium, MapPin, Wifi, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { levelColor, paletteStops } from "@/lib/dashboard/levels";
-import { fmtDb } from "@/lib/dashboard/format";
+import { fmtAgo, fmtDb, fmtExactTime } from "@/lib/dashboard/format";
+import { liveStatus, LIVE_TONE_COLOR } from "@/lib/dashboard/liveness";
 import { quantizeFrameMs, type FrameData } from "@/lib/dashboard/frames";
 import { dashboardStrings as tr } from "@/lib/strings/dashboard";
 import TimelineChart from "./charts/TimelineChart";
@@ -110,9 +111,8 @@ function SensorPane({
   }, [sensorId, windowS]);
 
   const latest = detail?.latestReading ?? null;
-  const ageS = latest ? Math.max(0, Math.round((nowMs - new Date(latest.receivedAt).getTime()) / 1000)) : null;
-  const liveTone =
-    ageS == null ? "var(--sw-silver)" : ageS < 120 ? "var(--sw-ok)" : ageS < 3600 ? "var(--sw-slate)" : "var(--sw-loud)";
+  const { ageS, tone } = liveStatus(latest?.receivedAt ?? null, nowMs);
+  const liveTone = LIVE_TONE_COLOR[tone];
   const heroLaeq = liveLaeq ?? latest?.laeq ?? null;
 
   // 24h stats straight from the chart's own buckets: exact energy mean, the
@@ -129,7 +129,6 @@ function SensorPane({
     };
   }, [series]);
 
-  const ago = (s: number): string => (s < 90 ? `${s}δ` : s < 5400 ? `${Math.round(s / 60)}λ` : `${(s / 3600).toFixed(1)}ω`);
   const stops = typeof window !== "undefined" ? paletteStops() : undefined;
 
   return (
@@ -163,10 +162,14 @@ function SensorPane({
         )}
         <div className="mt-2 flex items-center gap-2 text-[11px] text-muted-foreground">
           <span
-            className={cn("size-2 rounded-full", ageS != null && ageS < 120 && "animate-pulse")}
+            className={cn("size-2 rounded-full", tone === "live" && "animate-pulse")}
             style={{ backgroundColor: liveTone }}
           />
-          <span>{ageS != null ? tr.pane.lastReading(ago(ageS)) : tr.pane.noData}</span>
+          {/* The age is rounded and marked approximate; the exact arrival
+              time is one hover away. */}
+          <span title={fmtExactTime(latest?.receivedAt)}>
+            {ageS != null ? tr.pane.lastReading(fmtAgo(ageS)) : tr.pane.noData}
+          </span>
           <span className="flex-1" />
           {latest?.battery != null && (
             <span className="flex items-center gap-0.5 tabular-nums">
