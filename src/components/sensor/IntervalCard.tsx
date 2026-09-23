@@ -3,13 +3,19 @@
 // The interval in focus: live (newest row) by default, or the row the user
 // clicked in the log. LAeq big in the level colour; every percentile through
 // the censoring rule; the saturation chip only when there is something to say.
+//
+// The chevrons step one interval at a time without going back to the log,
+// which is how someone taking reference measurements actually reads this
+// page. Both destinations come from focusNav in src/lib/sensor/live.ts; the
+// arrow keys are wired to the same two steps in SensorLivePage.
 
-import { AlertTriangle } from "lucide-react";
+import type { ReactNode } from "react";
+import { AlertTriangle, ChevronLeft, ChevronRight } from "lucide-react";
 import type { ApiReading } from "@/lib/api/schemas";
 import { levelColor, paletteStops } from "@/lib/dashboard/levels";
 import { fmtDb } from "@/lib/dashboard/format";
 import { LIVE_TONE_COLOR } from "@/lib/dashboard/liveness";
-import { fmtClock, fmtDuty, fmtLevel, fmtLmax, fmtOptionalDb, isLowCoverage, isSaturated } from "@/lib/sensor/live";
+import { fmtClock, fmtDuty, fmtLevel, fmtLmax, fmtOptionalDb, isLowCoverage, isSaturated, type FocusNav } from "@/lib/sensor/live";
 import { sensorStrings as tr } from "@/lib/strings/sensor";
 import { GLOSSARY, METRICS, metricLabel, type GlossaryKey } from "@/lib/strings/glossary";
 import HelpLabel from "./HelpLabel";
@@ -56,11 +62,42 @@ function Stat({
   );
 }
 
+/** One step through the log. Disabled at either end rather than hidden, so
+ *  the control does not move about as the focus travels. */
+function StepButton({
+  label,
+  keyHint,
+  disabled,
+  onClick,
+  children,
+}: {
+  label: string;
+  keyHint: string;
+  disabled: boolean;
+  onClick: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      onClick={onClick}
+      aria-label={label}
+      title={tr.card.navKeyHint(label, keyHint)}
+      className="rounded-md p-1 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground disabled:pointer-events-none disabled:opacity-25"
+    >
+      {children}
+    </button>
+  );
+}
+
 export default function IntervalCard({
   reading,
   isLive,
   outsideWindow = false,
   onBackToLive,
+  nav,
+  onFocus,
 }: {
   reading: ApiReading;
   isLive: boolean;
@@ -68,6 +105,9 @@ export default function IntervalCard({
    *  selected window — say so, so an old interval is not read as a live one. */
   outsideWindow?: boolean;
   onBackToLive: () => void;
+  nav: FocusNav;
+  /** Same setter the log uses: a key, or null for live. */
+  onFocus: (key: string | null) => void;
 }) {
   const stops = paletteStops();
   const l10 = fmtLevel(reading.l10, reading);
@@ -82,30 +122,60 @@ export default function IntervalCard({
 
   return (
     <div className="flex flex-col gap-3 rounded-xl border bg-card px-[18px] pb-4 pt-3.5">
-      <div className="flex items-center justify-between gap-3">
-        {isLive ? (
-          <h2 className="text-[11px] font-semibold uppercase tracking-[0.1em] text-muted-foreground/80">{tr.card.latest}</h2>
-        ) : (
-          <div className="flex items-center gap-2.5">
-            <h2 className="text-[11px] font-semibold uppercase tracking-[0.1em] text-sound">
-              {tr.card.focused(fmtClock(reading.recordedAt))}
-            </h2>
-            {outsideWindow ? (
-              // Nothing to go back to: this is the sensor's last known interval,
-              // and the window it is being shown next to holds no rows at all.
-              <span className="text-[11px] text-muted-foreground">{tr.card.outsideWindow}</span>
-            ) : (
-              <button
-                type="button"
-                onClick={onBackToLive}
-                className="inline-flex items-center gap-1.5 rounded-md bg-secondary px-2 py-1 text-[11px] font-medium text-muted-foreground hover:text-foreground"
+      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
+        <div className="flex items-center gap-2.5">
+          {isLive ? (
+            <h2 className="text-[11px] font-semibold uppercase tracking-[0.1em] text-muted-foreground/80">{tr.card.latest}</h2>
+          ) : (
+            <>
+              <h2 className="text-[11px] font-semibold uppercase tracking-[0.1em] text-sound">
+                {tr.card.focused(fmtClock(reading.recordedAt))}
+              </h2>
+              {outsideWindow ? (
+                // Nothing to go back to: this is the sensor's last known interval,
+                // and the window it is being shown next to holds no rows at all.
+                <span className="text-[11px] text-muted-foreground">{tr.card.outsideWindow}</span>
+              ) : (
+                <button
+                  type="button"
+                  onClick={onBackToLive}
+                  className="inline-flex items-center gap-1.5 rounded-md bg-secondary px-2 py-1 text-[11px] font-medium text-muted-foreground hover:text-foreground"
+                >
+                  <span className="size-1.5 rounded-full" style={{ backgroundColor: LIVE_TONE_COLOR.live }} />
+                  {tr.card.backToLive}
+                </button>
+              )}
+            </>
+          )}
+
+          {/* Hidden only when the window cannot be stepped at all (empty, or a
+              single interval); otherwise present and disabled at the ends. */}
+          {(nav.hasOlder || nav.hasNewer) && (
+            <div className="inline-flex items-center gap-0.5">
+              <StepButton
+                label={tr.card.olderInterval}
+                keyHint="←"
+                disabled={!nav.hasOlder}
+                onClick={() => onFocus(nav.older)}
               >
-                <span className="size-1.5 rounded-full" style={{ backgroundColor: LIVE_TONE_COLOR.live }} />
-                {tr.card.backToLive}
-              </button>
-            )}
-          </div>
-        )}
+                <ChevronLeft className="size-4" />
+              </StepButton>
+              <StepButton
+                label={tr.card.newerInterval}
+                keyHint="→"
+                disabled={!nav.hasNewer}
+                onClick={() => onFocus(nav.newer)}
+              >
+                <ChevronRight className="size-4" />
+              </StepButton>
+              {!isLive && nav.total > 0 && (
+                <span className="ml-1 text-[11px] tabular-nums text-muted-foreground/80">
+                  {tr.card.position(nav.index + 1, nav.total)}
+                </span>
+              )}
+            </div>
+          )}
+        </div>
         <span className="text-[11px] tabular-nums text-muted-foreground">
           {tr.card.stamps(fmtClock(reading.recordedAt), fmtClock(reading.receivedAt))}
         </span>

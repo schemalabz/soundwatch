@@ -26,6 +26,12 @@ export const sensorStrings = {
     latest: "Τελευταίο διάστημα",
     focused: (clock: string) => `Διάστημα ${clock}`,
     backToLive: "πίσω στο ζωντανό",
+    olderInterval: "παλαιότερο διάστημα",
+    newerInterval: "νεότερο διάστημα",
+    /** Shown on the buttons' tooltips, so the keyboard route is discoverable. */
+    navKeyHint: (label: string, key: string) => `${label} (${key})`,
+    /** How far back the interval in focus sits, 1 = the newest in the window. */
+    position: (i: number, n: number) => `${i} από ${n}`,
     outsideWindow: "εκτός του επιλεγμένου παραθύρου",
     stamps: (device: string, server: string) => `συσκευή ${device} · server ${server}`,
     duration: (s: string) => `${s} δ`,

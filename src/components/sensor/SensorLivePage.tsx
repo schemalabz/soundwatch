@@ -17,7 +17,7 @@ import type { ApiReading, ApiSensorDetail } from "@/lib/api/schemas";
 import { fmtAgo, fmtDb, fmtDurationS, fmtExactTime } from "@/lib/dashboard/format";
 import { liveStatus, LIVE_TONE_COLOR } from "@/lib/dashboard/liveness";
 import { downloadCsv, fetchDetail, fetchReadings } from "@/lib/sensor/api";
-import { clockOffsetS, mergeReadings, observedCadenceS, spectrumScale, trimToWindow } from "@/lib/sensor/live";
+import { clockOffsetS, focusNav, mergeReadings, observedCadenceS, spectrumScale, trimToWindow } from "@/lib/sensor/live";
 import { sensorStrings as tr } from "@/lib/strings/sensor";
 import HelpLabel from "./HelpLabel";
 import IntervalCard from "./IntervalCard";
@@ -133,7 +133,34 @@ export default function SensorLivePage({ id, shareKey }: { id: string; shareKey:
     [readings, newest]
   );
   const scale = useMemo(() => spectrumScale(spectrumSource), [spectrumSource]);
+  // Where the chevrons and the arrow keys go from here. focusNav resolves a
+  // null or stale focusKey to the newest row, the same fallback `focused` uses
+  // above, so the controls can never point somewhere the card is not.
+  const nav = useMemo(() => focusNav(readings, focusKey), [readings, focusKey]);
   const hasAnyBands = useMemo(() => spectrumSource.some((r) => r.bandsDb != null), [spectrumSource]);
+
+  // Arrow keys step the interval in focus, so someone reading off a reference
+  // meter can walk the log without going back to it. Ignored while a form
+  // control has focus — the window <select> uses the same keys to change its
+  // value, and the browser's own behaviour there must win.
+  useEffect(() => {
+    const onKey = (ev: KeyboardEvent) => {
+      if (ev.altKey || ev.ctrlKey || ev.metaKey || ev.shiftKey) return;
+      const t = ev.target;
+      // Buttons are deliberately NOT excluded: clicking a chevron or a log row
+      // leaves focus on that button, and the arrows must keep stepping from there.
+      if (t instanceof HTMLElement && (t.isContentEditable || ["INPUT", "SELECT", "TEXTAREA"].includes(t.tagName))) return;
+      if (ev.key === "ArrowLeft" && nav.hasOlder) {
+        ev.preventDefault();
+        setFocusKey(nav.older);
+      } else if (ev.key === "ArrowRight" && nav.hasNewer) {
+        ev.preventDefault();
+        setFocusKey(nav.newer);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [nav]);
 
   const onWindowChange = useCallback((h: WindowHours) => {
     setFocusKey(null);
@@ -230,7 +257,14 @@ export default function SensorLivePage({ id, shareKey }: { id: string; shareKey:
           {/* interval in focus + spectrum */}
           {focused && (
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-              <IntervalCard reading={focused} isLive={isLive} outsideWindow={outsideWindow} onBackToLive={() => setFocusKey(null)} />
+              <IntervalCard
+                reading={focused}
+                isLive={isLive}
+                outsideWindow={outsideWindow}
+                onBackToLive={() => setFocusKey(null)}
+                nav={nav}
+                onFocus={setFocusKey}
+              />
               <SpectrumCard reading={focused} isLive={isLive} scale={scale} hasAnyBands={hasAnyBands} />
             </div>
           )}

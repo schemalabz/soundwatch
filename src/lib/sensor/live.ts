@@ -48,6 +48,57 @@ export function observedCadenceS(readings: ApiReading[], fallbackS: number): num
   return Math.round(gaps[Math.floor(gaps.length / 2)]);
 }
 
+// --- focus navigation ---------------------------------------------------
+
+/** One step through the log: `older` goes back in time, `newer` forward. */
+export type FocusStep = "older" | "newer";
+
+export interface FocusNav {
+  /** Position of the interval in focus, 0 = newest. -1 when the window is empty. */
+  index: number;
+  total: number;
+  /** focusKey for the interval one step older, or null when there is none. */
+  older: string | null;
+  /**
+   * focusKey for the interval one step newer. null means the newest row, which
+   * the page expresses as live (focusKey = null) rather than as a pinned key —
+   * so null is a legitimate destination here, and `hasNewer` is what says
+   * whether the step exists at all.
+   */
+  newer: string | null;
+  hasOlder: boolean;
+  hasNewer: boolean;
+}
+
+/**
+ * Where the previous/next controls should go from the interval in focus.
+ *
+ * `readings` is newest-first (the order the log renders), so "older" moves
+ * down the array. A focusKey that is not in the window — the sensor's last
+ * known interval shown beside an empty window — is treated as the newest, the
+ * same fallback SensorLivePage uses when it resolves `focused`.
+ */
+export function focusNav(readings: ApiReading[], focusKey: string | null): FocusNav {
+  const total = readings.length;
+  if (total === 0) return { index: -1, total: 0, older: null, newer: null, hasOlder: false, hasNewer: false };
+
+  const found = focusKey == null ? 0 : readings.findIndex((r) => r.recordedAt === focusKey);
+  const index = found === -1 ? 0 : found;
+
+  const hasOlder = index < total - 1;
+  const hasNewer = index > 0;
+  return {
+    index,
+    total,
+    hasOlder,
+    hasNewer,
+    older: hasOlder ? readings[index + 1].recordedAt : null,
+    // Stepping onto the newest row returns to live rather than pinning it,
+    // so the page keeps following new intervals as they arrive.
+    newer: hasNewer && index - 1 > 0 ? readings[index - 1].recordedAt : null,
+  };
+}
+
 // --- formatting ---------------------------------------------------------
 
 const clock = new Intl.DateTimeFormat("el-GR", {

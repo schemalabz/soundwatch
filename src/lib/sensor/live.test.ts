@@ -11,6 +11,7 @@ import {
   fmtLevel,
   fmtLmax,
   fmtOptionalDb,
+  focusNav,
   isLowCoverage,
   isSaturated,
   mergeReadings,
@@ -207,6 +208,72 @@ describe("isSaturated", () => {
     expect(isSaturated(withSat(null))).toBe(false);
     expect(isSaturated(withSat(0))).toBe(false);
     expect(isSaturated(withSat(3))).toBe(true);
+  });
+});
+
+describe("focusNav", () => {
+  // Newest first, the order the log renders and SensorLivePage holds.
+  const rows = [
+    at("2026-09-23T10:03:00Z", "2026-09-23T10:03:05Z"),
+    at("2026-09-23T10:02:00Z", "2026-09-23T10:02:05Z"),
+    at("2026-09-23T10:01:00Z", "2026-09-23T10:01:05Z"),
+  ];
+  const k = (i: number) => rows[i].recordedAt;
+
+  it("treats live as the newest row, and offers only the older step", () => {
+    const nav = focusNav(rows, null);
+    expect(nav.index).toBe(0);
+    expect(nav.total).toBe(3);
+    expect(nav.hasNewer).toBe(false);
+    expect(nav.hasOlder).toBe(true);
+    expect(nav.older).toBe(k(1));
+  });
+
+  it("steps in both directions from the middle", () => {
+    const nav = focusNav(rows, k(1));
+    expect(nav.index).toBe(1);
+    expect(nav.hasOlder).toBe(true);
+    expect(nav.older).toBe(k(2));
+    expect(nav.hasNewer).toBe(true);
+    // Stepping onto the newest row hands back null: the page reads that as
+    // live and resumes following new intervals, rather than pinning row 0.
+    expect(nav.newer).toBeNull();
+  });
+
+  it("stops at the oldest row", () => {
+    const nav = focusNav(rows, k(2));
+    expect(nav.index).toBe(2);
+    expect(nav.hasOlder).toBe(false);
+    expect(nav.older).toBeNull();
+    expect(nav.hasNewer).toBe(true);
+    expect(nav.newer).toBe(k(1));
+  });
+
+  it("falls back to the newest when the focused key left the window", () => {
+    // Narrowing the window can drop the focused row; SensorLivePage resolves
+    // `focused` to the newest in that case, so navigation must agree.
+    const nav = focusNav(rows, "2026-09-23T09:00:00.000Z");
+    expect(nav.index).toBe(0);
+    expect(nav.hasNewer).toBe(false);
+    expect(nav.older).toBe(k(1));
+  });
+
+  it("offers no steps at all for an empty window", () => {
+    expect(focusNav([], null)).toEqual({
+      index: -1,
+      total: 0,
+      older: null,
+      newer: null,
+      hasOlder: false,
+      hasNewer: false,
+    });
+  });
+
+  it("offers no steps when the window holds a single interval", () => {
+    const nav = focusNav([rows[0]], null);
+    expect(nav.total).toBe(1);
+    expect(nav.hasOlder).toBe(false);
+    expect(nav.hasNewer).toBe(false);
   });
 });
 
