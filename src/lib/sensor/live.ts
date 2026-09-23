@@ -1,4 +1,4 @@
-import { BAND_LABELS, type BandLabel } from "../../../mqtt-ingester/flavor2";
+import { BAND_LABELS } from "../../../mqtt-ingester/flavor2";
 import type { ApiReading } from "@/lib/api/schemas";
 import { describeLevel, isLmaxLowerBound, type LevelBound } from "@/lib/api/levels";
 import { fmtDb } from "@/lib/dashboard/format";
@@ -121,16 +121,6 @@ export function isSaturated(r: Pick<ApiReading, "energySaturations">): boolean {
 // carries no bands at all (spectrumScale returns them, unchanged).
 export const SPECTRUM_MIN_DB = 85;
 export const SPECTRUM_MAX_DB = 120;
-/**
- * Bands at or above 12.5 kHz are mostly the sensor's own noise floor: a bench
- * unit left overnight in an empty office measured 69–78 dB at 12.5–20 kHz,
- * and an occupied office the next day measured the same
- * (soundwatch-firmware/docs/soundwatch/measurement-contract.md, bench3
- * overnight baseline, 2026-08-11).
- */
-const bandIndex = (label: BandLabel): number => BAND_LABELS.indexOf(label);
-export const NOISE_FLOOR_FROM_BAND = bandIndex("12500");
-
 export interface SpectrumScale {
   min: number;
   max: number;
@@ -179,7 +169,6 @@ export interface SpectrumBar {
   value: number | null;
   /** 0..1 on the fixed scale. */
   height: number;
-  muted: boolean;
 }
 
 export function spectrumBars(
@@ -190,7 +179,7 @@ export function spectrumBars(
   return SPECTRUM_LABELS.map((label, i) => {
     const value = bands[i] ?? null;
     const height = value == null ? 0 : Math.max(0, Math.min(1, (value - scale.min) / (scale.max - scale.min)));
-    return { label, value, height, muted: i >= NOISE_FLOOR_FROM_BAND };
+    return { label, value, height };
   });
 }
 

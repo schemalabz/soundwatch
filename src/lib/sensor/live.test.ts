@@ -14,7 +14,6 @@ import {
   isLowCoverage,
   isSaturated,
   mergeReadings,
-  NOISE_FLOOR_FROM_BAND,
   observedCadenceS,
   SPECTRUM_LABELS,
   spectrumBars,
@@ -214,7 +213,6 @@ describe("isSaturated", () => {
 describe("spectrum", () => {
   const bands = serializeReading(readingRow()).bandsDb;
   it("labels 21 bands and scales heights into 0..1 on the fixed 85-120 scale", () => {
-    expect(NOISE_FLOOR_FROM_BAND).toBe(18);
     const bars = spectrumBars(bands);
     expect(bars.length).toBe(21);
     expect(SPECTRUM_LABELS[0]).toBe("LOW");
@@ -224,8 +222,6 @@ describe("spectrum", () => {
     expect(bars[20].height).toBe(0); // 74.0 is below the floor too
     expect(spectrumBars([120, ...Array(20).fill(null)])[0].height).toBe(1);
     expect(spectrumBars([200, ...Array(20).fill(null)])[0].height).toBe(1);
-    expect(bars[18].muted).toBe(true);
-    expect(bars[17].muted).toBe(false);
   });
   it("handles null bands", () => {
     expect(spectrumBars(null)).toEqual([]);
