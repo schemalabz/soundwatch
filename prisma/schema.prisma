@@ -37,6 +37,11 @@ model Sensor {
   plannedLocation   PlannedLocation? @relation(fields: [plannedLocationId], references: [id])
   // Bench/experimental units: keep them out of public maps and aggregates.
   isExperimental    Boolean   @default(false) @map("is_experimental")
+  // Read-only share credential for /sensors/[id]?k=... — lets one outside
+  // reader (an acoustics expert beside a bench unit) see this sensor's
+  // readings without the admin token and without the MQTT token. Null means
+  // no link exists. Rotating replaces it; the old link stops at once.
+  shareKey          String?   @unique @map("share_key")
   createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
 
   readings Reading[]
