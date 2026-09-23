@@ -66,6 +66,8 @@ backfill progress and exits when it completes — the stack keeps running). Then
 - http://localhost:3005 — the dashboard
 - http://localhost:3005/status — network status
 - http://localhost:3005/admin — admin (token `admin-local`)
+- http://localhost:3005/sensors/<id> — one sensor live: every interval as it arrives, spectrum, log, CSV.
+  Bench units open for an admin, or through a share link minted in `/admin` (`?k=…`).
 - `psql postgresql://soundwatch:soundwatch@localhost:5432/soundwatch`
 
 Re-running `local:up` is cheap: the backfill is idempotent and only tops up the gap

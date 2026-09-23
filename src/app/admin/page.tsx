@@ -1,8 +1,16 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import DeviceLabel from "@/components/admin/DeviceLabel";
+import { ADMIN_TOKEN_STORAGE_KEY } from "@/lib/adminToken";
+import { sensorPagePath, sensorShareUrl } from "@/lib/sensor/api";
+
+/** The fallback for a sensor whose share link was not minted this session —
+ *  the same builder the mint endpoint uses, against this browser's origin. */
+function shareUrlFor(id: string, key: string): string {
+  return sensorShareUrl(id, key, window.location.origin);
+}
 
 interface SensorWithStatus {
   id: string;
@@ -25,6 +33,7 @@ interface SensorWithStatus {
   installedAt: string | null;
   isExperimental: boolean;
   plannedLocation: { name: string } | null;
+  shareKey: string | null;
 }
 
 const STAGE_BADGE: Record<SensorWithStatus["stage"], { label: string; cls: string }> = {
@@ -67,6 +76,18 @@ export default function AdminPage() {
   const [deleteInfo, setDeleteInfo] = useState<{ readings: number; framelogChunks: number } | null>(null);
   const [deleteTyped, setDeleteTyped] = useState("");
   const [deleting, setDeleting] = useState(false);
+  const [shareBusy, setShareBusy] = useState(false);
+  const [shareCopied, setShareCopied] = useState(false);
+  const [shareError, setShareError] = useState("");
+  // Minted-this-session share URLs, keyed by sensor id — the mint route's own
+  // `url` (which honours NEXT_PUBLIC_BASE_URL) rather than a rebuilt one. Kept
+  // with the key it was minted for, so a rotation from another admin session
+  // (visible here as a different sensor.shareKey after the list refresh)
+  // never serves a dead link.
+  const [shareUrls, setShareUrls] = useState<Record<string, { key: string; url: string }>>({});
+  const copyTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+
+  useEffect(() => () => clearTimeout(copyTimeoutRef.current), []);
 
   async function fetchSensors(adminToken: string) {
     const res = await fetch("/api/admin/sensors", {
@@ -75,7 +96,7 @@ export default function AdminPage() {
     if (!res.ok) {
       setError("Authentication failed");
       setAuthenticated(false);
-      localStorage.removeItem("sw-admin-token");
+      localStorage.removeItem(ADMIN_TOKEN_STORAGE_KEY);
       return;
     }
     const data = await res.json();
@@ -83,13 +104,13 @@ export default function AdminPage() {
     setAuthenticated(true);
     setError("");
     // Stay logged in across visits; a 401 above clears it again.
-    localStorage.setItem("sw-admin-token", adminToken);
+    localStorage.setItem(ADMIN_TOKEN_STORAGE_KEY, adminToken);
   }
 
   // Auto-login from a previous session. Deferred a microtask so the effect
   // body itself never sets state (react-hooks/set-state-in-effect).
   useEffect(() => {
-    const saved = localStorage.getItem("sw-admin-token");
+    const saved = localStorage.getItem(ADMIN_TOKEN_STORAGE_KEY);
     if (saved) {
       void Promise.resolve().then(() => {
         setToken(saved);
@@ -133,9 +154,99 @@ export default function AdminPage() {
     }
   }
 
+  // The share link: a read-only credential for ONE sensor's live page, for
+  // someone outside who must hold neither the admin token nor the MQTT token.
+  // `confirmMsg`, when given, gates the mint on a window.confirm — used for
+  // Rotate (which invalidates the current link at once), not for the first
+  // Create.
+  async function mintShareKey(confirmMsg?: string) {
+    if (!editingSensor) return;
+    if (confirmMsg && !window.confirm(confirmMsg)) return;
+    const id = editingSensor.id;
+    setShareBusy(true);
+    setShareCopied(false);
+    clearTimeout(copyTimeoutRef.current);
+    try {
+      const res = await fetch(`/api/admin/sensors/${id}/share-key`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const { shareKey, url } = await res.json();
+        setEditingSensor((prev) => (prev && prev.id === id ? { ...prev, shareKey } : prev));
+        setShareUrls((prev) => ({ ...prev, [id]: { key: shareKey, url } }));
+        setShareError("");
+        await fetchSensors(token);
+      } else {
+        setShareError(`Failed (${res.status}) — is your admin token still valid?`);
+      }
+    } catch {
+      setShareError("Network error — could not reach the server.");
+    } finally {
+      setShareBusy(false);
+    }
+  }
+
+  async function revokeShareKey() {
+    if (!editingSensor) return;
+    if (!window.confirm("Revoke the link? Anyone holding it loses access immediately.")) return;
+    const id = editingSensor.id;
+    setShareBusy(true);
+    setShareCopied(false);
+    clearTimeout(copyTimeoutRef.current);
+    try {
+      const res = await fetch(`/api/admin/sensors/${id}/share-key`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        setEditingSensor((prev) => (prev && prev.id === id ? { ...prev, shareKey: null } : prev));
+        setShareError("");
+        await fetchSensors(token);
+      } else {
+        setShareError(`Failed (${res.status}) — is your admin token still valid?`);
+      }
+    } catch {
+      setShareError("Network error — could not reach the server.");
+    } finally {
+      setShareBusy(false);
+    }
+  }
+
+  /**
+   * The minted-this-session URL when there is one, it still matches the
+   * sensor's current share key, and the server knows its own public address
+   * (NEXT_PUBLIC_BASE_URL — inlined client-side, so this reads at build time);
+   * otherwise rebuilt from the list's key against window.location.origin,
+   * which a browser can always open.
+   */
+  function shareUrlForSensor(sensor: SensorWithStatus): string | null {
+    if (!sensor.shareKey) return null;
+    const minted = shareUrls[sensor.id];
+    if (process.env.NEXT_PUBLIC_BASE_URL && minted && minted.key === sensor.shareKey) {
+      return minted.url;
+    }
+    return shareUrlFor(sensor.id, sensor.shareKey);
+  }
+
+  async function copyShareUrl() {
+    if (!editingSensor) return;
+    const url = shareUrlForSensor(editingSensor);
+    if (!url) return;
+    try {
+      await navigator.clipboard.writeText(url);
+      setShareCopied(true);
+      clearTimeout(copyTimeoutRef.current);
+      copyTimeoutRef.current = setTimeout(() => setShareCopied(false), 1500);
+    } catch {
+      setShareError("Failed to copy the link — copy it from the field instead.");
+    }
+  }
+
   function openEdit(sensor: SensorWithStatus) {
     setDeleteInfo(null);
     setDeleteTyped("");
+    setShareError("");
     setEditingSensor(sensor);
     setEditForm({
       name: sensor.name || "",
@@ -312,6 +423,14 @@ export default function AdminPage() {
                       : "Never"}
                   </td>
                   <td className="p-3">
+                    <Link
+                      href={sensorPagePath(sensor.id)}
+                      onClick={(e) => e.stopPropagation()}
+                      className="mr-1.5 inline-flex items-center gap-1.5 rounded border border-sound/40 px-2 py-1 text-xs text-sound hover:bg-sound/10"
+                    >
+                      <span className="size-1.5 rounded-full bg-sound" />
+                      Live
+                    </Link>
                     <button
                       onClick={(e) => { e.stopPropagation(); setLabelSensor(sensor); }}
                       disabled={!sensor.apName}
@@ -327,8 +446,14 @@ export default function AdminPage() {
           </table>
         </div>
 
+        {/* The panel is sticky, not merely top-aligned: the sensor table runs
+            to dozens of rows, and a panel pinned to the top of the page leaves
+            you editing a sensor you have already scrolled past. `self-start`
+            keeps its natural height (a stretched flex item cannot stick),
+            `top-6` holds it just inside the viewport, and the max-height lets a
+            tall panel scroll on its own instead of spilling past the fold. */}
         {editForm && editingSensor && (
-          <div className="w-80 bg-white rounded-xl border border-border p-5 space-y-4 self-start">
+          <div className="w-80 shrink-0 bg-white rounded-xl border border-border p-5 space-y-4 self-start sticky top-6 max-h-[calc(100vh-3rem)] overflow-y-auto">
             <div className="flex items-center justify-between">
               <h3 className="font-bold">Edit Sensor</h3>
               <button
@@ -340,6 +465,14 @@ export default function AdminPage() {
             </div>
 
             <p className="font-mono text-xs text-muted-foreground">{editingSensor.deviceId}</p>
+
+            <Link
+              href={sensorPagePath(editingSensor.id)}
+              className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-sound/40 py-2 text-sm font-medium text-sound transition-colors hover:bg-sound/10"
+            >
+              <span className="size-1.5 rounded-full bg-sound" />
+              Open live page
+            </Link>
 
             <div className="text-xs text-muted-foreground space-y-1">
               {editingSensor.hardwareId && (
@@ -436,6 +569,61 @@ export default function AdminPage() {
                 Cancel
               </button>
             </div>
+
+            <div className="rounded-lg border border-border p-3 space-y-2">
+              <p className="text-sm font-semibold">Live page link</p>
+              <p className="text-xs text-muted-foreground">
+                Whoever has this link sees only this sensor&apos;s readings, read-only. It reveals neither the
+                MQTT token nor the admin token. If it leaks, rotate it — the old link stops at once.
+              </p>
+              {editingSensor.shareKey ? (
+                <>
+                  <div className="flex gap-1.5">
+                    <input
+                      readOnly
+                      value={shareUrlForSensor(editingSensor) ?? ""}
+                      onFocus={(e) => e.currentTarget.select()}
+                      className="min-w-0 flex-1 rounded-lg border border-border bg-muted px-2 py-1.5 font-mono text-[11px]"
+                    />
+                    <button
+                      type="button"
+                      onClick={copyShareUrl}
+                      className="rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-white"
+                    >
+                      {shareCopied ? "Copied" : "Copy"}
+                    </button>
+                  </div>
+                  <div className="flex gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => mintShareKey("Rotate the link? The current link stops working immediately.")}
+                      disabled={shareBusy}
+                      className="rounded-lg border border-border px-3 py-1.5 text-xs hover:bg-muted disabled:opacity-50"
+                    >
+                      Rotate link
+                    </button>
+                    <button
+                      type="button"
+                      onClick={revokeShareKey}
+                      disabled={shareBusy}
+                      className="rounded-lg border border-[#fca5a5] px-3 py-1.5 text-xs text-[#b91c1c] hover:bg-[#fef2f2] disabled:opacity-50"
+                    >
+                      Revoke
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => mintShareKey()}
+                  disabled={shareBusy}
+                  className="w-full rounded-lg bg-primary py-1.5 text-xs font-semibold text-white disabled:opacity-50"
+                >
+                  {shareBusy ? "Creating…" : "Create link"}
+                </button>
+              )}
+            </div>
+            {shareError && <p className="text-xs text-[#b91c1c]">{shareError}</p>}
 
             {editingSensor.firmwareVersion && (
               <p className="text-xs text-muted-foreground pt-2">

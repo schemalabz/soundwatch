@@ -18,6 +18,12 @@ export type StatusSensor = {
   name: string | null;
   /** Age of this sensor's newest reading; null when it has never reported. */
   secondsAgo: number | null;
+  /**
+   * Arrival time (receivedAt) of that same newest reading, ISO. secondsAgo is
+   * rendered rounded and approximate; this is what the page shows on hover
+   * when the reader wants the actual moment.
+   */
+  lastSeenAt: string | null;
   /** Bitstring, one char per 6h bucket: "1" = at least one reading. */
   cells: string;
 };

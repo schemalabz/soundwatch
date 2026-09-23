@@ -8,21 +8,17 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
-import { fmtDb } from "@/lib/dashboard/format";
+import { fmtAgo, fmtDb, fmtExactTime } from "@/lib/dashboard/format";
+import { liveTone, LIVE_TONE_COLOR, type LiveTone } from "@/lib/dashboard/liveness";
 
 // Shapes come from the shared contract the route is annotated against. These
 // were two hand-written types kept in step by hand, and they had already
 // drifted: `ingest` was optional here and is always present in the response.
 import type { StatusResponse, StatusSensor } from "@/lib/api/dashboard";
 
-const ONLINE_S = 3600;
-
 function ago(s: number | null): string {
   if (s == null) return "ποτέ";
-  if (s < 90) return `πριν ${s}δ`;
-  if (s < 5400) return `πριν ${Math.round(s / 60)}λ`;
-  if (s < 90000) return `πριν ${Math.round(s / 3600)}ω`;
-  return `πριν ${Math.round(s / 86400)}ημ`;
+  return `πριν ${fmtAgo(s)}`;
 }
 
 function uptime(cells: string): number {
@@ -89,12 +85,22 @@ function IngestChart({ hours }: { hours: { t: number; n: number }[] }) {
   );
 }
 
-function Dot({ on }: { on: boolean }) {
+/** A sensor is "reporting" if it has spoken inside the stale bound — the
+ *  counting rule this page has always used (secondsAgo < STALE_S), restated
+ *  over the shared tones so the headline number does not move. */
+function isReporting(tone: LiveTone): boolean {
+  return tone !== "dead" && tone !== "never";
+}
+
+/** The dot takes a tone, not a boolean: a boolean is what let this page
+ *  invent a two-colour scale of its own, so a sensor that never reported
+ *  went red here and silver on the map pane. A LiveTone cannot express one. */
+function Dot({ tone }: { tone: LiveTone }) {
   return (
     <span
       className="size-2 shrink-0 rounded-full"
-      style={{ backgroundColor: on ? "var(--sw-ok)" : "var(--sw-loud)" }}
-      title={on ? "Ενεργός την τελευταία ώρα" : "Εκτός λειτουργίας"}
+      style={{ backgroundColor: LIVE_TONE_COLOR[tone] }}
+      title={isReporting(tone) ? "Ενεργός την τελευταία ώρα" : "Εκτός λειτουργίας"}
     />
   );
 }
@@ -121,11 +127,11 @@ export default function StatusPage() {
   // Problems first, then alphabetical — a status page leads with what's wrong.
   const sensors = useMemo(() => {
     const list = [...(data?.sensors ?? [])];
-    const isOn = (s: StatusSensor) => s.secondsAgo != null && s.secondsAgo < ONLINE_S;
+    const isOn = (s: StatusSensor) => isReporting(liveTone(s.secondsAgo));
     return list.sort((a, b) => Number(isOn(a)) - Number(isOn(b)) || (a.name ?? "").localeCompare(b.name ?? "", "el"));
   }, [data]);
 
-  const online = sensors.filter((s) => s.secondsAgo != null && s.secondsAgo < ONLINE_S).length;
+  const online = sensors.filter((s) => isReporting(liveTone(s.secondsAgo))).length;
   const fleetUptime = sensors.length > 0 ? sensors.reduce((sum, s) => sum + uptime(s.cells), 0) / sensors.length : 0;
 
   return (
@@ -208,15 +214,20 @@ export default function StatusPage() {
 
           <div className="divide-y">
             {sensors.map((s) => {
-              const on = s.secondsAgo != null && s.secondsAgo < ONLINE_S;
+              const tone = liveTone(s.secondsAgo);
               const pct = uptime(s.cells);
               return (
                 <div key={s.id} className="flex items-center gap-3 px-4 py-1.5 transition-colors hover:bg-secondary/50 max-md:flex-wrap">
-                  <Dot on={on} />
+                  <Dot tone={tone} />
                   <div className="w-40 shrink-0 truncate">
                     <span className="text-[13px] font-medium leading-tight">{s.name ?? `#${s.id.slice(0, 8)}`}</span>
                   </div>
-                  <span className="w-14 shrink-0 text-right text-[11px] tabular-nums text-muted-foreground">
+                  <span
+                    className="w-14 shrink-0 text-right text-[11px] tabular-nums text-muted-foreground"
+                    // The age is rounded and marked approximate; the exact
+                    // arrival time is one hover away.
+                    title={fmtExactTime(s.lastSeenAt)}
+                  >
                     {ago(s.secondsAgo)}
                   </span>
                   <div className="min-w-0 flex-1">

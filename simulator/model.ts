@@ -161,9 +161,9 @@ export interface SimReading {
   minEnergy: number;
   /** 30 histogram bin counts, sum == frameCount. */
   histCounts: number[];
-  /** 21 band levels as dB*10 ints, or null on intervals where 242 is skipped. */
+  /** 21 band levels as dB*10 ints. Null only for firmware that omits 242. */
   bandsDb10: number[] | null;
-  /** Packed id-243 string, or null on intervals where 243 is skipped. */
+  /** Packed id-243 string. Null only for firmware that omits 243. */
   diagString: string | null;
   // Environment (wire units: pressure in kPa, everything else as stored)
   temperature: number;
@@ -334,39 +334,35 @@ export function generateReading(sensor: FleetSensor, tSec: number, intervalS: nu
   const minEnergy = Math.max(1, Math.round(Math.pow(10, minDb / 10)));
 
   // --- bands: traffic-ish spectrum rolling off toward high frequencies ---
-  // 242 and 243 alternate across intervals (NETBUFF budget, like a real
-  // duty-cycled device would).
-  const sendBands = intervalIndex % 2 === 0;
-  let bandsDb10: number[] | null = null;
-  if (sendBands) {
-    bandsDb10 = BAND_LABELS.map((_, k) => {
-      const rolloff = -2 - (23 * k) / (BAND_LABELS.length - 1); // -2 .. -25 dB
-      let db = L + rolloff + 1.5 * valueNoise(sensor.deviceId, `band-${k}`, t, 900);
-      if (event?.siren && k >= 7 && k <= 10) db += 6; // 1-2 kHz slots
-      return Math.max(1, Math.round(db * 10));
-    });
-  }
+  // Every interval carries 242: on the production dump, bands are present on
+  // 574,449 of 574,449 payload-v4 readings, so the fleet sends the 21 bands
+  // every time. The null case survives for pre-Flavor-2 firmware and for
+  // imported rows, which is why consumers still handle null.
+  const bandsDb10: number[] | null = BAND_LABELS.map((_, k) => {
+    const rolloff = -2 - (23 * k) / (BAND_LABELS.length - 1); // -2 .. -25 dB
+    let db = L + rolloff + 1.5 * valueNoise(sensor.deviceId, `band-${k}`, t, 900);
+    if (event?.siren && k >= 7 && k <= 10) db += 6; // 1-2 kHz slots
+    return Math.max(1, Math.round(db * 10));
+  });
 
   // --- diagnostics: reboot every 3-10 days, believable counters. A unit
   // that just recovered from an outage reports uptime since power-back, not
-  // since its scheduled reboot — outages ARE reboots. ---
-  const sendDiag = !sendBands;
-  let diagString: string | null = null;
-  if (sendDiag) {
-    const bootPeriodS = Math.round((3 + 7 * rand01(sensor.deviceId, "boot", 0)) * 86400);
-    const scheduledBootT = t - (t % bootPeriodS);
-    const outageEndT = lastOutageEndBefore(sensor.deviceId, t);
-    const uptimeS = t - Math.max(scheduledBootT, outageEndT ?? 0);
-    const freeHeap = 7000 + Math.round(2000 * rand01(sensor.deviceId, "heap", Math.floor(t / bootPeriodS)));
-    const wifiConnects = 1 + Math.floor(uptimeS / 43200);
-    const publishFails = Math.floor(uptimeS / 86400);
-    const captureFails = Math.floor(uptimeS / 7200) % 60;
-    const i2sReinits = Math.floor(uptimeS / 14400);
-    // Release 1.1 (ef1ba3e) — the build the fleet actually runs. Field 12 is
-    // energy_saturations: 0 is what a healthy 1.1 unit reports, and the
-    // contract says to expect it even at 97.7 device-dB.
-    diagString = [uptimeS, freeHeap, 64, wifiConnects, publishFails, captureFails, i2sReinits, 0, "1.1", "ef1ba3e", "ef1ba3e", 0].join("-");
-  }
+  // since its scheduled reboot — outages ARE reboots. Every interval carries
+  // 243 too: diagnostics are present on 574,448 of 574,449 payload-v4
+  // production readings. ---
+  const bootPeriodS = Math.round((3 + 7 * rand01(sensor.deviceId, "boot", 0)) * 86400);
+  const scheduledBootT = t - (t % bootPeriodS);
+  const outageEndT = lastOutageEndBefore(sensor.deviceId, t);
+  const uptimeS = t - Math.max(scheduledBootT, outageEndT ?? 0);
+  const freeHeap = 7000 + Math.round(2000 * rand01(sensor.deviceId, "heap", Math.floor(t / bootPeriodS)));
+  const wifiConnects = 1 + Math.floor(uptimeS / 43200);
+  const publishFails = Math.floor(uptimeS / 86400);
+  const captureFails = Math.floor(uptimeS / 7200) % 60;
+  const i2sReinits = Math.floor(uptimeS / 14400);
+  // Release 1.1 (ef1ba3e) — the build the fleet actually runs. Field 12 is
+  // energy_saturations: 0 is what a healthy 1.1 unit reports, and the
+  // contract says to expect it even at 97.7 device-dB.
+  const diagString: string | null = [uptimeS, freeHeap, 64, wifiConnects, publishFails, captureFails, i2sReinits, 0, "1.1", "ef1ba3e", "ef1ba3e", 0].join("-");
 
   // --- environment ---
   const day = daylight(lt);

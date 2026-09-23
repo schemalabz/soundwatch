@@ -12,6 +12,10 @@ import type { ApiReading } from "./schemas";
 export const TOP_BIN_FLOOR_DB = HIST_MIN_DB + (HIST_BINS - 1) * HIST_BIN_DB;
 /** Upper edge of the open-ended bottom bin: 32 device-dB. */
 export const BOTTOM_BIN_CEILING_DB = HIST_MIN_DB + HIST_BIN_DB;
+/** Where the histogram's binned range ends: 90 device-dB. The top bin has no
+ *  ceiling, so this is the last edge that exists, not a maximum level. The
+ *  Greek copy that explains "≥" quotes it. */
+export const HIST_TOP_DB = HIST_MIN_DB + HIST_BINS * HIST_BIN_DB;
 
 export type LevelBound = "lower" | "upper" | null;
 

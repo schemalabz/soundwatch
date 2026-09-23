@@ -1,6 +1,9 @@
 // Greek UI strings for the dashboard. Single-locale on purpose; extraction
 // point for proper i18n later.
 
+import { AGG_KEYS, type AggKey } from "@/lib/dashboard/metrics";
+import { LEVEL_CAVEAT, METRICS } from "./glossary";
+
 export const dashboardStrings = {
   filters: "Φίλτρα",
   reset: "Καθαρισμός φίλτρων",
@@ -108,18 +111,17 @@ export const dashboardStrings = {
   // the frames inside one interval (which is what the device's own l10/l50/l90
   // columns are). Same names, different statistic — the hints say "διαστημάτων"
   // so a reader is not told a stronger claim than we can make.
-  aggregations: {
-    laeq: { label: "Μέση", hint: "Ενεργειακός μέσος (LAeq)" },
-    l50: { label: "Διάμεσος", hint: "Τυπική στάθμη — διάμεσος των διαστημάτων (L50)" },
-    l10: { label: "Αιχμές", hint: "Ξεπερνιέται στο 10% των διαστημάτων (L10)" },
-    l90: { label: "Υπόβαθρο", hint: "Ξεπερνιέται στο 90% των διαστημάτων (L90)" },
-    lmax: { label: "Μέγιστη", hint: "Δυνατότερο μεμονωμένο καρέ 11,6 ms (Lmax)" },
-  },
+  //
+  // Keyed on AGG_KEYS, not on Object.keys(METRICS): the glossary table also
+  // carries interval-only metrics (Lmin), which have no across-intervals
+  // statistic and must never appear in the dashboard's metric picker.
+  aggregations: Object.fromEntries(
+    AGG_KEYS.map((k) => [k, { label: METRICS[k].label, hint: METRICS[k].hint.rollup }])
+  ) as Record<AggKey, { label: string; hint: string }>,
   // The one caveat that governs every number on screen. Wording matches the
   // firmware repo's measurement contract; kept verbatim from the pre-existing
   // Greek copy so the two never drift.
-  uncalibrated:
-    "Σχετική στάθμη ήχου, χωρίς βαθμονόμηση — χρήσιμη για σύγκριση της ίδιας θέσης με την πάροδο του χρόνου, όχι με όρια θορύβου ή άλλα όργανα.",
+  uncalibrated: LEVEL_CAVEAT,
   timebar: {
     live: "Μετάβαση στο τώρα",
     freshness: (s: number) => (s === 1 ? "Δεδομένα από πριν 1 δευτερόλεπτο" : `Δεδομένα από πριν ${s} δευτερόλεπτα`),
