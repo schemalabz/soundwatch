@@ -4,11 +4,15 @@
 // window by spectrumScale (see src/lib/sensor/live.ts) so one interval can
 // still be compared to the next by eye; SPECTRUM_MIN_DB/MAX_DB there are only
 // the no-bands fallback.
+//
+// The chart stops below 12.5 kHz: the three bands above it are the sensor's
+// own noise, not the scene (see SELF_NOISE_FROM_BAND in live.ts for the
+// measurement). They stay in the API and the CSV, so the note below says the
+// plot is not the whole record.
 
-import { BAND_LABELS } from "../../../mqtt-ingester/flavor2";
 import type { ApiReading } from "@/lib/api/schemas";
 import { fmtDb } from "@/lib/dashboard/format";
-import { bandRangeLabel, fmtClock, spectrumBars, spectrumTicks, type SpectrumScale } from "@/lib/sensor/live";
+import { bandRangeLabel, fmtClock, PLOTTED_BAND_COUNT, spectrumBars, spectrumTicks, type SpectrumScale } from "@/lib/sensor/live";
 import { sensorStrings as tr } from "@/lib/strings/sensor";
 import HelpLabel from "./HelpLabel";
 
@@ -35,7 +39,7 @@ export default function SpectrumCard({
   // assistive tech actually reads.
   const plotLabel =
     n > 0
-      ? `${tr.spectrum.title}: ${tr.spectrum.bands(n)}, ${bandRangeLabel(0)} – ${bandRangeLabel(n - 1)}, ${tr.spectrum.unweighted}, ${scale.min}–${scale.max} dB`
+      ? `${tr.spectrum.title}: ${tr.spectrum.bands(n)}, ${bandRangeLabel(0)} – ${bandRangeLabel(n - 1)}, ${tr.spectrum.unweighted}, ${scale.min}–${scale.max} dB. ${tr.spectrum.cutNote}`
       : undefined;
 
   return (
@@ -50,7 +54,7 @@ export default function SpectrumCard({
           </span>
         </h2>
         <span className="text-[11px] text-muted-foreground">
-          {tr.spectrum.bands(BAND_LABELS.length)} · <HelpLabel entry="spectrum">{tr.spectrum.unweighted}</HelpLabel>
+          {tr.spectrum.bands(PLOTTED_BAND_COUNT)} · <HelpLabel entry="spectrum">{tr.spectrum.unweighted}</HelpLabel>
         </span>
       </div>
 
@@ -111,6 +115,10 @@ export default function SpectrumCard({
           </div>
 
           <div className="text-center text-[9.5px] text-muted-foreground">{tr.spectrum.xAxis}</div>
+
+          <div className="text-[11px] leading-[1.45] text-muted-foreground">
+            <HelpLabel entry="spectrum">{tr.spectrum.cutNote}</HelpLabel>
+          </div>
         </>
       )}
     </div>

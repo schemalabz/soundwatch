@@ -1,4 +1,4 @@
-import { BAND_LABELS } from "../../../mqtt-ingester/flavor2";
+import { BAND_LABELS, type BandLabel } from "../../../mqtt-ingester/flavor2";
 import type { ApiReading } from "@/lib/api/schemas";
 import { describeLevel, isLmaxLowerBound, type LevelBound } from "@/lib/api/levels";
 import { fmtDb } from "@/lib/dashboard/format";
@@ -165,6 +165,36 @@ export function isSaturated(r: Pick<ApiReading, "energySaturations">): boolean {
 
 // --- spectrum -----------------------------------------------------------
 
+/**
+ * The spectrum stops below 12.5 kHz. The three bands above it are dominated
+ * by the sensor's own noise rather than by the scene, so plotting them shows
+ * the device to the reader instead of the sound.
+ *
+ * Measured over 608,834 fleet readings, 2026-08-07 to 2026-09-21, excluding
+ * the simulator. Between the quietest and the loudest tenth of intervals,
+ * every band from LOW to 8 kHz moves 27-33 dB and correlates 0.85+ with the
+ * broadband level. Above that the response and the correlation fall away
+ * together, monotonically:
+ *
+ *   10 kHz    25.0 dB   r = 0.82     kept: degraded, still tracks the scene
+ *   12.5 kHz  18.0 dB   r = 0.66     cut
+ *   16 kHz    15.2 dB   r = 0.62     cut
+ *   20 kHz     9.6 dB   r = 0.39     cut
+ *
+ * Their quiet floors rise the same way (20 kHz reads 75.6 when the world is
+ * at its quietest, 15 dB above any mid band), which is what an additive noise
+ * floor does. The pattern holds on every unit with a real sample. The 20 kHz
+ * band also spans up to 22.45 kHz, past the 22.05 kHz Nyquist limit of the
+ * 44.1 kHz sampling, so part of it cannot carry signal at all.
+ *
+ * This is a DISPLAY decision only: /api and the CSV still carry all 21 bands,
+ * and they are the evidence for the self-noise itself.
+ */
+const bandIndex = (label: BandLabel): number => BAND_LABELS.indexOf(label);
+export const SELF_NOISE_FROM_BAND = bandIndex("12500");
+/** How many bands the spectrum plots, and the length of every SpectrumBar[]. */
+export const PLOTTED_BAND_COUNT = SELF_NOISE_FROM_BAND;
+
 // The scale a bar chart actually uses is derived from the window by
 // spectrumScale below, so consecutive intervals stay comparable by eye even
 // though un-weighted bands run anywhere from ~35 (quiet room) to ~115
@@ -180,16 +210,21 @@ export interface SpectrumScale {
 export const SPECTRUM_MIN_SPAN_DB = 30;
 
 /**
- * A scale that fits every band in the window, padded by 5 dB and snapped to
- * multiples of 5, never narrower than SPECTRUM_MIN_SPAN_DB. Bands are
- * un-weighted device-dB and sit anywhere from ~35 (quiet room) to ~115 (street),
- * so a fixed scale cannot serve both. With no bands at all: the fallback.
+ * A scale that fits every PLOTTED band in the window, padded by 5 dB and
+ * snapped to multiples of 5, never narrower than SPECTRUM_MIN_SPAN_DB. Bands
+ * are un-weighted device-dB and sit anywhere from ~35 (quiet room) to ~115
+ * (street), so a fixed scale cannot serve both. With no bands at all: the
+ * fallback.
+ *
+ * The cut bands are excluded here too, not just from the bars: their floor
+ * sits above the mid bands, so letting them set `max` stretched the axis to
+ * fit the sensor's own noise and squashed every real bar into the bottom.
  */
 export function spectrumScale(readings: ApiReading[]): SpectrumScale {
   let lo = Infinity;
   let hi = -Infinity;
   for (const r of readings) {
-    for (const v of r.bandsDb ?? []) {
+    for (const v of (r.bandsDb ?? []).slice(0, PLOTTED_BAND_COUNT)) {
       if (v == null) continue;
       if (v < lo) lo = v;
       if (v > hi) hi = v;
@@ -206,8 +241,11 @@ export function spectrumScale(readings: ApiReading[]): SpectrumScale {
   return { min, max };
 }
 
-/** Display labels: LOW, 250 … 800, 1k, 1,25k … 20k (Greek decimal comma). */
-export const SPECTRUM_LABELS: string[] = BAND_LABELS.map((b) => {
+/**
+ * Display labels for the PLOTTED bands: LOW, 250 … 800, 1k, 1,25k … 10k
+ * (Greek decimal comma). Stops at PLOTTED_BAND_COUNT — see SELF_NOISE_FROM_BAND.
+ */
+export const SPECTRUM_LABELS: string[] = BAND_LABELS.slice(0, PLOTTED_BAND_COUNT).map((b) => {
   if (b === "low") return "LOW";
   const hz = Number(b);
   if (hz < 1000) return b;

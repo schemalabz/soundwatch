@@ -16,6 +16,7 @@
 import { BAND_LABELS, HIST_BIN_DB, HIST_BINS, HIST_MIN_DB } from "../../../mqtt-ingester/flavor2";
 import { HIST_TOP_DB, TOP_BIN_FLOOR_DB } from "@/lib/api/levels";
 import type { AggKey } from "@/lib/dashboard/metrics";
+import { PLOTTED_BAND_COUNT } from "@/lib/sensor/live";
 
 /**
  * A metric every screen names. `label` is the Greek name, `code` the symbol
@@ -161,8 +162,8 @@ export const GLOSSARY: Record<GlossaryKey, GlossaryEntry> = {
   },
   spectrum: {
     term: "Φάσμα",
-    short: "Ο ίδιος ήχος σε 21 ζώνες, μπάσα αριστερά, πρίμα δεξιά — χωρίς προσαρμογή στο αυτί.",
-    long: "Ο ίδιος ήχος χωρισμένος σε 21 ζώνες, από τα μπάσα αριστερά ως τα πρίμα δεξιά. Χωρίς προσαρμογή στο πώς ακούει το αυτί, γι' αυτό δεν συγκρίνεται με τη Μέση.",
+    short: `Ο ίδιος ήχος σε ${PLOTTED_BAND_COUNT} ζώνες συχνότητας, μπάσα αριστερά, πρίμα δεξιά — χωρίς προσαρμογή στο αυτί.`,
+    long: `Ο ίδιος ήχος χωρισμένος σε ${PLOTTED_BAND_COUNT} ζώνες συχνότητας, από τα μπάσα αριστερά ως τα πρίμα δεξιά. Χωρίς προσαρμογή στο πώς ακούει το αυτί, γι' αυτό δεν συγκρίνεται με τη Μέση. Οι τρεις ψηλότερες ζώνες δεν σχεδιάζονται: πάνω από τα 11 kHz ο αισθητήρας καταγράφει κυρίως τον δικό του θόρυβο και όχι τον ήχο του χώρου. Παραμένουν στη λήψη CSV.`,
   },
   clocks: {
     term: "Ώρα",

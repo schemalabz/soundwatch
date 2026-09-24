@@ -12,6 +12,7 @@ import {
   fmtLmax,
   fmtOptionalDb,
   focusNav,
+  PLOTTED_BAND_COUNT,
   isLowCoverage,
   isSaturated,
   mergeReadings,
@@ -279,14 +280,21 @@ describe("focusNav", () => {
 
 describe("spectrum", () => {
   const bands = serializeReading(readingRow()).bandsDb;
-  it("labels 21 bands and scales heights into 0..1 on the fixed 85-120 scale", () => {
+  it("plots only the bands below 12.5 kHz, scaled into 0..1", () => {
     const bars = spectrumBars(bands);
-    expect(bars.length).toBe(21);
+    // 21 bands arrive; the three self-noise bands are not plotted.
+    expect(bands?.length).toBe(21);
+    expect(bars.length).toBe(PLOTTED_BAND_COUNT);
+    expect(PLOTTED_BAND_COUNT).toBe(18);
     expect(SPECTRUM_LABELS[0]).toBe("LOW");
     expect(SPECTRUM_LABELS[8]).toBe("1,25k");
-    expect(SPECTRUM_LABELS[20]).toBe("20k");
+    // The last plotted band is 10k; 12,5k / 16k / 20k are gone entirely.
+    expect(SPECTRUM_LABELS.at(-1)).toBe("10k");
+    expect(SPECTRUM_LABELS).not.toContain("20k");
     expect(bars[0].height).toBe(0); // 55.1 is below the floor
-    expect(bars[20].height).toBe(0); // 74.0 is below the floor too
+    // The last plotted bar is the 10 kHz band, not the old 20 kHz one.
+    expect(bars.at(-1)!.label).toBe("10k");
+    expect(bars.at(-1)!.height).toBe(0); // below the 85-120 fallback floor
     expect(spectrumBars([120, ...Array(20).fill(null)])[0].height).toBe(1);
     expect(spectrumBars([200, ...Array(20).fill(null)])[0].height).toBe(1);
   });
@@ -318,7 +326,19 @@ describe("spectrumScale", () => {
     expect(spectrumScale([withBands(Array(21).fill(null))])).toEqual({ min: 85, max: 120 });
   });
   it("fits the window with 5 dB padding, snapped to 5", () => {
-    expect(spectrumScale([withBands([36.2, ...Array(19).fill(45), 59])])).toEqual({ min: 30, max: 65 });
+    // 36.2 is the lowest PLOTTED band; the 59 sits at index 20 (20 kHz) and
+    // is excluded, so the top comes from the 45s.
+    expect(spectrumScale([withBands([36.2, ...Array(19).fill(45), 59])])).toEqual({ min: 25, max: 55 });
+  });
+  it("ignores the cut bands, so self-noise cannot stretch the axis", () => {
+    // The three cut bands read far above the rest (20 kHz sits ~13 dB over any
+    // mid band even in silence). Letting them set `max` pushed every real bar
+    // into the bottom of the plot — the reason they leave the scale too, not
+    // just the bars.
+    const quiet = Array(PLOTTED_BAND_COUNT).fill(50);
+    const withSelfNoise = [...quiet, 95, 95, 95];
+    expect(withSelfNoise.length).toBe(21);
+    expect(spectrumScale([withBands(withSelfNoise)])).toEqual(spectrumScale([withBands([...quiet, null, null, null])]));
   });
   it("never goes narrower than 30 dB", () => {
     expect(spectrumScale([withBands(Array(21).fill(50))])).toEqual({ min: 35, max: 65 });
