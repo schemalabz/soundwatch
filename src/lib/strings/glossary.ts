@@ -75,9 +75,20 @@ export const METRICS: Record<AggKey, MetricTerm> & Record<"lmin", IntervalOnlyMe
   },
 };
 
-/** "Μέση LAeq" — the name with its code, as the sensor page labels a value. */
+/**
+ * "Μέση (LAeq)" — the name with its code in brackets, as the sensor page
+ * labels a value.
+ *
+ * The brackets are load-bearing. "Μέση LAeq" reads in Greek as adjective plus
+ * noun, "the average LAeq", implying an average taken OF Leq values — but Leq
+ * is itself the energy average, so the label was either redundant or wrong
+ * depending on how you read it. Bracketing makes the Greek word a gloss of the
+ * symbol rather than a modifier of it, and matches what the hints above
+ * already do ("Ενεργειακός μέσος (LAeq)"). Raised by the acoustician
+ * reviewing the page.
+ */
 export function metricLabel(k: MetricKey): string {
-  return `${METRICS[k].label} ${METRICS[k].code}`;
+  return `${METRICS[k].label} (${METRICS[k].code})`;
 }
 
 /** The one caveat that governs every level on every screen. Was dashboardStrings.uncalibrated; verbatim. */

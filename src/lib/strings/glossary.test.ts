@@ -34,7 +34,10 @@ describe("glossary", () => {
   it("declares Lmin's label and code once, and keeps it out of the dashboard's picker", () => {
     // The log used to recover "Ελάχιστη" with tr.card.lmin.split(" ")[0] and
     // spell "Lmin" as a literal in three places.
-    expect(metricLabel("lmin")).toBe(`${METRICS.lmin.label} ${METRICS.lmin.code}`);
+    // Brackets, not a bare space: "Μέση LAeq" read as "average LAeq", an
+    // average OF Leq values, when Leq already IS the energy average.
+    expect(metricLabel("lmin")).toBe(`${METRICS.lmin.label} (${METRICS.lmin.code})`);
+    expect(metricLabel("laeq")).toBe("Μέση (LAeq)");
     // Lmin is interval-only: the dashboard computes no across-intervals
     // sibling, so the metric picker must still carry exactly the five.
     expect(Object.keys(dashboardStrings.aggregations).sort()).toEqual([...AGG_KEYS].sort());
