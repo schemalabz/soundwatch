@@ -84,6 +84,8 @@ services:
     # staging" — point the device at a tunnel instead.
     volumes:
       - mosquitto_data_staging:/mosquitto/data
+      # Broker log file — survives redeploys. See mosquitto/mosquitto.conf.
+      - mosquitto_log_staging:/mosquitto/log
     restart: unless-stopped
 
   postgres:
@@ -157,3 +159,4 @@ services:
 volumes:
   pgdata_staging:
   mosquitto_data_staging:
+  mosquitto_log_staging:

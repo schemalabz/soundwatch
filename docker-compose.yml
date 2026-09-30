@@ -42,6 +42,8 @@ services:
       - "${MQTT_PORT:-1883}:1883"
     volumes:
       - mosquitto_data:/mosquitto/data
+      # Broker log file — survives redeploys. See mosquitto/mosquitto.conf.
+      - mosquitto_log:/mosquitto/log
     restart: unless-stopped
 
   postgres:
@@ -78,3 +80,4 @@ services:
 volumes:
   pgdata:
   mosquitto_data:
+  mosquitto_log:
