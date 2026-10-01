@@ -1,5 +1,5 @@
 import type { Prisma } from "@prisma/client";
-import { HIST_BINS, parseCounts } from "../../../mqtt-ingester/flavor2";
+import { HIST_BINS, HIST_SPARSE_VERSION, decodeHist } from "../../../mqtt-ingester/flavor2";
 import type { ApiReading } from "./schemas";
 
 // Bin 29 of the level histogram is open-ended [88, ∞) device-dB and bin 0 is
@@ -11,18 +11,25 @@ export interface HistCensoring {
   bottomBinCensored: boolean;
 }
 
-export function parseHist(histRaw: string | null): number[] | null {
+// `hist` in the API is the dense 30-bin v<=4 layout. Firmware 1.2 (payload v5)
+// sends a sparse 55-bin layout that this shape cannot carry, so v5 rows serve
+// hist = null until the contract grows a grid-aware field — their L10/L50/L90
+// are computed correctly by the ingester either way.
+export function parseHist(histRaw: string | null, payloadVersion: number | null = null): number[] | null {
   if (histRaw == null) return null;
-  const counts = parseCounts(histRaw);
-  return counts && counts.length === HIST_BINS ? counts : null;
+  if ((payloadVersion ?? 0) >= HIST_SPARSE_VERSION) return null;
+  const h = decodeHist(histRaw, payloadVersion);
+  return h && h.counts.length === HIST_BINS ? h.counts : null;
 }
 
-export function deriveCensoring(histRaw: string | null): HistCensoring | null {
-  const counts = parseHist(histRaw);
-  if (!counts) return null;
+export function deriveCensoring(histRaw: string | null, payloadVersion: number | null = null): HistCensoring | null {
+  if (histRaw == null) return null;
+  const h = decodeHist(histRaw, payloadVersion);
+  if (!h) return null;
+  if (h.counts.length === 0) return { topBinCensored: false, bottomBinCensored: false };
   return {
-    topBinCensored: counts[HIST_BINS - 1] > 0,
-    bottomBinCensored: counts[0] > 0,
+    topBinCensored: h.topOpen && h.counts[h.counts.length - 1] > 0,
+    bottomBinCensored: h.bottomOpen && h.counts[0] > 0,
   };
 }
 
@@ -127,7 +134,7 @@ export function toBandsDb(value: ReadingRow["bandsDb"]): (number | null)[] | nul
 }
 
 export function serializeReading(r: ReadingRow): ApiReading {
-  const censoring = deriveCensoring(r.histRaw);
+  const censoring = deriveCensoring(r.histRaw, r.payloadVersion);
   return {
     recordedAt: r.recordedAt.toISOString(),
     receivedAt: r.receivedAt.toISOString(),
@@ -139,7 +146,7 @@ export function serializeReading(r: ReadingRow): ApiReading {
     bottomBinCensored: censoring?.bottomBinCensored ?? null,
     lmaxEst: r.lmaxEst,
     lminEst: r.lminEst,
-    hist: parseHist(r.histRaw),
+    hist: parseHist(r.histRaw, r.payloadVersion),
     bandsDb: toBandsDb(r.bandsDb),
     realizedDuty: r.realizedDuty,
     frameCount: r.frameCount,

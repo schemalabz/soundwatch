@@ -1,4 +1,11 @@
-import { HIST_BIN_DB, HIST_BINS, HIST_MIN_DB } from "../../../mqtt-ingester/flavor2";
+import {
+  HIST_BIN_DB,
+  HIST_BINS,
+  HIST_MIN_DB,
+  HIST_SPARSE_VERSION,
+  HIST_V5_BINS,
+  HIST_V5_MIN_DB,
+} from "../../../mqtt-ingester/flavor2";
 import type { ApiReading } from "./schemas";
 
 // Rendering helpers for censored levels. The README tells consumers to render
@@ -16,6 +23,11 @@ export const BOTTOM_BIN_CEILING_DB = HIST_MIN_DB + HIST_BIN_DB;
  *  ceiling, so this is the last edge that exists, not a maximum level. The
  *  Greek copy that explains "≥" quotes it. */
 export const HIST_TOP_DB = HIST_MIN_DB + HIST_BINS * HIST_BIN_DB;
+/** Firmware 1.2 (payload v5) moved both open-ended bins out to the edges of a
+ *  20-130 grid: the top bin starts at 128, the bottom bin ends at 22. A v5 flag
+ *  judged against v4's 88/32 would put "≥" on exact values. */
+export const V5_TOP_BIN_FLOOR_DB = HIST_V5_MIN_DB + (HIST_V5_BINS - 1) * HIST_BIN_DB;
+export const V5_BOTTOM_BIN_CEILING_DB = HIST_V5_MIN_DB + HIST_BIN_DB;
 
 export type LevelBound = "lower" | "upper" | null;
 
@@ -40,7 +52,7 @@ export interface DescribedLevel {
  */
 type DeviceCensoring = Pick<
   ApiReading,
-  "topBinCensored" | "bottomBinCensored"
+  "topBinCensored" | "bottomBinCensored" | "payloadVersion"
 >;
 
 /**
@@ -64,10 +76,14 @@ export function describeLevel(
   const n = value.toFixed(decimals);
   const shown = Number(n);
 
+  // The open-ended bins sit where the reading's own histogram layout put them.
+  const v5 = (censoring.payloadVersion ?? 0) >= HIST_SPARSE_VERSION;
+  const topFloor = v5 ? V5_TOP_BIN_FLOOR_DB : TOP_BIN_FLOOR_DB;
+  const bottomCeiling = v5 ? V5_BOTTOM_BIN_CEILING_DB : BOTTOM_BIN_CEILING_DB;
   const bound: LevelBound =
-    censoring.topBinCensored && shown >= TOP_BIN_FLOOR_DB
+    censoring.topBinCensored && shown >= topFloor
       ? "lower"
-      : censoring.bottomBinCensored && shown <= BOTTOM_BIN_CEILING_DB
+      : censoring.bottomBinCensored && shown <= bottomCeiling
         ? "upper"
         : null;
 

@@ -89,3 +89,23 @@ describe("isLmaxLowerBound", () => {
     expect(isLmaxLowerBound({ topBinCensored: null })).toBe(false);
   });
 });
+
+describe("describeLevel on firmware 1.2 (payload v5) readings", () => {
+  // v5's open-ended bins are at 128+ and below 22, not 88+ and below 32.
+  it("leaves an exact 95 dB L10 alone even when the interval had a >=128 frame", () => {
+    const d = describeLevel(95, { topBinCensored: true, payloadVersion: 5 });
+    expect(d.bound).toBeNull();
+    expect(d.display).toBe("95.0");
+  });
+  it("still bounds a percentile that lands in the v5 top bin", () => {
+    expect(describeLevel(128.4, { topBinCensored: true, payloadVersion: 5 }).bound).toBe("lower");
+  });
+  it("leaves an exact 30 dB L90 alone; bounds one at or below 22", () => {
+    expect(describeLevel(30, { bottomBinCensored: true, payloadVersion: 5 }).bound).toBeNull();
+    expect(describeLevel(21.5, { bottomBinCensored: true, payloadVersion: 5 }).bound).toBe("upper");
+  });
+  it("keeps 1.1 (v4) behaviour unchanged", () => {
+    expect(describeLevel(88.5, { topBinCensored: true, payloadVersion: 4 }).bound).toBe("lower");
+    expect(describeLevel(88.5, { topBinCensored: true }).bound).toBe("lower");
+  });
+});

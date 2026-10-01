@@ -76,7 +76,7 @@ export function deriveReadingRow(reading: ParsedReading, receivedAt: Date): Read
   // Flavor 1 (Step 4): turn raw accumulators into LAeq / realized_duty / Lmax-Lmin.
   const f1 = computeFlavor1({ ...reading, intervalMs });
   // Flavor 2: percentiles from the level histogram + band dB from the packed spectrum.
-  const pct = reading.histRaw ? computePercentiles(reading.histRaw) : null;
+  const pct = reading.histRaw ? computePercentiles(reading.histRaw, reading.payloadVersion) : null;
   const bandsDb = reading.bandsRaw ? decodeBandsDb(reading.bandsRaw) : null;
   // Device health telemetry (id 243) — uptime, heap, reset cause, churn counters.
   const diag = decodeDiagnostics(reading.diagRaw);
