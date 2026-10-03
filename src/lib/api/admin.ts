@@ -1,0 +1,59 @@
+// Response contracts for the admin fleet surfaces. The routes are annotated
+// with these and the pages import them, so a renamed field fails to compile
+// instead of arriving as undefined (same pattern as lib/api/dashboard.ts).
+import type { CellState, FleetStatus, SilentCause } from "@/lib/fleet/status";
+
+export interface FleetNetwork {
+  /** Latest public IP the unit connected from (broker log). */
+  ip: string | null;
+  /** "Nova", "Cyta", "OTE"… from reverse DNS / registry; null = unknown. */
+  provider: string | null;
+  /** Reverse DNS says static (e.g. static…hol.gr); false = dynamic pool; null = unknown. */
+  staticIp: boolean | null;
+  /** Distinct public IPs over the last 7 days. */
+  ips7d: number;
+  /** Connects from a NEW public IP in the last 7 days = store router restarts. */
+  routerRestarts7d: number;
+}
+
+export interface FleetUnit {
+  id: string;
+  deviceId: string;
+  apName: string | null;
+  hardwareId: string | null;
+  name: string | null;
+  address: string | null;
+  site: { id: string; name: string } | null;
+  latitude: number | null;
+  longitude: number | null;
+  status: FleetStatus;
+  /** Why "watch" (or empty). */
+  watchReasons: string[];
+  /** For silent units: what the last readings say. */
+  silentCause: SilentCause | null;
+  lastReceivedAt: string | null;
+  provisionedAt: string | null;
+  installedAt: string | null;
+  handedOverAt: string | null;
+  retiredAt: string | null;
+  supersededBy: { id: string; deviceId: string } | null;
+  firmware: string | null;
+  /** 12-hour cells, oldest first, covering the last 30 days. */
+  cells: CellState[];
+  /** Share of hours since max(install, 7 days ago) with any reading; null when not installed. */
+  completeness7d: number | null;
+  rssiAvg24h: number | null;
+  rssiMin7d: number | null;
+  batteryLast: number | null;
+  unscheduledBoots7d: number;
+  /** Energy-average level over 7 days (LAeq), from the level rollup. */
+  laeq7d: number | null;
+  network: FleetNetwork;
+}
+
+export interface FleetResponse {
+  generatedAt: string;
+  cellHours: number;
+  windowDays: number;
+  units: FleetUnit[];
+}

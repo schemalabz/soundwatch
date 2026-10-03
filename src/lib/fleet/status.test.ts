@@ -25,6 +25,7 @@ describe("lifecycleStatus", () => {
   it("retired wins over everything, bench next", () => {
     expect(lifecycleStatus({ ...base, retiredAt: now, isExperimental: true }, now)).toBe("retired");
     expect(lifecycleStatus({ ...base, isExperimental: true }, now)).toBe("bench");
+    expect(lifecycleStatus({ ...base, isActive: false }, now)).toBe("retired");
   });
 
   it("walks minted → in box → with installer before install", () => {

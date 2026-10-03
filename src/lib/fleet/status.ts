@@ -30,6 +30,9 @@ export type FleetStatus =
 
 export interface StatusInput {
   retiredAt: Date | null;
+  /** false = hidden from the public; a unit switched off before retirement
+   *  existed (sck-exarchia) counts as retired. Defaults to true. */
+  isActive?: boolean;
   isExperimental: boolean;
   provisionedAt: Date | null;
   handedOverAt: Date | null;
@@ -46,7 +49,7 @@ export interface Last24h {
 }
 
 export function lifecycleStatus(s: StatusInput, now: Date): FleetStatus {
-  if (s.retiredAt) return "retired";
+  if (s.retiredAt || s.isActive === false) return "retired";
   if (s.isExperimental) return "bench";
   if (!s.installedAt) {
     if (s.handedOverAt) return "with_installer";
