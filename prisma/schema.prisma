@@ -9,42 +9,56 @@ datasource db {
 }
 
 model Sensor {
-  id                String    @id @default(uuid())
-  deviceId          String    @unique @map("device_id")
-  name              String?
-  latitude          Float?
-  longitude         Float?
-  address           String?
-  firmwareVersion   String?   @map("firmware_version")
-  targetFirmwareVersion String? @map("target_firmware_version")
-  readingIntervalS  Int       @default(60) @map("reading_interval_s")
-  isActive          Boolean   @default(true) @map("is_active")
-  lastSeenAt        DateTime? @map("last_seen_at") @db.Timestamptz(3)
+  id                    String           @id @default(uuid())
+  deviceId              String           @unique @map("device_id")
+  name                  String?
+  latitude              Float?
+  longitude             Float?
+  address               String?
+  firmwareVersion       String?          @map("firmware_version")
+  targetFirmwareVersion String?          @map("target_firmware_version")
+  readingIntervalS      Int              @default(60) @map("reading_interval_s")
+  isActive              Boolean          @default(true) @map("is_active")
+  lastSeenAt            DateTime?        @map("last_seen_at") @db.Timestamptz(3)
   // Unique SAMD21 chip id, self-reported on device/inventory. Survives reflash,
   // token change and relocation — the only identifier that answers "which
   // physical box is this?". Used to catch units swapped during installation.
-  hardwareId        String?   @map("hardware_id")
+  hardwareId            String?          @map("hardware_id")
   // Setup-AP name (Smartcitizen<last4 of softAP MAC>) — recorded at provisioning
   // because it cannot be derived from anything else, and the installer needs it
   // to join the right box when several are on a table.
-  apName            String?   @map("ap_name")
-  provisionedAt     DateTime? @map("provisioned_at") @db.Timestamptz(3)
-  installedAt       DateTime? @map("installed_at") @db.Timestamptz(3)
+  apName                String?          @map("ap_name")
+  provisionedAt         DateTime?        @map("provisioned_at") @db.Timestamptz(3)
+  installedAt           DateTime?        @map("installed_at") @db.Timestamptz(3)
   // Which planned site this unit was confirmed at. Null + coordinates set
   // means an unplanned install (recorded, flagged in admin). Copy-on-bind:
   // name/address are copied at install time, not read through this relation.
-  plannedLocationId String?          @map("planned_location_id")
-  plannedLocation   PlannedLocation? @relation(fields: [plannedLocationId], references: [id])
+  plannedLocationId     String?          @map("planned_location_id")
+  plannedLocation       PlannedLocation? @relation(fields: [plannedLocationId], references: [id])
   // Bench/experimental units: keep them out of public maps and aggregates.
-  isExperimental    Boolean   @default(false) @map("is_experimental")
+  isExperimental        Boolean          @default(false) @map("is_experimental")
   // Read-only share credential for /sensors/[id]?k=... — lets one outside
   // reader (an acoustics expert beside a bench unit) see this sensor's
   // readings without the admin token and without the MQTT token. Null means
   // no link exists. Rotating replaces it; the old link stops at once.
-  shareKey          String?   @unique @map("share_key")
-  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  shareKey              String?          @unique @map("share_key")
+  // Retired: this TOKEN is finished, not necessarily the box. Re-provisioning
+  // mints a new token for the same chip, and the old row used to linger as a
+  // phantom silent unit. Retiring keeps every reading (nothing is deleted) and
+  // points at the token that replaced it. isActive=false is set alongside, so
+  // the public filter needs no change.
+  retiredAt             DateTime?        @map("retired_at") @db.Timestamptz(3)
+  supersededById        String?          @map("superseded_by_id")
+  supersededBy          Sensor?          @relation("Supersedes", fields: [supersededById], references: [id])
+  supersedes            Sensor[]         @relation("Supersedes")
+  // Handed to the installer: between "in box" and "installed". Without it a
+  // box in a van and a box on our shelf look identical.
+  handedOverAt          DateTime?        @map("handed_over_at") @db.Timestamptz(3)
+  createdAt             DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
 
-  readings Reading[]
+  readings  Reading[]
+  events    DeviceEvent[]
+  incidents Incident[]
 
   @@map("sensors")
 }
@@ -103,38 +117,38 @@ model Reading {
   sdCard      Float?   @map("sd_card")
 
   // Flavor 1 (Step 4): raw device accumulators + server-computed levels.
-  payloadVersion Int?    @map("payload_version")
-  energySum      Float?  @map("energy_sum")
-  frameCount     Int?    @map("frame_count")
-  intervalS      Int?    @map("interval_s")
-  intervalMs     Int?    @map("interval_ms")
-  maxEnergy      Float?  @map("max_energy")
-  minEnergy      Float?  @map("min_energy")
+  payloadVersion Int?   @map("payload_version")
+  energySum      Float? @map("energy_sum")
+  frameCount     Int?   @map("frame_count")
+  intervalS      Int?   @map("interval_s")
+  intervalMs     Int?   @map("interval_ms")
+  maxEnergy      Float? @map("max_energy")
+  minEnergy      Float? @map("min_energy")
   laeq           Float?
-  realizedDuty   Float?  @map("realized_duty")
-  lmaxEst        Float?  @map("lmax_est")
-  lminEst        Float?  @map("lmin_est")
+  realizedDuty   Float? @map("realized_duty")
+  lmaxEst        Float? @map("lmax_est")
+  lminEst        Float? @map("lmin_est")
 
   // Flavor 2: packed spectrum (raw) + computed percentiles/band dB.
-  histRaw        String? @map("hist_raw")
-  bandsRaw       String? @map("bands_raw")
-  l10            Float?
-  l50            Float?
-  l90            Float?
-  bandsDb        Json?   @map("bands_db")
+  histRaw           String? @map("hist_raw")
+  bandsRaw          String? @map("bands_raw")
+  l10               Float?
+  l50               Float?
+  l90               Float?
+  bandsDb           Json?   @map("bands_db")
   // Device health telemetry, unpacked from id 243. The only window into a
   // deployed unit — no site access, no SAM-side OTA.
-  deviceUptimeS  Int?    @map("device_uptime_s")
-  freeHeapBytes  Int?    @map("free_heap_bytes")
+  deviceUptimeS     Int?    @map("device_uptime_s")
+  freeHeapBytes     Int?    @map("free_heap_bytes")
   // SAMD21 RCAUSE. 32 = watchdog. 64 = "SYST", which covers BOTH a software
   // reset and a power cycle (the UF2 bootloader resets before the app runs),
   // so 64 cannot distinguish "lost power" from "reset itself".
-  resetCause     Int?    @map("reset_cause")
-  wifiConnects   Int?    @map("wifi_connects")
-  publishFails   Int?    @map("publish_fails")
-  captureFails   Int?    @map("capture_fails")
-  i2sReinits     Int?    @map("i2s_reinits")
-  ghostRefusals  Int?    @map("ghost_refusals")
+  resetCause        Int?    @map("reset_cause")
+  wifiConnects      Int?    @map("wifi_connects")
+  publishFails      Int?    @map("publish_fails")
+  captureFails      Int?    @map("capture_fails")
+  i2sReinits        Int?    @map("i2s_reinits")
+  ghostRefusals     Int?    @map("ghost_refusals")
   // Release 1.0 build stamp: which firmware produced this row. Before it, the
   // only record of what a unit ran was a table in a handoff doc. The SAM learns
   // the ESP's hash over the config sync and reports both, so
@@ -171,4 +185,57 @@ model FrameLogChunk {
 
   @@unique([deviceId, day, offset])
   @@map("frame_log_chunks")
+}
+
+// Discrete things that happened to a device, as opposed to its 30-second
+// readings. `boot` comes from the ingester (a reading's uptime went DOWN);
+// `connect` / `disconnect` come from the broker log, the only record of the
+// public IP a unit connects from — a new IP from the same unit means the
+// store's router restarted. Unique on (sensor, kind, at) so re-importing a log
+// is a no-op.
+model DeviceEvent {
+  id       BigInt   @id @default(autoincrement())
+  sensorId String   @map("sensor_id")
+  sensor   Sensor   @relation(fields: [sensorId], references: [id], onDelete: Cascade)
+  kind     String
+  at       DateTime @db.Timestamptz(3)
+  // boot: { uptimeBefore, resetCause, scheduled } · connect: { ip }
+  // disconnect: { ip, reason }
+  detail   Json?
+  source   String
+
+  @@unique([sensorId, kind, at])
+  @@index([sensorId, at(sort: Desc)])
+  @@map("device_events")
+}
+
+// Who a public IP belongs to, looked up once: reverse DNS name and the
+// registry's network name. Turns "91.140.85.214" into "Nova · dynamic DSL".
+model IpInfo {
+  ip         String   @id
+  ptr        String?
+  network    String?
+  lookedUpAt DateTime @default(now()) @map("looked_up_at") @db.Timestamptz(3)
+
+  @@map("ip_info")
+}
+
+// An open problem with a unit, opened and closed by the evaluator. One open
+// incident per (sensor, kind); delivery is de-duplicated by the notified_at
+// columns, so a restart of the evaluator never re-sends.
+model Incident {
+  id                 BigInt    @id @default(autoincrement())
+  sensorId           String    @map("sensor_id")
+  sensor             Sensor    @relation(fields: [sensorId], references: [id], onDelete: Cascade)
+  kind               String
+  openedAt           DateTime  @map("opened_at") @db.Timestamptz(3)
+  closedAt           DateTime? @map("closed_at") @db.Timestamptz(3)
+  cause              String?
+  evidence           Json?
+  notifiedAt         DateTime? @map("notified_at") @db.Timestamptz(3)
+  resolvedNotifiedAt DateTime? @map("resolved_notified_at") @db.Timestamptz(3)
+
+  @@index([sensorId, kind, closedAt])
+  @@index([openedAt(sort: Desc)])
+  @@map("incidents")
 }
