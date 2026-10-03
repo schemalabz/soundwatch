@@ -57,3 +57,39 @@ export interface FleetResponse {
   windowDays: number;
   units: FleetUnit[];
 }
+
+export interface InventoryToken {
+  id: string;
+  deviceId: string;
+  apName: string | null;
+  isExperimental: boolean;
+  createdAt: string;
+  retiredAt: string | null;
+  isActive: boolean;
+}
+
+export interface InventoryBox {
+  key: string;
+  hardwareId: string | null;
+  current: InventoryToken & {
+    status: FleetStatus;
+    provisionedAt: string | null;
+    handedOverAt: string | null;
+    installedAt: string | null;
+    lastReceivedAt: string | null;
+    siteName: string | null;
+    firmware: string | null;
+    batteryLast: number | null;
+    rssiAvg: number | null;
+    bench: { verdict: "passed" | "short" | "none"; text: string } | null;
+  };
+  previous: InventoryToken[];
+  /** Older tokens still active: retire these. */
+  duplicates: InventoryToken[];
+}
+
+export interface InventoryResponse {
+  generatedAt: string;
+  target: number;
+  boxes: InventoryBox[];
+}
