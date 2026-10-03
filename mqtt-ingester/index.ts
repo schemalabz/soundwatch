@@ -4,6 +4,7 @@ import { extractDeviceId, parseSensorPayload } from "./parser";
 import { deriveReadingRow } from "./row";
 import { parseFrameLogChunk } from "./framelog";
 import { recordBootIfAny, tailBrokerLog } from "./events";
+import { startAlerts } from "./alerts";
 
 const MQTT_BROKER_URL = process.env.MQTT_BROKER_URL || "mqtt://localhost:1883";
 // Stock SmartCitizen firmware readings topic: device/sck/<token>/readings/raw.
@@ -216,6 +217,8 @@ function main(): void {
 
   const stopTail = BROKER_LOG_PATH ? tailBrokerLog(prisma, BROKER_LOG_PATH) : () => {};
   if (BROKER_LOG_PATH) console.log(`Following broker log at ${BROKER_LOG_PATH}`);
+  // Fleet alerts. ALERTS=off disables (e.g. a second ingester pointed at the same DB).
+  const stopAlerts = process.env.ALERTS === "off" ? () => {} : startAlerts(prisma, Number(process.env.ALERTS_INTERVAL_MS) || 60_000);
 
   client.on("error", (err) => {
     console.error("MQTT connection error:", err);
@@ -228,6 +231,7 @@ function main(): void {
   process.on("SIGINT", async () => {
     console.log("Shutting down...");
     stopTail();
+    stopAlerts();
     client.end();
     await prisma.$disconnect();
     process.exit(0);
@@ -236,6 +240,7 @@ function main(): void {
   process.on("SIGTERM", async () => {
     console.log("Shutting down...");
     stopTail();
+    stopAlerts();
     client.end();
     await prisma.$disconnect();
     process.exit(0);

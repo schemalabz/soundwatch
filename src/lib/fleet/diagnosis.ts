@@ -95,16 +95,18 @@ export function diagnose(d: DiagnosisInput): { headline: string; evidence: Evide
     });
   }
 
-  const ask =
-    d.cause === "on_battery"
-      ? ["Is the sensor plugged in? Is its socket switched or on a timer?", "Did the store lose power?"]
-      : d.cause === "network_lost_powered"
-        ? [
-            "Is the router on and online?",
-            "Is it on a switched socket or a power strip that staff turn off?",
-            ...(d.routerRestartsBefore.length ? ["Was the internet being worked on that day?"] : []),
-          ]
-        : ["Is the sensor’s light on?", "Is the router on and online?"];
+  return { headline: SILENT_CAUSE_TEXT[d.cause], evidence, ask: askFor(d.cause, d.routerRestartsBefore.length > 0) };
+}
 
-  return { headline: SILENT_CAUSE_TEXT[d.cause], evidence, ask };
+/** What to ask the store about a silent unit — the unit page and the call sheet. */
+export function askFor(cause: SilentCause, routerRestarted: boolean): string[] {
+  if (cause === "on_battery") return ["Is the sensor plugged in? Is its socket switched or on a timer?", "Did the store lose power?"];
+  if (cause === "network_lost_powered") {
+    return [
+      "Is the router on and online?",
+      "Is it on a switched socket or a power strip that staff turn off?",
+      ...(routerRestarted ? ["Was the internet being worked on that day?"] : []),
+    ];
+  }
+  return ["Is the sensor’s light on?", "Is the router on and online?"];
 }

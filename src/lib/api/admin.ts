@@ -184,3 +184,24 @@ export interface UnitDetailResponse {
   lastReading: { receivedAt: string; battery: number | null; rssi: number | null; uptimeS: number | null; laeq: number | null } | null;
   diagnosis: { headline: string; evidence: { claim: string; detail: string; supports: boolean }[]; ask: string[] } | null;
 }
+
+export interface AdminIncident {
+  id: string;
+  kind: "silent" | "router_restarts" | "unscheduled_restarts" | "weak_signal";
+  cause: SilentCause | null;
+  openedAt: string;
+  closedAt: string | null;
+  notifiedAt: string | null;
+  /** How the opening was delivered: "discord", "dry-run", or null (not yet). */
+  delivery: string | null;
+  evidence: Record<string, unknown> | null;
+  unit: { id: string; title: string; apName: string | null; status: FleetStatus };
+}
+
+export interface IncidentsResponse {
+  generatedAt: string;
+  open: AdminIncident[];
+  /** Closed in the last 14 days, newest first. */
+  resolved: AdminIncident[];
+  rules: { silentMinutes: number; routerRestarts24h: number; unscheduledBoots24h: number; weakRssiDbm: number };
+}

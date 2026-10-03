@@ -113,13 +113,13 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
   return (
     <Ctx.Provider value={ctx}>
       <div className="flex min-h-full flex-col bg-background">
-        <header className="sticky top-0 z-20 flex h-16 shrink-0 items-center gap-8 bg-ink px-6 text-white lg:px-12">
-          <Link href="/admin" className="flex items-center gap-2.5">
+        <header className="sticky top-0 z-20 flex shrink-0 flex-wrap items-center gap-x-8 bg-ink px-4 text-white sm:px-6 lg:h-16 lg:flex-nowrap lg:px-12">
+          <Link href="/admin" className="flex h-14 items-center gap-2.5 lg:h-auto">
             <svg width="22" height="22" viewBox="0 0 22 22" fill="none" stroke="var(--sw-sound)" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><path d="M3 11v0M7 7v8M11 3v16M15 7v8M19 10v2" /></svg>
             <span className="text-[17px] font-bold">Soundwatch</span>
-            <span className="rounded-md border border-slate px-2 py-0.5 text-xs text-silver">Admin</span>
+            <span className="hidden rounded-md border border-slate px-2 py-0.5 text-xs text-silver sm:inline">Admin</span>
           </Link>
-          <nav className="flex gap-1 text-sm font-medium" aria-label="Admin sections">
+          <nav className="order-last -mx-1 flex w-full gap-1 overflow-x-auto pb-2 text-sm font-medium lg:order-none lg:mx-0 lg:w-auto lg:pb-0" aria-label="Admin sections">
             {NAV.map((n) => {
               const active = n.href === "/admin" ? pathname === "/admin" || pathname.startsWith("/admin/units") : pathname.startsWith(n.href);
               return (
@@ -127,7 +127,7 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
                   key={n.href}
                   href={n.href}
                   aria-current={active ? "page" : undefined}
-                  className={`rounded-lg px-3.5 py-2 ${active ? "bg-slate text-white" : "text-[#d6d8dc] hover:bg-white/10"}`}
+                  className={`shrink-0 rounded-lg px-3.5 py-2 ${active ? "bg-slate text-white" : "text-[#d6d8dc] hover:bg-white/10"}`}
                 >
                   {n.label}
                 </Link>

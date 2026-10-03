@@ -287,9 +287,10 @@ function Lanes({ hours, events, start, end, tick, since, labelIps = false }: {
 
   return (
     <div className="flex flex-col gap-2.5" role="img" aria-label={`Data, connection, restarts and battery between ${athens(new Date(start).toISOString())} and ${athens(new Date(end).toISOString())}`}>
-      <div className="relative ml-[120px] h-4">
-        {ticks.map((t) => (
-          <span key={t.t} className="absolute -translate-x-1/2 whitespace-nowrap text-xs text-slate" style={{ left: `${pos(t.t)}%` }}>{t.label}</span>
+      <div className="relative ml-[72px] h-4 sm:ml-[120px]">
+        {ticks.map((t, i) => (
+          // On a phone every second (days) or third (hours) tick: they collide otherwise.
+          <span key={t.t} className={`absolute -translate-x-1/2 whitespace-nowrap text-xs text-slate ${i % (tick === "day" ? 2 : 3) ? "hidden sm:block" : ""}`} style={{ left: `${pos(t.t)}%` }}>{t.label}</span>
         ))}
       </div>
       <Lane label="Data">
@@ -327,7 +328,7 @@ function Lanes({ hours, events, start, end, tick, since, labelIps = false }: {
 function Lane({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="flex items-center">
-      <span className="w-[120px] shrink-0 text-[13px] font-medium text-slate">{label}</span>
+      <span className="w-[72px] shrink-0 text-[13px] font-medium text-slate sm:w-[120px]">{label}</span>
       <div className="relative h-[26px] flex-1 overflow-hidden rounded-md bg-[#f6f7f8]">{children}</div>
     </div>
   );
@@ -339,7 +340,7 @@ function LaneLegend() {
     ["bg-[#9aa3b5]", "Connected (shade changes with each new public IP)"],
   ];
   return (
-    <div className="ml-[120px] flex flex-wrap gap-x-[18px] gap-y-1.5 text-xs text-slate">
+    <div className="flex flex-wrap gap-x-[18px] gap-y-1.5 text-xs text-slate sm:ml-[120px]">
       {items.map(([c, l]) => <span key={l} className="flex items-center gap-1.5"><span className={`size-2.5 rounded-sm ${c}`} />{l}</span>)}
       <span className="flex items-center gap-1.5"><span className="h-3 w-[3px] bg-[#8a8f9c]" />Scheduled restart</span>
       <span className="flex items-center gap-1.5"><span className="h-3 w-[3px] bg-loud" />Unscheduled restart</span>

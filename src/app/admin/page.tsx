@@ -90,16 +90,19 @@ export default function FleetPage() {
     : "";
 
   return (
-    <div className="mx-auto flex max-w-[1440px] flex-col gap-7 px-6 py-9 lg:px-12">
+    <div className="mx-auto flex max-w-[1440px] flex-col gap-6 px-4 py-6 sm:gap-7 sm:px-6 sm:py-9 lg:px-12">
       <section className="flex flex-wrap items-end gap-6">
         <div className="flex min-w-0 flex-1 flex-col gap-2">
           <h1 className="text-[32px] font-bold tracking-tight text-ink">Fleet</h1>
           <p className="max-w-[780px] text-base text-slate">{error || headline || "Loading…"}</p>
         </div>
-        <Link href="/admin/sites" className="flex h-11 items-center rounded-[10px] bg-ink px-[18px] text-sm font-semibold text-white">Sites</Link>
+        <div className="flex gap-2.5">
+          <Link href="/admin/call-sheet" className="flex h-11 items-center rounded-[10px] border border-silver bg-white px-[18px] text-sm font-semibold text-ink">Call sheet</Link>
+          <Link href="/admin/sites" className="flex h-11 items-center rounded-[10px] bg-ink px-[18px] text-sm font-semibold text-white">Sites</Link>
+        </div>
       </section>
 
-      <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <section className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
         <Tile label="Installed units sending data" value={fleet ? `${live.length}` : "—"} unit={`of ${deployed.length}`}>
           <div className="flex h-2 gap-[3px]">
             <div className="rounded-[3px] bg-ok" style={{ flexGrow: live.length }} />
@@ -202,11 +205,11 @@ export default function FleetPage() {
 
 function Tile({ label, value, unit, children }: { label: string; value: string; unit: string; children?: React.ReactNode }) {
   return (
-    <div className="flex flex-col gap-2.5 rounded-xl border border-border bg-white px-5 py-[18px]">
+    <div className="flex flex-col gap-2 rounded-xl border border-border bg-white px-3.5 py-3.5 sm:gap-2.5 sm:px-5 sm:py-[18px]">
       <span className="text-[13px] text-slate">{label}</span>
-      <div className="flex items-baseline gap-1.5">
-        <span className="text-[30px] font-bold tabular-nums text-ink">{value}</span>
-        <span className="text-base text-slate">{unit}</span>
+      <div className="flex flex-wrap items-baseline gap-x-1.5">
+        <span className="text-2xl font-bold tabular-nums text-ink sm:text-[30px]">{value}</span>
+        <span className="text-sm text-slate sm:text-base">{unit}</span>
       </div>
       {children}
     </div>
@@ -227,17 +230,17 @@ function AttentionCard({ u, now }: { u: FleetUnit; now: number }) {
     !u.network.ip && u.status === "silent" && "no connection records",
   ].filter(Boolean).join(" · ");
   return (
-    <Link href={`/admin/units/${u.id}`} className="flex items-start gap-4 rounded-xl border border-border bg-white px-[18px] py-4 hover:border-silver">
+    <Link href={`/admin/units/${u.id}`} className="flex flex-wrap items-start gap-x-4 gap-y-2 rounded-xl border border-border bg-white px-[18px] py-4 hover:border-silver">
       <StatusDot status={u.status} className="mt-1.5" />
       <div className="flex min-w-0 flex-1 flex-col gap-1">
-        <div className="flex items-baseline gap-2.5">
+        <div className="flex flex-wrap items-baseline gap-x-2.5">
           <span className="text-[15px] font-semibold text-ink">{unitTitle(u)}</span>
-          <span className="font-mono text-xs text-slate">{unitSubtitle(u)}</span>
+          <span className="hidden font-mono text-xs text-slate sm:inline">{unitSubtitle(u)}</span>
         </div>
         <span className="text-sm text-ink">{why}</span>
         {evidence && <span className="text-[13px] text-slate">{evidence}</span>}
       </div>
-      <div className="flex shrink-0 flex-col items-end gap-1">
+      <div className="flex w-full shrink-0 items-baseline gap-2 pl-[26px] sm:w-auto sm:flex-col sm:items-end sm:gap-1 sm:pl-0">
         <span className={`text-[13px] font-semibold ${meta.text}`}>
           {u.status === "silent" ? `Silent ${ago(u.lastReceivedAt, now).replace(" ago", "")}` : meta.label}
         </span>

@@ -30,6 +30,8 @@ services:
       - BROKER_LOG_PATH=/broker-log/mosquitto.log
       # Discord webhook for fleet alerts. Unset = alerts are logged, not sent.
       - DISCORD_WEBHOOK_URL=${DISCORD_WEBHOOK_URL:-}
+      # Base of the links in alert messages (…/admin/units/<id>).
+      - ADMIN_BASE_URL=${NEXT_PUBLIC_BASE_URL:-}
     volumes:
       - mosquitto_log:/broker-log:ro
     depends_on:
