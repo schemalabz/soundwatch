@@ -93,3 +93,47 @@ export interface InventoryResponse {
   target: number;
   boxes: InventoryBox[];
 }
+
+export interface SiteUnit {
+  id: string;
+  deviceId: string;
+  apName: string | null;
+  status: FleetStatus;
+  lastReceivedAt: string | null;
+  provider: string | null;
+  routerRestarts7d: number;
+}
+
+export interface AdminSite {
+  id: string;
+  key: string;
+  name: string;
+  address: string | null;
+  notes: string | null;
+  latitude: number;
+  longitude: number;
+  isActive: boolean;
+  units: SiteUnit[];
+  /** live / watch / silent from its best unit; waiting = no unit yet. */
+  stage: "live" | "watch" | "silent" | "waiting";
+}
+
+/** An installed unit with coordinates but no site — candidates for linking. */
+export interface UnlinkedUnit {
+  id: string;
+  deviceId: string;
+  apName: string | null;
+  name: string | null;
+  address: string | null;
+  latitude: number;
+  longitude: number;
+  status: FleetStatus;
+  installedAt: string | null;
+}
+
+export interface SitesResponse {
+  generatedAt: string;
+  target: number;
+  sites: AdminSite[];
+  unlinked: UnlinkedUnit[];
+}

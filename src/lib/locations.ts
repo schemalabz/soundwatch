@@ -1,6 +1,8 @@
 // Pure decision logic for planned deployment sites. Route handlers stay thin;
 // everything with a truth table lives here, where vitest can reach it.
 
+import { parseLatLon } from "@/lib/api/adminInput";
+
 export const LIVE_WINDOW_MS = 5 * 60 * 1000;
 
 // What "a sensor exists" means to the PUBLIC (map, leaderboard): active, not a
@@ -46,12 +48,8 @@ export function parseImportRows(body: unknown): { rows: ImportRow[] } | { error:
     const r = body[i] as Record<string, unknown>;
     const name = typeof r?.name === "string" ? r.name.trim() : "";
     if (!name) return { error: `row ${i}: name is required` };
-    const latitude = Number(r.latitude);
-    const longitude = Number(r.longitude);
-    if (!Number.isFinite(latitude) || latitude < -90 || latitude > 90 ||
-        !Number.isFinite(longitude) || longitude < -180 || longitude > 180) {
-      return { error: `row ${i}: valid latitude and longitude required` };
-    }
+    const at = parseLatLon(r.latitude, r.longitude);
+    if (!at) return { error: `row ${i}: valid latitude and longitude required` };
     const key = typeof r.key === "string" && r.key.trim() ? r.key.trim() : slugifyKey(name);
     if (!key) return { error: `row ${i}: key is empty after slugify` };
     if (seen.has(key)) return { error: `row ${i}: duplicate key "${key}" in import` };
@@ -59,8 +57,8 @@ export function parseImportRows(body: unknown): { rows: ImportRow[] } | { error:
     rows.push({
       key,
       name,
-      latitude,
-      longitude,
+      latitude: at.latitude,
+      longitude: at.longitude,
       ...(typeof r.address === "string" && r.address ? { address: r.address } : {}),
       ...(typeof r.notes === "string" && r.notes ? { notes: r.notes } : {}),
       ...(typeof r.isActive === "boolean" ? { isActive: r.isActive } : {}),

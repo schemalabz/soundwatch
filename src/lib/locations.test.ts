@@ -50,6 +50,14 @@ describe("parseImportRows", () => {
     expect(r).toHaveProperty("error");
     expect((r as { error: string }).error).toContain("row 0");
   });
+  it("rejects exactly 0,0 — the empty form submitted, never a store", () => {
+    const r = parseImportRows([{ name: "X", latitude: 0, longitude: 0 }]);
+    expect((r as { error: string }).error).toContain("row 0");
+  });
+  it("rejects non-numeric coordinates", () => {
+    const r = parseImportRows([{ name: "X", latitude: "37.98", longitude: "23.72" }]);
+    expect((r as { error: string }).error).toContain("row 0");
+  });
   it("passes isActive through for retirement, omits it when absent", () => {
     const r = parseImportRows([
       { name: "Live", latitude: 1, longitude: 1 },

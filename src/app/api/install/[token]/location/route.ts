@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { decideLocationWrite } from "@/lib/locations";
+import { loadSiteForBinding } from "@/lib/server/siteBinding";
 
 /**
  * The installer tells us where the unit ended up.
@@ -43,15 +44,10 @@ export async function POST(
   let site: { id: string; name: string; address: string | null } | null = null;
   let siteOccupiedByOther = false;
   if (plannedLocationId != null) {
-    const found = await prisma.plannedLocation.findUnique({
-      where: { id: String(plannedLocationId) },
-      include: { sensors: { select: { deviceId: true } } },
-    });
-    if (!found || !found.isActive) {
-      return NextResponse.json({ error: "unknown or retired planned location" }, { status: 400 });
-    }
-    site = { id: found.id, name: found.name, address: found.address };
-    siteOccupiedByOther = found.sensors.some((s) => s.deviceId !== token);
+    const found = await loadSiteForBinding(prisma, String(plannedLocationId), { deviceId: token });
+    if (!found.ok) return NextResponse.json({ error: found.error }, { status: 400 });
+    site = found.site;
+    siteOccupiedByOther = found.occupiedBy.length > 0;
   }
 
   const decision = decideLocationWrite({

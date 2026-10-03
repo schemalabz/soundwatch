@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { checkAdminAuth } from "../auth";
-import { computeStage, parseImportRows } from "@/lib/locations";
+import { computeStage, parseImportRows, slugifyKey } from "@/lib/locations";
 
 // The site list's source of truth is the operator's spreadsheet. This endpoint
 // makes re-import idempotent: upsert by key, never duplicate. Sites absent
@@ -51,4 +51,22 @@ export async function GET(request: Request) {
       filledBy: sensors.map((s) => ({ deviceId: s.deviceId, stage: computeStage(s, now) })),
     }))
   );
+}
+
+// One site from the admin UI. Same identity rule as the import: the key is
+// the slugified name unless given, and a taken key is a conflict, not an
+// overwrite — the UI edits through PATCH /api/admin/locations/[id].
+export async function POST(request: Request) {
+  const authError = checkAdminAuth(request);
+  if (authError) return authError;
+
+  const body = await request.json().catch(() => null);
+  const parsed = parseImportRows(body == null ? null : [body]);
+  if ("error" in parsed) return NextResponse.json({ error: parsed.error.replace(/^row 0: /, "") }, { status: 400 });
+  const { key, ...data } = parsed.rows[0];
+  if (await prisma.plannedLocation.findUnique({ where: { key } })) {
+    return NextResponse.json({ error: `a site with key "${key}" already exists` }, { status: 409 });
+  }
+  const site = await prisma.plannedLocation.create({ data: { key: key || slugifyKey(data.name), ...data } });
+  return NextResponse.json(site, { status: 201 });
 }
