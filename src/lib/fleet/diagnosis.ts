@@ -87,10 +87,18 @@ export function diagnose(d: DiagnosisInput): { headline: string; evidence: Evide
     });
   }
 
+  if (!d.lastDisconnect && d.routerRestartsBefore.length === 0) {
+    evidence.push({
+      claim: "No connection records for that day",
+      detail: "The broker’s log does not reach back to it (kept since Sep 24), so router restarts cannot be checked.",
+      supports: false,
+    });
+  }
+
   if (d.unscheduledBootsBefore > 0) {
     evidence.push({
       claim: `${d.unscheduledBootsBefore} unscheduled ${d.unscheduledBootsBefore === 1 ? "restart" : "restarts"}`,
-      detail: "Outside the 06:00 daily restart, in the day before it went silent.",
+      detail: "Outside the daily scheduled restart, in the day before it went silent.",
       supports: d.routerRestartsBefore.length > 0,
     });
   }

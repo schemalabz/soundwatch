@@ -11,7 +11,7 @@ const healthy: AlertUnit = {
 
 describe("evaluate", () => {
   it("a healthy unit opens nothing", () => {
-    expect(evaluate([healthy], [], now)).toEqual({ open: [], close: [] });
+    expect(evaluate([healthy], [], now)).toEqual({ open: [], close: [], closeQuiet: [] });
   });
 
   it("silent for 30 minutes opens a silent incident with its likely cause", () => {
@@ -28,15 +28,31 @@ describe("evaluate", () => {
 
   it("an already-open incident is not opened twice", () => {
     const silent = { ...healthy, lastReceivedAt: new Date(now.getTime() - 3600_000) };
-    expect(evaluate([silent], [{ id: 1, sensorId: "s1", kind: "silent" }], now)).toEqual({ open: [], close: [] });
+    expect(evaluate([silent], [{ id: 1, sensorId: "s1", kind: "silent" }], now)).toEqual({ open: [], close: [], closeQuiet: [] });
   });
 
   it("closes when the unit is back", () => {
     expect(evaluate([healthy], [{ id: 7, sensorId: "s1", kind: "silent" }], now).close).toEqual([7]);
   });
 
-  it("closes incidents of units no longer evaluated (retired)", () => {
-    expect(evaluate([], [{ id: 9, sensorId: "gone", kind: "silent" }], now).close).toEqual([9]);
+  it("closes incidents of units no longer evaluated (retired) quietly — nothing came back", () => {
+    const d = evaluate([], [{ id: 9, sensorId: "gone", kind: "silent" }], now);
+    expect(d.close).toEqual([]);
+    expect(d.closeQuiet).toEqual([9]);
+  });
+
+  it("a unit going silent does not 'resolve' its router-restart incident", () => {
+    const silent = { ...healthy, lastReceivedAt: new Date(now.getTime() - 3600_000), routerRestarts24h: 2 };
+    const d = evaluate([silent], [{ id: 3, sensorId: "s1", kind: "router_restarts" }], now);
+    expect(d.close).toEqual([]);
+    expect(d.open.map((o) => o.kind)).toEqual(["silent"]);
+  });
+
+  it("weak signal has hysteresis: open below −72, resolve only above −69", () => {
+    const openWeak = [{ id: 5, sensorId: "s1", kind: "weak_signal" as const }];
+    expect(evaluate([{ ...healthy, rssiAvg1h: -71 }], openWeak, now).close).toEqual([]);
+    expect(evaluate([{ ...healthy, rssiAvg1h: -68 }], openWeak, now).close).toEqual([5]);
+    expect(evaluate([{ ...healthy, rssiAvg1h: -71 }], [], now).open).toEqual([]);
   });
 
   it("router restarts, unscheduled restarts and weak signal open their own incidents on a live unit", () => {
@@ -65,14 +81,29 @@ describe("discordMessage", () => {
     expect(e.url).toBe("https://soundwatch.gr/admin/units/abc");
   });
 
-  it("a resolved incident says how long it lasted", () => {
+  it("a resolved silence counts from the last reading, not from when it was flagged", () => {
     const m = discordMessage(
-      { kind: "silent", cause: null, openedAt: new Date(now.getTime() - 3 * 3600_000), closedAt: now, evidence: null },
+      { kind: "silent", cause: null, openedAt: new Date(now.getTime() - 2.5 * 3600_000), closedAt: now,
+        evidence: { lastReceivedAt: new Date(now.getTime() - 3 * 3600_000).toISOString() } },
       unit, null,
     );
     const e = m.embeds[0] as { title: string; description: string; url?: string };
     expect(e.title).toBe("✓ Skroutz Δάφνη (05F3) — resolved");
     expect(e.description).toBe("Back after 3 h.");
     expect(e.url).toBeUndefined();
+  });
+
+  it("a weak-signal incident holds through an hour with no RSSI", () => {
+    const d = evaluate([{ ...healthy, rssiAvg1h: null }], [{ id: 1, sensorId: healthy.sensorId, kind: "weak_signal" }], now);
+    expect(d.close).toEqual([]);
+  });
+
+  it("restart incidents resolve without claiming the unit was away", () => {
+    const msg = discordMessage(
+      { kind: "router_restarts", cause: null, openedAt: new Date("2026-10-03T13:00:00Z"), closedAt: new Date("2026-10-04T12:00:00Z"), evidence: { count: 2 } },
+      { title: "Box D084", apName: "Soundwatch-D084", sensorId: "s1" }, null,
+    );
+    const text = (msg.embeds[0] as { description: string }).description;
+    expect(text).toBe("Fewer than 2 router restarts in the last 24 h (open 23 h).");
   });
 });

@@ -243,14 +243,17 @@ function Lanes({ hours, events, start, end, tick, since, labelIps = false }: {
 
   const inWin = hours.filter((h) => { const t = new Date(h.t).getTime(); return t + 3600_000 > start && t < end; });
   const ticks = useMemo(() => {
-    const step = tick === "day" ? 86400_000 : 3 * 3600_000;
-    const out: { t: number; label: string }[] = [];
+    // Walk the window hour by hour and keep Athens midnights (day ticks) or
+    // every third Athens hour — real local time, so DST shifts nothing.
+    const hourOf = new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/Athens", hour: "2-digit", hourCycle: "h23" });
     const fmt = new Intl.DateTimeFormat("en-GB", tick === "day"
       ? { timeZone: "Europe/Athens", month: "short", day: "numeric" }
       : { timeZone: "Europe/Athens", hour: "2-digit", minute: "2-digit" });
-    // Align to Athens midnight / 3-hour marks approximately via UTC+3.
-    const offset = 3 * 3600_000;
-    for (let t = Math.ceil((start + offset) / step) * step - offset; t <= end; t += step) out.push({ t, label: fmt.format(new Date(t)) });
+    const out: { t: number; label: string }[] = [];
+    for (let t = Math.ceil(start / 3600_000) * 3600_000; t <= end; t += 3600_000) {
+      const h = Number(hourOf.format(new Date(t)));
+      if (tick === "day" ? h === 0 : h % 3 === 0) out.push({ t, label: fmt.format(new Date(t)) });
+    }
     return out;
   }, [start, end, tick]);
 

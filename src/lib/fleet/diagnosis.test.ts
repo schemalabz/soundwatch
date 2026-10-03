@@ -44,6 +44,11 @@ describe("diagnose", () => {
     expect(d.evidence.find((e) => e.claim === "It was not on wifi")).toBeTruthy();
   });
 
+  it("Εξάρχεια: silent before the broker log existed says so instead of staying quiet", () => {
+    const d = diagnose({ ...dafni, routerRestartsBefore: [], lastDisconnect: null, unscheduledBootsBefore: 0 });
+    expect(d.evidence.map((e) => e.claim)).toContain("No connection records for that day");
+  });
+
   it("0% battery decides nothing", () => {
     const d = diagnose({ ...dafni, cause: "unknown", batteryLast: 0 });
     expect(d.evidence[0]).toMatchObject({ claim: "Battery tells us nothing", supports: false });

@@ -18,6 +18,18 @@ export const WATCH_ROUTER_RESTARTS = 2;
  *  readings_hour_health definition in scripts/timescale-objects.ts. */
 export const ON_TIME_MS = 30 * 60 * 1000;
 
+/** Events this soon after installed_at belong to the installation, not the
+ *  store: the box moves from the office wifi to the store's, and is power-
+ *  cycled while it is mounted. 4BEF changed public IP 30 min after install
+ *  (Oct 6); D084's first store connect came a minute before installed_at. */
+export const INSTALL_GRACE_MS = 2 * 3600_000;
+
+/** At or below this, the battery says nothing about power: an empty battery
+ *  is "steady" too. 436E read 2% at install (Oct 5) and died the moment
+ *  setup ended. Boxes this low should be charged before they ship. */
+export const LOW_BATTERY_PCT = 10;
+export const needsCharge = (battery: number | null): boolean => battery != null && battery <= LOW_BATTERY_PCT;
+
 export type FleetStatus =
   | "retired"
   | "bench"
@@ -75,15 +87,15 @@ export function fleetStatus(s: StatusInput, h: Last24h, now: Date): FleetStatus 
 }
 
 /**
- * The daily restart is scheduled at 03:00 UTC by the DEVICE's clock, which
- * drifts up to ~25 min either way — and a fast clock restarts twice (once by
- * its drifted clock, once after the resync). 05:00–07:00 Athens covers both.
+ * The daily restart is scheduled at 03:00 UTC by the DEVICE's clock (an RTC
+ * kept in UTC), which drifts up to ~25 min either way — and a fast clock
+ * restarts twice (once by its drifted clock, once after the resync). The
+ * window is 02:00–04:00 UTC, not Athens time: in Athens hours it would move
+ * by an hour when daylight saving ends, and call winter restarts unscheduled.
  */
 export function isScheduledBoot(at: Date): boolean {
-  const hour = Number(
-    new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/Athens", hour: "2-digit", hour12: false }).format(at)
-  );
-  return hour >= 5 && hour < 7;
+  const hour = at.getUTCHours();
+  return hour >= 2 && hour < 4;
 }
 
 /** A reading's uptime is lower than the one before it: the unit restarted. */
@@ -100,15 +112,16 @@ export type SilentCause = "network_lost_powered" | "on_battery" | "unknown";
  * mains keeps running — and uploading — on battery, so its level falls in the
  * readings we DO have. A unit that stopped at a full, steady battery still had
  * power: what vanished was the store's network. Thresholds are deliberately
- * coarse; a battery reading of 0 means "flat or not connected" and decides
- * nothing.
+ * coarse; a battery at or below LOW_BATTERY_PCT means flat or not connected and decides
+ * nothing — unless it is seen draining into it.
  */
 export function silentCause(lastHour: { batteryMin: number | null; batteryMax: number | null; batteryLast: number | null }): SilentCause {
   const { batteryMin, batteryMax, batteryLast } = lastHour;
-  if (batteryLast == null || batteryLast <= 0) return "unknown";
+  if (batteryLast == null) return "unknown";
   if (batteryMax != null && batteryMin != null && batteryMax - batteryMin >= 3 && batteryLast <= batteryMin + 1) {
     return "on_battery";
   }
+  if (needsCharge(batteryLast)) return "unknown";
   if (batteryLast >= 90) return "network_lost_powered";
   return "unknown";
 }

@@ -2,12 +2,14 @@
 // numbers, let src/lib/fleet/alerts.ts decide what opens and closes, and
 // deliver to Discord.
 //
-// Delivery is de-duplicated in the database (notified_at, resolved_notified_at),
-// so a restart never re-sends. Without DISCORD_WEBHOOK_URL it is a dry run: the
-// message is logged and the incident marked delivered-as-dry-run — so plugging
-// the webhook in later does not replay the backlog.
+// Delivery is claimed in the database (notified_at, resolved_notified_at)
+// before each post, so neither a restart nor a second evaluator re-sends.
+// Without DISCORD_WEBHOOK_URL it is a dry run: the message is logged and the
+// incident marked delivered-as-dry-run — so plugging the webhook in later
+// does not replay the backlog.
 import type { PrismaClient } from "@prisma/client";
-import { discordMessage, evaluate, type AlertUnit, type IncidentKind } from "../src/lib/fleet/alerts";
+import { ALERT_SILENT_MS, discordMessage, evaluate, type AlertUnit, type IncidentKind } from "../src/lib/fleet/alerts";
+import { classifiedEvents } from "../src/lib/fleet/eventsSql";
 
 interface UnitRow {
   sensor_id: string;
@@ -24,18 +26,14 @@ interface UnitRow {
 
 async function gather(prisma: PrismaClient, now: Date): Promise<AlertUnit[]> {
   const rows = await prisma.$queryRaw<UnitRow[]>`
-    WITH c AS (
-      SELECT sensor_id, at, detail->>'ip' AS ip,
-             lag(detail->>'ip') OVER (PARTITION BY sensor_id ORDER BY at) AS prev_ip
-      FROM device_events WHERE kind = 'connect' AND at > ${now}::timestamptz - INTERVAL '8 days'
-    )
+    WITH ev AS (${classifiedEvents()})
     SELECT s.id AS sensor_id,
            coalesce(p.name, s.name, s.address, 'Box ' || replace(s.ap_name, 'Soundwatch-', ''), s.device_id) AS title,
            s.ap_name, l.received_at AS last_at, l.battery, h.bmin, h.bmax, h.rssi_avg,
-           (SELECT count(*) FROM device_events e WHERE e.sensor_id = s.id AND e.kind = 'boot'
-              AND (e.detail->>'scheduled')::boolean IS FALSE AND e.at > ${now}::timestamptz - INTERVAL '24 hours')::bigint AS boots_24h,
-           (SELECT count(*) FROM c WHERE c.sensor_id = s.id AND c.prev_ip IS NOT NULL AND c.ip <> c.prev_ip
-              AND c.at > ${now}::timestamptz - INTERVAL '24 hours')::bigint AS router_24h
+           (SELECT count(*) FROM ev WHERE ev.sensor_id = s.id AND ev.unscheduled
+              AND ev.at > ref.t - INTERVAL '24 hours' AND ev.at <= ref.t)::bigint AS boots_24h,
+           (SELECT count(*) FROM ev WHERE ev.sensor_id = s.id AND ev.router_restart
+              AND ev.at > ref.t - INTERVAL '24 hours' AND ev.at <= ref.t)::bigint AS router_24h
     FROM sensors s
     LEFT JOIN planned_locations p ON p.id = s.planned_location_id
     LEFT JOIN LATERAL (
@@ -45,6 +43,12 @@ async function gather(prisma: PrismaClient, now: Date): Promise<AlertUnit[]> {
       SELECT min(battery) AS bmin, max(battery) AS bmax, avg(rssi) AS rssi_avg FROM readings r
       WHERE r.sensor_id = s.id AND r.received_at > l.received_at - INTERVAL '1 hour'
     ) h ON l.received_at IS NOT NULL
+    -- Counts are taken over the 24 h before "now", or, for a silent unit, before
+    -- its last reading: what happened before the silence is the evidence.
+    CROSS JOIN LATERAL (
+      SELECT CASE WHEN l.received_at < ${now}::timestamptz - make_interval(secs => ${ALERT_SILENT_MS / 1000}::double precision)
+                  THEN l.received_at ELSE ${now}::timestamptz END AS t
+    ) ref
     WHERE s.installed_at IS NOT NULL AND s.retired_at IS NULL AND s.is_active AND NOT s.is_experimental`;
   return rows.map((r) => ({
     sensorId: r.sensor_id,
@@ -90,18 +94,34 @@ export async function runAlertsOnce(prisma: PrismaClient, now = new Date()): Pro
   const decision = evaluate(units, open.map((i) => ({ ...i, kind: i.kind as IncidentKind })), now);
 
   for (const o of decision.open) {
-    await prisma.incident.create({
-      data: { sensorId: o.sensorId, kind: o.kind, openedAt: o.since, cause: o.cause, evidence: o.evidence as object },
-    });
-    console.log(`[alerts] opened ${o.kind} for ${o.sensorId}${o.cause ? ` (${o.cause})` : ""}`);
+    try {
+      await prisma.incident.create({
+        data: { sensorId: o.sensorId, kind: o.kind, openedAt: o.since, cause: o.cause, evidence: o.evidence as object },
+      });
+      console.log(`[alerts] opened ${o.kind} for ${o.sensorId}${o.cause ? ` (${o.cause})` : ""}`);
+    } catch (err) {
+      // incidents_one_open (migration 0020): another evaluator opened it first.
+      if ((err as { code?: string })?.code !== "P2002") throw err;
+    }
   }
   if (decision.close.length) {
-    await prisma.incident.updateMany({ where: { id: { in: decision.close.map((x) => BigInt(x)) } }, data: { closedAt: now } });
+    // open_slot back to NULL: the (unit, kind) slot is free for the next one.
+    await prisma.incident.updateMany({ where: { id: { in: decision.close.map((x) => BigInt(x)) } }, data: { closedAt: now, openSlot: null } });
     console.log(`[alerts] closed ${decision.close.length}`);
   }
+  if (decision.closeQuiet.length) {
+    // Retired or uninstalled: closed and marked as announced, so no
+    // "resolved" message claims the unit came back.
+    await prisma.incident.updateMany({
+      where: { id: { in: decision.closeQuiet.map((x) => BigInt(x)) } },
+      data: { closedAt: now, resolvedNotifiedAt: now, openSlot: null },
+    });
+  }
 
-  // Deliver what has not been delivered. Closed before it was ever announced
-  // (opened and resolved inside one tick) = nothing worth saying.
+  // Deliver what has not been delivered. Each message is CLAIMED first (a
+  // conditional update): two evaluators — the ingester and
+  // scripts/alerts-once.ts — never both post. At most once: a crash between
+  // claim and post loses that message, which beats posting it twice.
   const pending = await prisma.incident.findMany({
     where: { OR: [{ notifiedAt: null }, { closedAt: { not: null }, resolvedNotifiedAt: null }] },
     include: { sensor: { select: { apName: true, name: true, address: true, deviceId: true, plannedLocation: { select: { name: true } } } } },
@@ -116,22 +136,52 @@ export async function runAlertsOnce(prisma: PrismaClient, now = new Date()): Pro
       sensorId: inc.sensorId,
     };
     const evidence = (inc.evidence ?? {}) as Record<string, unknown>;
-    if (inc.notifiedAt == null && inc.closedAt != null) {
-      await prisma.incident.update({ where: { id: inc.id }, data: { notifiedAt: now, resolvedNotifiedAt: now } });
+    const resolving = inc.notifiedAt != null;
+    const closedUnannounced = !resolving && inc.closedAt != null;
+    // Opened and resolved inside one tick, never tried: nothing worth saying.
+    // Tried and failed (Discord was down): it happened, so say it once, as
+    // resolved — claiming notifiedAt AND resolvedNotifiedAt in one atomic
+    // update, before posting. Claiming them one at a time (notifiedAt now,
+    // resolvedNotifiedAt only after a successful post) left a window where a
+    // second evaluator reads notifiedAt set, resolvedNotifiedAt still null,
+    // concludes resolving=true, and posts "resolved" again.
+    if (closedUnannounced) {
+      if (evidence.deliveryFailedAt == null) {
+        await prisma.incident.update({ where: { id: inc.id }, data: { notifiedAt: now, resolvedNotifiedAt: now } });
+        continue;
+      }
+      const claim = await prisma.incident.updateMany({
+        where: { id: inc.id, notifiedAt: null, resolvedNotifiedAt: null },
+        data: { notifiedAt: now, resolvedNotifiedAt: now },
+      });
+      if (claim.count === 0) continue;
+      const result = await deliver(discordMessage(
+        { kind: inc.kind as IncidentKind, cause: inc.cause, openedAt: inc.openedAt, closedAt: inc.closedAt, evidence },
+        unit, base,
+      ));
+      if (result === "failed") {
+        // Give both claims back and remember the attempt; retried next tick.
+        await prisma.incident.update({ where: { id: inc.id }, data: { notifiedAt: null, resolvedNotifiedAt: null, evidence: { ...evidence, deliveryFailedAt: now.toISOString() } } });
+        continue;
+      }
+      await prisma.incident.update({ where: { id: inc.id }, data: { evidence: { ...evidence, delivery: result } } });
       continue;
     }
-    const resolving = inc.notifiedAt != null;
+    const field = resolving ? "resolvedNotifiedAt" : "notifiedAt";
+    const claim = await prisma.incident.updateMany({ where: { id: inc.id, [field]: null }, data: { [field]: now } });
+    if (claim.count === 0) continue;
     const result = await deliver(discordMessage(
       { kind: inc.kind as IncidentKind, cause: inc.cause, openedAt: inc.openedAt, closedAt: resolving ? inc.closedAt : null, evidence },
       unit, base,
     ));
-    if (result === "failed") continue; // retried next tick
-    await prisma.incident.update({
-      where: { id: inc.id },
-      data: resolving
-        ? { resolvedNotifiedAt: now }
-        : { notifiedAt: now, evidence: { ...evidence, delivery: result } },
-    });
+    if (result === "failed") {
+      // Give the claim back and remember the attempt; retried next tick.
+      await prisma.incident.update({ where: { id: inc.id }, data: { [field]: null, evidence: { ...evidence, deliveryFailedAt: now.toISOString() } } });
+      continue;
+    }
+    if (!resolving) {
+      await prisma.incident.update({ where: { id: inc.id }, data: { evidence: { ...evidence, delivery: result } } });
+    }
   }
 }
 

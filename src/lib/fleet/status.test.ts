@@ -5,6 +5,7 @@ import {
   isBoot,
   isScheduledBoot,
   lifecycleStatus,
+  needsCharge,
   silentCause,
   watchReasons,
   type StatusInput,
@@ -75,11 +76,12 @@ describe("restarts", () => {
     expect(isBoot(null, 40)).toBe(false);
   });
 
-  it("05:00–07:00 Athens is the scheduled window, both sides of DST", () => {
-    expect(isScheduledBoot(new Date("2026-09-29T03:13:00Z"))).toBe(true); // 06:13 EEST
-    expect(isScheduledBoot(new Date("2026-09-29T02:40:00Z"))).toBe(true); // 05:40, fast clock
+  it("02:00–04:00 UTC is the scheduled window, the same in summer and winter", () => {
+    expect(isScheduledBoot(new Date("2026-09-29T03:13:00Z"))).toBe(true); // 06:13 EEST, slow clock
+    expect(isScheduledBoot(new Date("2026-09-29T02:40:00Z"))).toBe(true); // 05:40 EEST, fast clock
     expect(isScheduledBoot(new Date("2026-09-29T08:58:00Z"))).toBe(false); // 11:58, Δάφνη
-    expect(isScheduledBoot(new Date("2026-12-01T04:10:00Z"))).toBe(true); // 06:10 EET
+    expect(isScheduledBoot(new Date("2026-12-01T02:38:00Z"))).toBe(true); // 04:38 EET, fast clock in winter
+    expect(isScheduledBoot(new Date("2026-12-01T04:10:00Z"))).toBe(false); // 06:10 EET is an hour late in winter
   });
 });
 
@@ -108,5 +110,20 @@ describe("cellState", () => {
     expect(cellState(120, 0, true)).toBe("offline");
     expect(cellState(0, 0, true)).toBe("silent");
     expect(cellState(0, 0, false)).toBe("none");
+  });
+});
+
+describe("low battery", () => {
+  it("needsCharge at and below 10 %", () => {
+    expect(needsCharge(10)).toBe(true);
+    expect(needsCharge(2)).toBe(true);
+    expect(needsCharge(11)).toBe(false);
+    expect(needsCharge(null)).toBe(false);
+  });
+  it("an empty, steady battery decides nothing (436E, Oct 5)", () => {
+    expect(silentCause({ batteryMin: 2, batteryMax: 2, batteryLast: 2 })).toBe("unknown");
+  });
+  it("a battery that drained into the floor still reads as on battery", () => {
+    expect(silentCause({ batteryMin: 8, batteryMax: 60, batteryLast: 8 })).toBe("on_battery");
   });
 });

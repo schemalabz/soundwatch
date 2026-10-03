@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseBrokerLine } from "./events";
+import { isNewBoot, parseBrokerLine } from "./events";
 
 // Real lines from the production broker log (Sep 24 – Oct 3).
 describe("parseBrokerLine", () => {
@@ -38,5 +38,31 @@ describe("parseBrokerLine", () => {
       "2026-10-01T05:51:28+0000: Saving in-memory database to /mosquitto/data//mosquitto.db.",
       "",
     ]) expect(parseBrokerLine(line)).toBeNull();
+  });
+});
+
+describe("isNewBoot", () => {
+  const t = (iso: string) => new Date(iso);
+  it("the daily restart: new boot a day after the previous one", () => {
+    // previous row 06:13:56 with uptime 86241 s; new row uptime 103 s at 06:14:57
+    const bootAt = new Date(t("2026-09-29T03:14:57Z").getTime() - 103_000);
+    expect(isNewBoot(bootAt, t("2026-09-29T03:13:56Z"), 86241, 103)).toBe(true);
+  });
+
+  it("a real restart followed by its own backlog upload (Δάφνη, Sep 29 11:58)", () => {
+    // a backlog row arrived at 08:58:30 with the old uptime 20230; the restart row arrives 08:58:40 with uptime 64
+    const bootAt = new Date(t("2026-09-29T08:58:40Z").getTime() - 64_000);
+    expect(isNewBoot(bootAt, t("2026-09-29T08:58:30Z"), 20230, 64)).toBe(true);
+  });
+
+  it("two restarts five minutes apart (Γαλάτσι, Sep 28) are both restarts", () => {
+    const bootAt = new Date(t("2026-09-28T08:26:44Z").getTime() - 40_000);
+    expect(isNewBoot(bootAt, t("2026-09-28T08:26:20Z"), 290, 40)).toBe(true);
+  });
+
+  it("a row replayed after a 5-minute outage is the same boot", () => {
+    // live row: uptime 20300 at 10:10:00. Replayed row recorded 10:05 (uptime 20000) arrives 10:10:05.
+    const bootAt = new Date(t("2026-10-01T10:10:05Z").getTime() - 20000_000);
+    expect(isNewBoot(bootAt, t("2026-10-01T10:10:00Z"), 20300, 20000)).toBe(false);
   });
 });

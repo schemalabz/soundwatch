@@ -11,6 +11,9 @@ export const ALERT_SILENT_MS = 30 * 60 * 1000;
 export const ALERT_ROUTER_RESTARTS_24H = 2;
 export const ALERT_UNSCHEDULED_BOOTS_24H = 2;
 export const ALERT_WEAK_RSSI_DBM = -72;
+/** Hysteresis: a weak-signal incident resolves only above this, so a unit
+ *  hovering around −72 dBm does not open and resolve every minute. */
+export const ALERT_WEAK_RSSI_CLEAR_DBM = -69;
 
 export type IncidentKind = "silent" | "router_restarts" | "unscheduled_restarts" | "weak_signal";
 
@@ -36,7 +39,11 @@ export interface Decision {
    *  reading plus the threshold, not from whenever the evaluator noticed
    *  (after a deploy, or for a unit silent for weeks, those differ by days). */
   open: { sensorId: string; kind: IncidentKind; cause: SilentCause | null; evidence: Record<string, unknown>; since: Date }[];
+  /** Resolved: announce it. */
   close: (bigint | number)[];
+  /** The unit left the evaluation (retired, uninstalled): close without a
+   *  "resolved" message — nothing came back. */
+  closeQuiet: (bigint | number)[];
 }
 
 /** What is true right now, per unit and kind. */
@@ -60,11 +67,19 @@ export function conditions(u: AlertUnit, now: Date): Map<IncidentKind, Record<st
 
 /** Open what became true, close what stopped being true. One open per (unit, kind). */
 export function evaluate(units: AlertUnit[], open: OpenIncident[], now: Date): Decision {
-  const decision: Decision = { open: [], close: [] };
+  const decision: Decision = { open: [], close: [], closeQuiet: [] };
   const openKey = new Map(open.map((i) => [`${i.sensorId}:${i.kind}`, i]));
   const seen = new Set<string>();
+  const silentUnits = new Set<string>();
   for (const u of units) {
-    for (const [kind, evidence] of conditions(u, now)) {
+    const now_ = conditions(u, now);
+    if (now_.has("silent")) silentUnits.add(u.sensorId);
+    // Hysteresis: an open weak-signal incident holds until the signal clears.
+    if (!now_.has("weak_signal") && openKey.has(`${u.sensorId}:weak_signal`) && !now_.has("silent")
+        && (u.rssiAvg1h == null || u.rssiAvg1h <= ALERT_WEAK_RSSI_CLEAR_DBM)) {
+      seen.add(`${u.sensorId}:weak_signal`);
+    }
+    for (const [kind, evidence] of now_) {
       const key = `${u.sensorId}:${kind}`;
       seen.add(key);
       if (!openKey.has(key)) {
@@ -80,8 +95,12 @@ export function evaluate(units: AlertUnit[], open: OpenIncident[], now: Date): D
   }
   const evaluated = new Set(units.map((u) => u.sensorId));
   for (const i of open) {
-    // Units no longer evaluated (retired, uninstalled) close too.
-    if (!seen.has(`${i.sensorId}:${i.kind}`) || !evaluated.has(i.sensorId)) decision.close.push(i.id);
+    if (!evaluated.has(i.sensorId)) { decision.closeQuiet.push(i.id); continue; }
+    if (seen.has(`${i.sensorId}:${i.kind}`)) continue;
+    // A silent unit's other incidents are not resolved — we just cannot see
+    // them. They stay open until it is back and they clear.
+    if (silentUnits.has(i.sensorId)) continue;
+    decision.close.push(i.id);
   }
   return decision;
 }
@@ -101,6 +120,21 @@ function duration(ms: number): string {
   const h = Math.round(m / 60);
   return h < 48 ? `${h} h` : `${Math.round(h / 24)} days`;
 }
+
+/** When the problem began: a silence began at the last reading, 30 minutes
+ *  before the incident opened; everything else at the opening. */
+export function outageStart(inc: { kind: IncidentKind; openedAt: Date; evidence: Record<string, unknown> | null }): Date {
+  const last = inc.evidence?.lastReceivedAt;
+  return inc.kind === "silent" && typeof last === "string" ? new Date(last) : inc.openedAt;
+}
+
+/** How each kind of incident ends. Only a silence was "away". */
+const RESOLVED_LINE: Record<IncidentKind, (open: string) => string> = {
+  silent: (d) => `Back after ${d}.`,
+  router_restarts: (d) => `Fewer than ${ALERT_ROUTER_RESTARTS_24H} router restarts in the last 24 h (open ${d}).`,
+  unscheduled_restarts: (d) => `Fewer than ${ALERT_UNSCHEDULED_BOOTS_24H} unscheduled restarts in the last 24 h (open ${d}).`,
+  weak_signal: (d) => `Signal back above ${ALERT_WEAK_RSSI_CLEAR_DBM} dBm (open ${d}).`,
+};
 
 /** The Discord webhook body for an incident opening or closing. */
 export function discordMessage(
@@ -123,7 +157,7 @@ export function discordMessage(
   } else if (!resolved && typeof ev.rssiAvg1h === "number") {
     lines.push(`${ev.rssiAvg1h} dBm average over the last hour.`);
   }
-  if (resolved) lines.push(`Back after ${duration(inc.closedAt!.getTime() - inc.openedAt.getTime())}.`);
+  if (resolved) lines.push(RESOLVED_LINE[inc.kind](duration(inc.closedAt!.getTime() - outageStart(inc).getTime())));
 
   const title = resolved
     ? `✓ ${unit.title} (${box}) — resolved`

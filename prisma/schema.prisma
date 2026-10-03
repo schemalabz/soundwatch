@@ -51,6 +51,9 @@ model Sensor {
   supersededById        String?          @map("superseded_by_id")
   supersededBy          Sensor?          @relation("Supersedes", fields: [supersededById], references: [id])
   supersedes            Sensor[]         @relation("Supersedes")
+  // is_active as it was when the token was retired, so an undo restores it —
+  // a unit hidden before retirement existed must not become public on undo.
+  activeBeforeRetire    Boolean?         @map("active_before_retire")
   // Handed to the installer: between "in box" and "installed". Without it a
   // box in a van and a box on our shelf look identical.
   handedOverAt          DateTime?        @map("handed_over_at") @db.Timestamptz(3)
@@ -234,7 +237,13 @@ model Incident {
   evidence           Json?
   notifiedAt         DateTime? @map("notified_at") @db.Timestamptz(3)
   resolvedNotifiedAt DateTime? @map("resolved_notified_at") @db.Timestamptz(3)
+  // true while open, NULL once closed. With the unique index below this
+  // allows one OPEN incident per (unit, kind) — NULLs never collide — so two
+  // evaluators racing (the ingester and scripts/alerts-once.ts) cannot both
+  // open, and announce, the same incident.
+  openSlot           Boolean?  @default(true) @map("open_slot")
 
+  @@unique([sensorId, kind, openSlot], map: "incidents_one_open")
   @@index([sensorId, kind, closedAt])
   @@index([openedAt(sort: Desc)])
   @@map("incidents")

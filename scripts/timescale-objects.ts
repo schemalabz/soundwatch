@@ -373,7 +373,21 @@ async function ensureAggregate(prisma: PrismaClient, agg: Aggregate): Promise<vo
 async function main() {
   const prisma = new PrismaClient();
   try {
-    for (const agg of AGGREGATES) await ensureAggregate(prisma, agg);
+    for (const agg of AGGREGATES) {
+      if (agg.view === "readings_hour_bins") {
+        // The public site reads this one: failing loudly (and holding the
+        // deploy) is the established, deliberate behaviour.
+        await ensureAggregate(prisma, agg);
+        continue;
+      }
+      // Admin-only rollups must not take the public site down with them: log
+      // and carry on. The admin pages that read it fail on their own.
+      try {
+        await ensureAggregate(prisma, agg);
+      } catch (err) {
+        console.error(`[timescale-objects] ${agg.view} not ready — continuing without it:`, err);
+      }
+    }
   } finally {
     await prisma.$disconnect();
   }

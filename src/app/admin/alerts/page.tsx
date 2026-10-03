@@ -10,6 +10,7 @@ import { useAdmin } from "@/components/admin/AdminShell";
 import { ago, athens, boxCode } from "@/components/admin/fleetUi";
 import type { AdminIncident, IncidentsResponse } from "@/lib/api/admin";
 import { SILENT_CAUSE_TEXT } from "@/lib/fleet/status";
+import { outageStart } from "@/lib/fleet/alerts";
 
 const KIND: Record<AdminIncident["kind"], { label: string; dot: string }> = {
   silent: { label: "silent", dot: "bg-loud" },
@@ -66,7 +67,7 @@ export default function AlertsPage() {
           </div>
           {data && data.open.length === 0 && <p className="px-[22px] py-4 text-sm text-slate">Nothing open.</p>}
           {data?.open.map((i) => (
-            <IncidentRow key={i.id} i={i} right={<><span className="text-sm font-medium text-ink">{span(i.openedAt, now)}</span><span className="text-xs text-slate">since {athens(i.openedAt)}</span></>} extra={
+            <IncidentRow key={i.id} i={i} right={<><span className="text-sm font-medium text-ink">{span(outageStart({ kind: i.kind, openedAt: new Date(i.openedAt), evidence: i.evidence }).toISOString(), now)}</span><span className="text-xs text-slate">since {athens(outageStart({ kind: i.kind, openedAt: new Date(i.openedAt), evidence: i.evidence }).toISOString())}</span></>} extra={
               <span className={`text-[13px] ${i.delivery === "discord" ? "text-ok" : "text-slate"}`}>
                 {i.delivery === "discord" ? "Sent to Discord" : i.delivery === "dry-run" ? "Logged (dry run)" : "Not sent yet"}
               </span>
@@ -82,7 +83,7 @@ export default function AlertsPage() {
           {data && data.resolved.length === 0 && <p className="px-[22px] py-4 text-sm text-slate">None.</p>}
           {data?.resolved.slice(0, 30).map((i) => (
             <IncidentRow key={i.id} i={i} muted right={
-              <><span className="text-sm text-ink">lasted {span(i.openedAt, new Date(i.closedAt!).getTime())}</span><span className="font-mono text-xs text-slate">{athens(i.closedAt)}</span></>
+              <><span className="text-sm text-ink">lasted {span(outageStart({ kind: i.kind, openedAt: new Date(i.openedAt), evidence: i.evidence }).toISOString(), new Date(i.closedAt!).getTime())}</span><span className="font-mono text-xs text-slate">{athens(i.closedAt)}</span></>
             } />
           ))}
         </section>
@@ -112,7 +113,7 @@ export default function AlertsPage() {
             <ul className="flex flex-col gap-3 text-sm">
               <Rule name={`Unit silent for ${data.rules.silentMinutes} minutes`} detail="Includes the likely cause: store network lost with the sensor powered, sensor on battery, or unknown." />
               <Rule name="Store router restarting" detail={`The unit reconnects from a new public IP ${data.rules.routerRestarts24h} or more times in 24 hours.`} />
-              <Rule name="Unscheduled restarts" detail={`${data.rules.unscheduledBoots24h} or more outside the 06:00 window in 24 hours.`} />
+              <Rule name="Unscheduled restarts" detail={`${data.rules.unscheduledBoots24h} or more outside the daily scheduled restart (03:00 UTC) in 24 hours.`} />
               <Rule name="Weak wifi signal" detail={`Below ${data.rules.weakRssiDbm} dBm on average over the last hour.`} />
             </ul>
           )}

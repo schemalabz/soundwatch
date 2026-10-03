@@ -1,7 +1,8 @@
 // Device events: the discrete things that happen to a unit, as opposed to its
 // 30-second readings.
 //
-//   boot        — a reading's uptime went DOWN (the ingester sees it arrive)
+//   boot        — the unit restarted: its uptime fell AND the boot it implies
+//                 (arrival − uptime) moved by more than its own uptime (isNewBoot)
 //   connect     — the broker accepted the unit, from a public IP
 //   disconnect  — the broker dropped it, with mosquitto's reason
 //
@@ -91,39 +92,53 @@ export async function lookupIps(prisma: PrismaClient, ips: string[]): Promise<vo
   }
 }
 
+/** Bytes read per tick: bounded memory however large the log grows. */
+const TAIL_CHUNK = 4 * 1024 * 1024;
+
 /**
  * Follow the broker log file: everything on start (idempotent), then the
- * appended bytes every `intervalMs`. A file that shrank was rotated or
+ * appended bytes every `intervalMs`, at most TAIL_CHUNK per pass.
+ *
+ * The read position advances only past complete lines that were imported:
+ * a database error leaves it where it was, and the next tick retries the same
+ * bytes (the import is idempotent). A file that shrank was rotated or
  * replaced — read it again from the top.
  */
 export function tailBrokerLog(prisma: PrismaClient, path: string, intervalMs = 10_000): () => void {
   let offset = 0;
-  let carry = "";
   let busy = false;
   const tick = async () => {
     if (busy) return;
     busy = true;
     try {
-      const size = (await stat(path)).size;
-      if (size < offset) { offset = 0; carry = ""; }
-      if (size === offset) return;
-      const fh = await open(path, "r");
-      try {
-        const buf = Buffer.alloc(size - offset);
-        await fh.read(buf, 0, buf.length, offset);
-        offset = size;
-        const text = carry + buf.toString("utf8");
-        const lines = text.split("\n");
-        carry = lines.pop() ?? ""; // a line still being written
+      for (;;) {
+        const size = (await stat(path)).size;
+        if (size < offset) offset = 0;
+        if (size === offset) return;
+        const fh = await open(path, "r");
+        let buf: Buffer;
+        try {
+          buf = Buffer.alloc(Math.min(TAIL_CHUNK, size - offset));
+          await fh.read(buf, 0, buf.length, offset);
+        } finally {
+          await fh.close();
+        }
+        // Only whole lines: a line still being written is read next time.
+        const end = buf.lastIndexOf(0x0a);
+        if (end < 0) {
+          if (buf.length < TAIL_CHUNK) return; // partial line, wait for the rest
+          offset += buf.length; // a single 4 MB "line" is not a broker log line
+          continue;
+        }
+        const lines = buf.subarray(0, end).toString("utf8").split("\n");
         const events = lines.map(parseBrokerLine).filter((e): e is BrokerEvent => e != null);
         const n = await importBrokerEvents(prisma, events);
+        offset += end + 1;
         if (n > 0) console.log(`broker-log: ${n} new connection events`);
-      } finally {
-        await fh.close();
       }
     } catch (err) {
       const code = (err as { code?: string })?.code;
-      if (code !== "ENOENT") console.error("broker-log tail failed:", err);
+      if (code !== "ENOENT") console.error("broker-log tail failed (will retry):", err);
     } finally {
       busy = false;
     }
@@ -131,6 +146,23 @@ export function tailBrokerLog(prisma: PrismaClient, path: string, intervalMs = 1
   void tick();
   const timer = setInterval(tick, intervalMs);
   return () => clearInterval(timer);
+}
+
+/**
+ * Is a lower uptime a restart, or a replayed row from the same boot?
+ *
+ * Every row implies a boot time: arrival minus uptime. A row replayed after a
+ * short outage (inside the 30-min on-time cut) has a lower uptime than the
+ * live row before it, but implies the SAME boot, give or take the outage. A
+ * real restart implies a boot later than the previous row's by about that
+ * row's whole uptime — more than the new row's own small uptime. Comparing
+ * against the previous row's arrival instead fails for a real restart
+ * followed by its own backlog upload (Δάφνη, Sep 29 11:58: the backlog row
+ * arrived after the boot).
+ */
+export function isNewBoot(bootAt: Date, prevReceivedAt: Date, prevUptimeS: number, uptimeS: number): boolean {
+  const prevBootAt = prevReceivedAt.getTime() - prevUptimeS * 1000;
+  return bootAt.getTime() - prevBootAt > uptimeS * 1000;
 }
 
 /**
@@ -150,8 +182,8 @@ export async function recordBootIfAny(
   const uptime = row.deviceUptimeS;
   if (uptime == null) return;
   if (Math.abs(receivedAt.getTime() - row.recordedAt.getTime()) > ON_TIME_MS) return;
-  const prev = await prisma.$queryRaw<{ up: number | null }[]>`
-    SELECT device_uptime_s AS up FROM readings
+  const prev = await prisma.$queryRaw<{ up: number | null; received_at: Date }[]>`
+    SELECT device_uptime_s AS up, received_at FROM readings
     WHERE sensor_id = ${sensorId}
       AND received_at < ${receivedAt}
       AND abs(extract(epoch FROM received_at - recorded_at)) <= ${ON_TIME_MS / 1000}
@@ -159,6 +191,7 @@ export async function recordBootIfAny(
   if (!isBoot(prev[0]?.up, uptime)) return;
   // Server clock minus uptime: the device clock drifts, the uptime counter does not.
   const at = new Date(receivedAt.getTime() - uptime * 1000);
+  if (!isNewBoot(at, prev[0]!.received_at, prev[0]!.up!, uptime)) return;
   await prisma.deviceEvent.createMany({
     data: [{
       sensorId,

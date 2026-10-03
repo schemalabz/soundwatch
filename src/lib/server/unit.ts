@@ -37,24 +37,7 @@ export async function loadUnit(prisma: PrismaClient, id: string, now: Date): Pro
   ]);
   const unit = fleet.units.find((u) => u.id === id)!;
 
-  // Mark connects from a new public IP (router restarts): walk oldest → newest.
-  const asc = [...events].reverse();
-  let prevIp: string | null = null;
-  const out: UnitEvent[] = asc.map((e): UnitEvent => {
-    const d = e.detail ?? {};
-    if (e.kind === "connect") {
-      const ip = String(d.ip ?? "");
-      const ev: UnitEvent = { at: e.at.toISOString(), kind: "connect", ip, newIp: prevIp != null && ip !== prevIp };
-      prevIp = ip;
-      return ev;
-    }
-    if (e.kind === "disconnect") return { at: e.at.toISOString(), kind: "disconnect" as const, ip: String(d.ip ?? ""), reason: String(d.reason ?? "") };
-    return {
-      at: e.at.toISOString(), kind: "boot" as const,
-      scheduled: Boolean(d.scheduled), uptimeBefore: Number(d.uptimeBefore ?? 0),
-      resetCause: d.resetCause == null ? null : Number(d.resetCause),
-    };
-  }).reverse();
+  const out = toUnitEvents(events);
 
   const ips = [...new Set(out.filter((e) => e.ip).map((e) => e.ip!))];
   const infos = ips.length ? await prisma.ipInfo.findMany({ where: { ip: { in: ips } } }) : [];
@@ -68,11 +51,17 @@ export async function loadUnit(prisma: PrismaClient, id: string, now: Date): Pro
       SELECT avg(rssi) AS rssi_avg, max(publish_fails) AS fails, min(battery) AS bmin, max(battery) AS bmax
       FROM readings
       WHERE sensor_id = ${id} AND received_at > ${lastAt}::timestamptz - INTERVAL '1 hour' AND received_at <= ${lastAt}::timestamptz`;
-    const dayBefore = (e: UnitEvent) => {
-      const t = new Date(e.at).getTime();
-      return t <= lastAt.getTime() + 10 * 60_000 && t > lastAt.getTime() - 24 * 3600_000;
-    };
-    const lastDisc = out.find((e) => e.kind === "disconnect" && new Date(e.at).getTime() >= lastAt.getTime() - 60_000);
+    // The day before it went silent, however long ago that was — not the
+    // page's 14-day window (Εξάρχεια has been silent longer). Connects reach
+    // back further so the first one in the day can tell a new IP from an old.
+    const around = toUnitEvents(await prisma.$queryRaw<EventRow[]>`
+      SELECT at, kind, detail FROM device_events
+      WHERE sensor_id = ${id}
+        AND at <= ${lastAt}::timestamptz + INTERVAL '10 minutes'
+        AND at > ${lastAt}::timestamptz - CASE WHEN kind = 'connect' THEN INTERVAL '8 days' ELSE INTERVAL '24 hours' END
+      ORDER BY at DESC`);
+    const dayBefore = (e: UnitEvent) => new Date(e.at).getTime() > lastAt.getTime() - 24 * 3600_000;
+    const lastDisc = around.find((e) => e.kind === "disconnect" && new Date(e.at).getTime() >= lastAt.getTime() - 60_000);
     diagnosis = diagnose({
       cause: unit.silentCause ?? "unknown",
       batteryLast: lastRow.battery,
@@ -80,9 +69,9 @@ export async function loadUnit(prisma: PrismaClient, id: string, now: Date): Pro
       batteryMax1h: lh?.bmax ?? null,
       rssiLastHour: lh?.rssi_avg ?? null,
       publishFails1h: lh?.fails ?? null,
-      routerRestartsBefore: out.filter((e) => e.kind === "connect" && e.newIp && dayBefore(e)).reverse().map((e) => ({ at: e.at, ip: e.ip! })),
+      routerRestartsBefore: around.filter((e) => e.kind === "connect" && e.newIp && dayBefore(e)).reverse().map((e) => ({ at: e.at, ip: e.ip! })),
       lastDisconnect: lastDisc ? { at: lastDisc.at, reason: lastDisc.reason ?? "" } : null,
-      unscheduledBootsBefore: out.filter((e) => e.kind === "boot" && !e.scheduled && dayBefore(e)).length,
+      unscheduledBootsBefore: around.filter((e) => e.kind === "boot" && !e.scheduled && dayBefore(e)).length,
     });
   }
 
@@ -119,4 +108,26 @@ export async function loadUnit(prisma: PrismaClient, id: string, now: Date): Pro
       : null,
     diagnosis,
   };
+}
+
+/** Rows (newest first) → UnitEvents (newest first), marking connects from a
+ *  new public IP — router restarts — by walking oldest → newest. */
+function toUnitEvents(events: EventRow[]): UnitEvent[] {
+  const asc = [...events].reverse();
+  let prevIp: string | null = null;
+  return asc.map((e): UnitEvent => {
+    const d = e.detail ?? {};
+    if (e.kind === "connect") {
+      const ip = String(d.ip ?? "");
+      const ev: UnitEvent = { at: e.at.toISOString(), kind: "connect", ip, newIp: prevIp != null && ip !== prevIp };
+      prevIp = ip;
+      return ev;
+    }
+    if (e.kind === "disconnect") return { at: e.at.toISOString(), kind: "disconnect" as const, ip: String(d.ip ?? ""), reason: String(d.reason ?? "") };
+    return {
+      at: e.at.toISOString(), kind: "boot" as const,
+      scheduled: Boolean(d.scheduled), uptimeBefore: Number(d.uptimeBefore ?? 0),
+      resetCause: d.resetCause == null ? null : Number(d.resetCause),
+    };
+  }).reverse();
 }
