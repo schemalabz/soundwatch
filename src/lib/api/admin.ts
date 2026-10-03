@@ -137,3 +137,50 @@ export interface SitesResponse {
   sites: AdminSite[];
   unlinked: UnlinkedUnit[];
 }
+
+export interface UnitHour {
+  /** Hour start, ISO. */
+  t: string;
+  n: number;
+  onTime: number;
+  rssiAvg: number | null;
+  batteryMin: number | null;
+  batteryMax: number | null;
+}
+
+export interface UnitEvent {
+  at: string;
+  kind: "boot" | "connect" | "disconnect";
+  ip?: string;
+  /** connect: the unit came back from a different public IP than last time. */
+  newIp?: boolean;
+  reason?: string;
+  scheduled?: boolean;
+  uptimeBefore?: number;
+  resetCause?: number | null;
+}
+
+export interface UnitDetailResponse {
+  generatedAt: string;
+  unit: FleetUnit;
+  identity: {
+    hardwareId: string | null;
+    readingIntervalS: number;
+    targetFirmwareVersion: string | null;
+    firmwareVersion: string | null;
+    samGitHash: string | null;
+    espGitHash: string | null;
+    createdAt: string;
+    isActive: boolean;
+    isExperimental: boolean;
+    shareKey: string | null;
+    previousTokens: { id: string; deviceId: string; retiredAt: string | null }[];
+  };
+  /** Hourly health over the last 7 days (device-time buckets). */
+  hours: UnitHour[];
+  /** Newest first, last 14 days. */
+  events: UnitEvent[];
+  ipInfo: Record<string, { provider: string | null; ptr: string | null; staticIp: boolean | null }>;
+  lastReading: { receivedAt: string; battery: number | null; rssi: number | null; uptimeS: number | null; laeq: number | null } | null;
+  diagnosis: { headline: string; evidence: { claim: string; detail: string; supports: boolean }[]; ask: string[] } | null;
+}
