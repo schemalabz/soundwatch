@@ -25,6 +25,13 @@ services:
     environment:
       - DATABASE_URL=postgresql://soundwatch:${POSTGRES_PASSWORD}@postgres:5432/soundwatch
       - MQTT_BROKER_URL=mqtt://mosquitto:1884
+      # Connection events (public IP per connect, drop reasons) come from the
+      # broker's own log file. Read-only: the ingester never writes it.
+      - BROKER_LOG_PATH=/broker-log/mosquitto.log
+      # Discord webhook for fleet alerts. Unset = alerts are logged, not sent.
+      - DISCORD_WEBHOOK_URL=${DISCORD_WEBHOOK_URL:-}
+    volumes:
+      - mosquitto_log:/broker-log:ro
     depends_on:
       postgres:
         condition: service_healthy
