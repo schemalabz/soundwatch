@@ -10,6 +10,7 @@ import type { PrismaClient } from "@prisma/client";
 import type { FleetResponse, FleetUnit } from "@/lib/api/admin";
 import { cellState, fleetStatus, silentCause, watchReasons } from "@/lib/fleet/status";
 import { isStaticIp, providerOf } from "@/lib/fleet/network";
+import { classifiedEvents } from "@/lib/fleet/eventsSql";
 
 const CELL_S = 12 * 3600;
 const WINDOW_DAYS = 30;
@@ -18,6 +19,7 @@ interface LastRow { sensor_id: string; last_at: Date | null; battery: number | n
 interface CellRow { sensor_id: string; c: bigint; n: bigint; on_time: bigint }
 interface HealthRow { sensor_id: string; rssi_avg_24h: number | null; rssi_min_7d: number | null; hours_7d: bigint }
 interface LevelRow { sensor_id: string; laeq: number | null }
+interface NoteRow { sensor_id: string; id: bigint; body: string; created_at: Date }
 interface EventRow { sensor_id: string; unsched_24h: bigint; unsched_7d: bigint; router_24h: bigint; router_7d: bigint; ips_7d: bigint; ip: string | null; ptr: string | null; network: string | null }
 
 export async function loadFleet(prisma: PrismaClient, now = new Date()): Promise<FleetResponse> {
@@ -29,7 +31,7 @@ export async function loadFleet(prisma: PrismaClient, now = new Date()): Promise
     },
   });
 
-  const [last, cells, health, levels, events] = await Promise.all([
+  const [last, cells, health, levels, events, notes] = await Promise.all([
     // Newest arrival, plus the battery over the hour before it: what a silent
     // unit's last hour says about power (see silentCause).
     prisma.$queryRaw<LastRow[]>`
@@ -66,35 +68,36 @@ export async function loadFleet(prisma: PrismaClient, now = new Date()): Promise
       FROM readings_hour_bins
       WHERE bucket > ${now}::timestamptz - INTERVAL '7 days'
       GROUP BY 1`,
-    // A connect from a different public IP than the unit's previous connect
-    // is a store router restart (dynamic DSL re-dials with a new address).
+    // Router restarts and unscheduled restarts, as src/lib/fleet/eventsSql.ts
+    // classifies them (never during the installation itself).
     prisma.$queryRaw<EventRow[]>`
-      WITH c AS (
-        SELECT sensor_id, at, detail->>'ip' AS ip,
-               lag(detail->>'ip') OVER (PARTITION BY sensor_id ORDER BY at) AS prev_ip
-        FROM device_events WHERE kind = 'connect' AND at <= ${now}::timestamptz
-      ),
+      WITH ev AS (SELECT * FROM (${classifiedEvents()}) x WHERE x.at <= ${now}::timestamptz),
       latest AS (
-        SELECT DISTINCT ON (sensor_id) sensor_id, ip FROM c ORDER BY sensor_id, at DESC
+        SELECT DISTINCT ON (sensor_id) sensor_id, ip FROM ev WHERE kind = 'connect' ORDER BY sensor_id, at DESC
       )
       SELECT s.id AS sensor_id,
-        (SELECT count(*) FROM device_events e WHERE e.sensor_id = s.id AND e.kind = 'boot'
-           AND (e.detail->>'scheduled')::boolean IS FALSE AND e.at > ${now}::timestamptz - INTERVAL '24 hours' AND e.at <= ${now}::timestamptz)::bigint AS unsched_24h,
-        (SELECT count(*) FROM device_events e WHERE e.sensor_id = s.id AND e.kind = 'boot'
-           AND (e.detail->>'scheduled')::boolean IS FALSE AND e.at > ${now}::timestamptz - INTERVAL '7 days' AND e.at <= ${now}::timestamptz)::bigint AS unsched_7d,
-        (SELECT count(*) FROM c WHERE c.sensor_id = s.id AND c.prev_ip IS NOT NULL AND c.ip <> c.prev_ip
-           AND c.at > ${now}::timestamptz - INTERVAL '24 hours')::bigint AS router_24h,
-        (SELECT count(*) FROM c WHERE c.sensor_id = s.id AND c.prev_ip IS NOT NULL AND c.ip <> c.prev_ip
-           AND c.at > ${now}::timestamptz - INTERVAL '7 days')::bigint AS router_7d,
-        (SELECT count(DISTINCT c.ip) FROM c WHERE c.sensor_id = s.id AND c.at > ${now}::timestamptz - INTERVAL '7 days')::bigint AS ips_7d,
+        (SELECT count(*) FROM ev WHERE ev.sensor_id = s.id AND ev.unscheduled
+           AND ev.at > ${now}::timestamptz - INTERVAL '24 hours')::bigint AS unsched_24h,
+        (SELECT count(*) FROM ev WHERE ev.sensor_id = s.id AND ev.unscheduled
+           AND ev.at > ${now}::timestamptz - INTERVAL '7 days')::bigint AS unsched_7d,
+        (SELECT count(*) FROM ev WHERE ev.sensor_id = s.id AND ev.router_restart
+           AND ev.at > ${now}::timestamptz - INTERVAL '24 hours')::bigint AS router_24h,
+        (SELECT count(*) FROM ev WHERE ev.sensor_id = s.id AND ev.router_restart
+           AND ev.at > ${now}::timestamptz - INTERVAL '7 days')::bigint AS router_7d,
+        (SELECT count(DISTINCT ev.ip) FROM ev WHERE ev.sensor_id = s.id AND ev.kind = 'connect'
+           AND ev.at > ${now}::timestamptz - INTERVAL '7 days')::bigint AS ips_7d,
         latest.ip, i.ptr, i.network
       FROM sensors s
       LEFT JOIN latest ON latest.sensor_id = s.id
       LEFT JOIN ip_info i ON i.ip = latest.ip`,
+    // Notes are written by people in the present: not bounded by `now`.
+    prisma.$queryRaw<NoteRow[]>`
+      SELECT DISTINCT ON (sensor_id) sensor_id, id, body, created_at
+      FROM unit_notes ORDER BY sensor_id, created_at DESC`,
   ]);
 
   const by = <T extends { sensor_id: string }>(rows: T[]) => new Map(rows.map((r) => [r.sensor_id, r]));
-  const lastBy = by(last), healthBy = by(health), levelBy = by(levels), eventsBy = by(events);
+  const lastBy = by(last), healthBy = by(health), levelBy = by(levels), eventsBy = by(events), noteBy = by(notes);
   const cellsBy = new Map<string, Map<number, { n: number; onTime: number }>>();
   for (const r of cells) {
     let m = cellsBy.get(r.sensor_id);
@@ -175,6 +178,10 @@ export async function loadFleet(prisma: PrismaClient, now = new Date()): Promise
         ips7d: Number(ev?.ips_7d ?? 0),
         routerRestarts7d: Number(ev?.router_7d ?? 0),
       },
+      latestNote: (() => {
+        const n = noteBy.get(s.id);
+        return n ? { id: String(n.id), body: n.body, createdAt: n.created_at.toISOString() } : null;
+      })(),
     };
   });
 

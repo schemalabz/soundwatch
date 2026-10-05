@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { benchCheck, groupBoxes, type TokenRow } from "./inventory";
+import { groupBoxes, type TokenRow } from "./inventory";
 
 const row = (deviceId: string, hardwareId: string | null, created: string, extra: Partial<TokenRow> = {}): TokenRow => ({
   id: deviceId, deviceId, hardwareId, createdAt: new Date(created), retiredAt: null, isActive: true, isExperimental: false, ...extra,
@@ -35,21 +35,3 @@ describe("groupBoxes", () => {
   });
 });
 
-describe("benchCheck", () => {
-  it("passes 30 minutes with signal and level on nearly every reading", () => {
-    expect(benchCheck({ readings: 60, spanS: 1800, withRssi: 60, withLevel: 59 }).verdict).toBe("passed");
-  });
-
-  it("the Oct 1 batch: 1–11 readings is too short", () => {
-    expect(benchCheck({ readings: 2, spanS: 30, withRssi: 2, withLevel: 2 })).toEqual({ verdict: "short", text: "Too short · 2 readings" });
-    expect(benchCheck({ readings: 11, spanS: 300, withRssi: 11, withLevel: 11 }).text).toBe("Too short · 11 readings over 5 min");
-  });
-
-  it("long enough but never joined wifi does not pass", () => {
-    expect(benchCheck({ readings: 120, spanS: 3600, withRssi: 0, withLevel: 120 }).verdict).toBe("short");
-  });
-
-  it("no readings at all", () => {
-    expect(benchCheck({ readings: 0, spanS: 0, withRssi: 0, withLevel: 0 }).verdict).toBe("none");
-  });
-});

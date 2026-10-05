@@ -1,7 +1,7 @@
 // The unit page's "likely cause" card: the evidence behind silentCause(),
 // spelled out the way it was argued on the Sep 30 call — each claim with the
-// number that supports it, and what to ask the store. Pure, tested.
-import { SILENT_CAUSE_TEXT, type SilentCause } from "./status";
+// number that supports it. Pure, tested.
+import { SILENT_CAUSE_TEXT, needsCharge, type SilentCause } from "./status";
 
 export interface DiagnosisInput {
   cause: SilentCause;
@@ -18,6 +18,10 @@ export interface DiagnosisInput {
   lastDisconnect: { at: string; reason: string } | null;
   /** Unscheduled restarts in the 24 h before silence. */
   unscheduledBootsBefore: number;
+  /** When the unit was last heard. */
+  lastReceivedAt: string;
+  /** The broker log's first connection record (any unit); null = none at all. */
+  brokerRecordsFrom: string | null;
 }
 
 export interface Evidence {
@@ -30,28 +34,31 @@ export interface Evidence {
 const hm = (iso: string) =>
   new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/Athens", hour: "2-digit", minute: "2-digit" }).format(new Date(iso));
 
-export function diagnose(d: DiagnosisInput): { headline: string; evidence: Evidence[]; ask: string[] } {
+const day = (iso: string) =>
+  new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/Athens", day: "numeric", month: "short" }).format(new Date(iso));
+
+export function diagnose(d: DiagnosisInput): { headline: string; evidence: Evidence[] } {
   const evidence: Evidence[] = [];
 
-  if (d.batteryLast != null && d.batteryLast > 0) {
+  if (d.cause === "on_battery" && d.batteryLast != null) {
+    evidence.push({
+      claim: "The battery was draining",
+      detail: `It fell from ${Math.round(d.batteryMax1h ?? d.batteryLast)}% to ${Math.round(d.batteryLast)}% in its last hour — running without mains.`,
+      supports: true,
+    });
+  } else if (d.batteryLast != null && !needsCharge(d.batteryLast)) {
     const steady = d.batteryMin1h != null && d.batteryMax1h != null && d.batteryMax1h - d.batteryMin1h < 3;
-    if (d.cause === "on_battery") {
-      evidence.push({
-        claim: "The battery was draining",
-        detail: `It fell from ${Math.round(d.batteryMax1h ?? d.batteryLast)}% to ${Math.round(d.batteryLast)}% in its last hour — running without mains.`,
-        supports: true,
-      });
-    } else {
-      evidence.push({
-        claim: "The sensor had power",
-        detail: `Battery ${Math.round(d.batteryLast)}% at its last reading${steady ? ", steady" : ""}. Unplugged, it would have kept uploading on battery and drained.`,
-        supports: d.cause === "network_lost_powered",
-      });
-    }
+    evidence.push({
+      claim: "The sensor had power",
+      detail: `Battery ${Math.round(d.batteryLast)}% at its last reading${steady ? ", steady" : ""}. Unplugged, it would have kept uploading on battery and drained.`,
+      supports: d.cause === "network_lost_powered",
+    });
   } else {
     evidence.push({
       claim: "Battery tells us nothing",
-      detail: d.batteryLast === 0 ? "It reads 0% — flat or not connected." : "No battery reading.",
+      detail: d.batteryLast == null
+        ? "No battery reading."
+        : `It reads ${Math.round(d.batteryLast)}% — too low to tell a power cut from a network outage.`,
       supports: false,
     });
   }
@@ -88,11 +95,16 @@ export function diagnose(d: DiagnosisInput): { headline: string; evidence: Evide
   }
 
   if (!d.lastDisconnect && d.routerRestartsBefore.length === 0) {
-    evidence.push({
-      claim: "No connection records for that day",
-      detail: "The broker’s log does not reach back to it (kept since Sep 24), so router restarts cannot be checked.",
-      supports: false,
-    });
+    const dayBefore = new Date(d.lastReceivedAt).getTime() - 24 * 3600_000;
+    if (d.brokerRecordsFrom == null || new Date(d.brokerRecordsFrom).getTime() > dayBefore) {
+      evidence.push({
+        claim: "No connection records for that day",
+        detail: d.brokerRecordsFrom == null
+          ? "There are no broker records at all, so router restarts cannot be checked."
+          : `The broker’s log starts ${day(d.brokerRecordsFrom)}, after the day before it went silent, so router restarts cannot be checked.`,
+        supports: false,
+      });
+    }
   }
 
   if (d.unscheduledBootsBefore > 0) {
@@ -103,18 +115,6 @@ export function diagnose(d: DiagnosisInput): { headline: string; evidence: Evide
     });
   }
 
-  return { headline: SILENT_CAUSE_TEXT[d.cause], evidence, ask: askFor(d.cause, d.routerRestartsBefore.length > 0) };
+  return { headline: SILENT_CAUSE_TEXT[d.cause], evidence };
 }
 
-/** What to ask the store about a silent unit — the unit page and the call sheet. */
-export function askFor(cause: SilentCause, routerRestarted: boolean): string[] {
-  if (cause === "on_battery") return ["Is the sensor plugged in? Is its socket switched or on a timer?", "Did the store lose power?"];
-  if (cause === "network_lost_powered") {
-    return [
-      "Is the router on and online?",
-      "Is it on a switched socket or a power strip that staff turn off?",
-      ...(routerRestarted ? ["Was the internet being worked on that day?"] : []),
-    ];
-  }
-  return ["Is the sensor’s light on?", "Is the router on and online?"];
-}

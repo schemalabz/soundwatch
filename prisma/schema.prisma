@@ -62,6 +62,7 @@ model Sensor {
   readings  Reading[]
   events    DeviceEvent[]
   incidents Incident[]
+  notes     UnitNote[]
 
   @@map("sensors")
 }
@@ -247,4 +248,18 @@ model Incident {
   @@index([sensorId, kind, closedAt])
   @@index([openedAt(sort: Desc)])
   @@map("incidents")
+}
+
+// What we learned about a unit from outside the data — "technician says the
+// store's internet is off until Thursday". A dated log, newest first; notes
+// are never edited in place, so what was known when stays on record.
+model UnitNote {
+  id        BigInt   @id @default(autoincrement())
+  sensorId  String   @map("sensor_id")
+  sensor    Sensor   @relation(fields: [sensorId], references: [id], onDelete: Cascade)
+  body      String
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@index([sensorId, createdAt(sort: Desc)])
+  @@map("unit_notes")
 }

@@ -8,7 +8,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useAdmin } from "@/components/admin/AdminShell";
-import { STATUS_META, Strip, StripLegend, StatusDot, ago, athens, boxCode } from "@/components/admin/fleetUi";
+import { STATUS_META, Strip, StripLegend, StatusDot, ChargeChip, ago, athens, boxCode } from "@/components/admin/fleetUi";
+import { NoteLine } from "@/components/admin/UnitNotes";
 import type { FleetResponse, FleetUnit } from "@/lib/api/admin";
 import { SILENT_CAUSE_TEXT, type FleetStatus } from "@/lib/fleet/status";
 
@@ -96,10 +97,7 @@ export default function FleetPage() {
           <h1 className="text-[32px] font-bold tracking-tight text-ink">Fleet</h1>
           <p className="max-w-[780px] text-base text-slate">{error || headline || "Loading…"}</p>
         </div>
-        <div className="flex gap-2.5">
-          <Link href="/admin/call-sheet" className="flex h-11 items-center rounded-[10px] border border-silver bg-white px-[18px] text-sm font-semibold text-ink">Call sheet</Link>
-          <Link href="/admin/sites" className="flex h-11 items-center rounded-[10px] bg-ink px-[18px] text-sm font-semibold text-white">Sites</Link>
-        </div>
+        <Link href="/admin/sites" className="flex h-11 items-center rounded-[10px] bg-ink px-[18px] text-sm font-semibold text-white">Sites</Link>
       </section>
 
       <section className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
@@ -239,6 +237,7 @@ function AttentionCard({ u, now }: { u: FleetUnit; now: number }) {
         </div>
         <span className="text-sm text-ink">{why}</span>
         {evidence && <span className="text-[13px] text-slate">{evidence}</span>}
+        <NoteLine note={u.latestNote} className="mt-1 rounded-md bg-[#f6f7f8] px-2.5 py-1.5" />
       </div>
       <div className="flex w-full shrink-0 items-baseline gap-2 pl-[26px] sm:w-auto sm:flex-col sm:items-end sm:gap-1 sm:pl-0">
         <span className={`text-[13px] font-semibold ${meta.text}`}>
@@ -260,6 +259,8 @@ function UnitRow({ u, now }: { u: FleetUnit; now: number }) {
           <span className="flex min-w-0 flex-col">
             <span className="max-w-[230px] truncate text-sm font-semibold text-ink">{unitTitle(u)}</span>
             <span className="font-mono text-xs text-slate">{unitSubtitle(u)}</span>
+            <NoteLine note={u.latestNote} className="max-w-[230px] text-xs" />
+            {!u.installedAt && !u.retiredAt && <ChargeChip battery={u.batteryLast} at={u.lastReceivedAt} />}
           </span>
         </Link>
       </td>

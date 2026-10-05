@@ -8,6 +8,7 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useAdmin } from "@/components/admin/AdminShell";
 import { ago, athens, boxCode } from "@/components/admin/fleetUi";
+import { NoteLine } from "@/components/admin/UnitNotes";
 import type { AdminIncident, IncidentsResponse } from "@/lib/api/admin";
 import { SILENT_CAUSE_TEXT } from "@/lib/fleet/status";
 import { outageStart } from "@/lib/fleet/alerts";
@@ -54,8 +55,7 @@ export default function AlertsPage() {
         <div className="flex flex-col gap-1.5">
           <h1 className="text-[30px] font-bold text-ink">Alerts</h1>
           <p className="max-w-[760px] text-[15px] text-slate">
-            Every outage becomes an incident with its evidence, opened and closed automatically. Εξάρχεια went unnoticed
-            for 20 days; with these rules it would have been flagged in {data?.rules.silentMinutes ?? 30} minutes.
+            Every outage becomes an incident with its evidence, opened and closed automatically.
           </p>
           {error && <p className="text-sm text-loud">{error}</p>}
         </div>
@@ -133,6 +133,7 @@ function IncidentRow({ i, right, extra, muted = false }: { i: AdminIncident; rig
           {i.unit.title} <span className="font-mono text-xs font-normal text-slate">{boxCode(i.unit.apName) ?? ""}</span> · {KIND[i.kind].label}
         </span>
         <span className="text-[13px] text-slate">{why(i)}</span>
+        {!muted && <NoteLine note={i.unit.latestNote} />}
       </span>
       <span className="flex flex-col">{right}</span>
       <span className="hidden md:block">{extra}</span>

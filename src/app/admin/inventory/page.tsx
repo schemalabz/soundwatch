@@ -2,14 +2,15 @@
 
 // Inventory: one row per physical box (chip id), not per token. Follows the
 // design canvas (Inventory.dc.html): where every box is, the boxes registered
-// twice, what is ready to ship and whether it passed a bench check.
+// twice, and what is ready to ship.
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import DeviceLabel from "@/components/admin/DeviceLabel";
 import { useAdmin } from "@/components/admin/AdminShell";
-import { STATUS_META, StatusDot, ago, athens, boxCode } from "@/components/admin/fleetUi";
+import { STATUS_META, StatusDot, ChargeChip, ago, athens, boxCode } from "@/components/admin/fleetUi";
 import type { InventoryBox, InventoryResponse } from "@/lib/api/admin";
+import { needsCharge, LOW_BATTERY_PCT } from "@/lib/fleet/status";
 
 type Group = "store" | "ready" | "bench" | "retired";
 
@@ -70,6 +71,11 @@ export default function InventoryPage() {
   }
 
   async function handover(ids: string[], undo = false) {
+    const low = lowBattery.filter((b) => ids.includes(b.current.id));
+    if (!undo && low.length > 0 && !window.confirm(
+      `${low.map((b) => boxCode(b.current.apName)).join(", ")} ${low.length === 1 ? "reads" : "read"} ${LOW_BATTERY_PCT}% or less from ${low.length === 1 ? "its" : "their"} last reading. ` +
+      "Charge before they go out: an empty box can't ride out a power gap, and we can't tell a power cut from a network outage. Hand over anyway?",
+    )) return;
     setBusy(true);
     try {
       for (const id of ids) await api(`/api/admin/sensors/${id}/handover`, { method: "POST", body: JSON.stringify({ undo }) });
@@ -86,8 +92,7 @@ export default function InventoryPage() {
     load();
   }
 
-  const zeroBattery = ready.filter((b) => b.current.batteryLast === 0).length;
-  const notChecked = ready.filter((b) => b.current.bench?.verdict !== "passed").length;
+  const lowBattery = ready.filter((b) => needsCharge(b.current.batteryLast));
 
   return (
     <div className="mx-auto flex max-w-[1440px] flex-col gap-6 px-6 py-8 lg:px-12">
@@ -148,7 +153,7 @@ export default function InventoryPage() {
         <div className="flex flex-wrap items-center gap-3.5 border-b border-border px-5 py-4">
           <h2 className="text-lg font-bold text-ink">Ready to ship</h2>
           <span className="text-[13px] text-slate">
-            {ready.length} boxes · {notChecked} without a passed bench check{zeroBattery ? ` · ${zeroBattery} report 0% battery` : ""}
+            {ready.length} boxes{lowBattery.length ? ` · ${lowBattery.length} need charging` : ""}
           </span>
           <span className="flex-1" />
           <span className="text-[13px] text-slate">{sel.size ? `${sel.size} selected` : "Select boxes to hand over"}</span>
@@ -168,8 +173,7 @@ export default function InventoryPage() {
                 <th className="px-3 py-2.5">Box</th>
                 <th className="px-3 py-2.5">Chip</th>
                 <th className="px-3 py-2.5">Firmware</th>
-                <th className="px-3 py-2.5">Bench check</th>
-                <th className="px-3 py-2.5">Signal</th>
+                <th className="px-3 py-2.5">Last signal</th>
                 <th className="px-3 py-2.5">Battery</th>
                 <th className="px-3 py-2.5">Where</th>
                 <th className="px-3 py-2.5">Previously</th>
@@ -201,15 +205,10 @@ export default function InventoryPage() {
                     </td>
                     <td className="px-3 py-2.5 font-mono text-[13px] text-slate">{b.hardwareId ? `${b.hardwareId.slice(0, 8)}…` : "—"}</td>
                     <td className="px-3 py-2.5 text-sm">{c.firmware ?? "—"}</td>
-                    <td className="px-3 py-2.5">
-                      <span className="flex items-center gap-2 text-sm">
-                        <span className={`size-2 rounded-full ${c.bench?.verdict === "passed" ? "bg-ok" : c.bench?.verdict === "short" ? "bg-warn" : "bg-loud"}`} />
-                        {c.bench?.text ?? "—"}
-                      </span>
-                    </td>
-                    <td className="px-3 py-2.5 text-sm tabular-nums">{c.rssiAvg != null ? `${c.rssiAvg} dBm` : "—"}</td>
-                    <td className={`px-3 py-2.5 text-sm tabular-nums ${c.batteryLast === 0 ? "font-semibold text-loud" : ""}`}>
-                      {c.batteryLast == null ? "—" : c.batteryLast === 0 ? "0% · check" : `${Math.round(c.batteryLast)}%`}
+                    <td className="px-3 py-2.5 text-sm tabular-nums">{c.rssiLast != null ? `${Math.round(c.rssiLast)} dBm` : "—"}</td>
+                    <td className={`px-3 py-2.5 text-sm tabular-nums ${needsCharge(c.batteryLast) ? "font-semibold text-loud" : ""}`}>
+                      {c.batteryLast == null ? "—" : `${Math.round(c.batteryLast)}%`}
+                      <ChargeChip battery={c.batteryLast} at={c.lastReceivedAt} />
                     </td>
                     <td className="px-3 py-2.5 text-sm">
                       {withInstaller ? (
@@ -239,9 +238,7 @@ export default function InventoryPage() {
           </table>
         </div>
         <div className="flex flex-col gap-1 px-5 py-3 text-xs text-slate md:flex-row md:gap-5">
-          <span>Proposed bench check: 30 minutes of readings, each with a wifi signal and a sound level.</span>
-          <span className="flex-1" />
-          <span>Battery 0% means flat or not connected — check before shipping: the battery is how we tell a power cut from a router outage.</span>
+          <span>A battery at 10% or less shows <strong>Charge first</strong>, with the date of the reading: an empty box dies the moment it is unplugged, and we can&apos;t tell a power cut from a network outage. Switch a charged box on near the office wifi once to clear the chip.</span>
         </div>
       </section>
 

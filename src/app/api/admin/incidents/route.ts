@@ -18,14 +18,16 @@ export async function GET(request: Request) {
   if (authError) return authError;
   const now = adminNow();
 
-  const [rows, fleet] = await Promise.all([
+  const [openRows, resolvedRows, fleet] = await Promise.all([
+    prisma.incident.findMany({ where: { closedAt: null }, orderBy: { openedAt: "desc" } }),
     prisma.incident.findMany({
-      where: { OR: [{ closedAt: null }, { closedAt: { gt: new Date(now.getTime() - 14 * 86400_000) } }] },
+      where: { closedAt: { gt: new Date(now.getTime() - 14 * 86400_000) } },
       orderBy: { openedAt: "desc" },
       take: 300,
     }),
     loadFleet(prisma, now),
   ]);
+  const rows = [...openRows, ...resolvedRows];
   const units = new Map(fleet.units.map((u) => [u.id, u]));
 
   const shape = (r: (typeof rows)[number]): AdminIncident => {
@@ -45,6 +47,7 @@ export async function GET(request: Request) {
         title: u?.site?.name ?? u?.name ?? u?.address ?? (u?.apName ? `Box ${u.apName.replace(/^Soundwatch-/, "")}` : r.sensorId.slice(0, 8)),
         apName: u?.apName ?? null,
         status: u?.status ?? "retired",
+        latestNote: u?.latestNote ?? null,
       },
     };
   };

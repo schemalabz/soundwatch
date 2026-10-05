@@ -7,9 +7,11 @@ import { use, useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useAdmin } from "@/components/admin/AdminShell";
 import LinkSiteDialog from "@/components/admin/LinkSiteDialog";
+import UnitNotes from "@/components/admin/UnitNotes";
 import UnitSettings from "@/components/admin/UnitSettings";
 import { STATUS_META, StatusDot, ago, athens, boxCode } from "@/components/admin/fleetUi";
 import type { SitesResponse, UnitDetailResponse, UnitEvent, UnitHour } from "@/lib/api/admin";
+import { duringInstall } from "@/lib/fleet/status";
 import { sensorPagePath } from "@/lib/sensor/api";
 
 const RESET_CAUSE: Record<number, string> = { 1: "power-on", 16: "external reset", 32: "watchdog", 64: "software/power cycle" };
@@ -21,6 +23,11 @@ export default function UnitPage({ params }: { params: Promise<{ id: string }> }
   const [sites, setSites] = useState<SitesResponse | null>(null);
   const [linking, setLinking] = useState(false);
   const [error, setError] = useState("");
+  // The settings panel remounts only when the unit itself changed through
+  // settings or site linking — not on every load() (a note, a background
+  // refresh) — so in-progress edits and the "Saved." message survive those.
+  const [settingsRev, setSettingsRev] = useState(0);
+  const [settingsNotice, setSettingsNotice] = useState<string | undefined>(undefined);
 
   const load = useCallback(() => {
     api<UnitDetailResponse>(`/api/admin/units/${id}`).then((d) => { setData(d); setError(""); }, () => setError("Could not load this unit."));
@@ -42,7 +49,8 @@ export default function UnitPage({ params }: { params: Promise<{ id: string }> }
   // The day that matters: the 24 h up to silence for a silent unit, else the last 24 h.
   const focusEnd = unit.status === "silent" ? Math.min(now, lastAt + 3 * 3600_000) : now;
   const installedMs = unit.installedAt ? new Date(unit.installedAt).getTime() : unit.status === "bench" ? new Date(identity.createdAt).getTime() : null;
-  const routerRestarts = data.events.filter((e) => e.kind === "connect" && e.newIp).length;
+  const installedAtDate = unit.installedAt ? new Date(unit.installedAt) : null;
+  const routerRestarts = data.unit.network.routerRestarts7d;
   const network = unit.network;
 
   return (
@@ -92,10 +100,6 @@ export default function UnitPage({ params }: { params: Promise<{ id: string }> }
                   </div>
                 ))}
               </div>
-              <div className="flex flex-wrap gap-x-3 gap-y-1 border-t border-[#eef0f2] pt-3 text-sm">
-                <span className="font-semibold text-ink">Ask the store:</span>
-                <span className="text-slate">{diagnosis.ask.join(" ")}</span>
-              </div>
             </section>
           ) : unit.status === "watch" ? (
             <section className="rounded-[14px] border border-[#ecd9b0] bg-[#fbf4e6] px-7 py-5">
@@ -104,17 +108,23 @@ export default function UnitPage({ params }: { params: Promise<{ id: string }> }
             </section>
           ) : null}
 
+          <UnitNotes unitId={unit.id} notes={data.notes} siteNote={data.siteNote} onChanged={load} />
+
           <section className="flex flex-col gap-4 rounded-[14px] border border-border bg-white px-7 pb-6 pt-5">
             <div className="flex flex-wrap items-baseline gap-4">
               <h2 className="text-lg font-bold text-ink">Last 7 days</h2>
-              <span className="text-[13px] text-slate">Hourly. Connection records exist from the broker log only (Sep 24 onward).</span>
+              <span className="text-[13px] text-slate">
+                Hourly. {data.brokerRecordsFrom
+                  ? `Connection records exist from the broker log only (${new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/Athens", day: "numeric", month: "short" }).format(new Date(data.brokerRecordsFrom))} onward).`
+                  : "No connection records yet."}
+              </span>
             </div>
-            <Lanes hours={data.hours} events={data.events} start={now - 7 * 86400_000} end={now} tick="day" since={installedMs} />
+            <Lanes hours={data.hours} events={data.events} start={now - 7 * 86400_000} end={now} tick="day" since={installedMs} installedAt={installedAtDate} />
             <div className="flex flex-col gap-3 border-t border-dashed border-[#dcdde0] pt-4">
               <h3 className="text-[13px] font-semibold text-ink">
                 {unit.status === "silent" ? "The day it went silent" : "Last 24 hours"} · {athens(new Date(focusEnd - 24 * 3600_000).toISOString())} → {athens(new Date(focusEnd).toISOString())}
               </h3>
-              <Lanes hours={data.hours} events={data.events} start={focusEnd - 24 * 3600_000} end={focusEnd} tick="hour" since={installedMs} labelIps />
+              <Lanes hours={data.hours} events={data.events} start={focusEnd - 24 * 3600_000} end={focusEnd} tick="hour" since={installedMs} installedAt={installedAtDate} labelIps />
             </div>
             <LaneLegend />
           </section>
@@ -126,7 +136,7 @@ export default function UnitPage({ params }: { params: Promise<{ id: string }> }
             </div>
             {data.events.length === 0 && <p className="px-7 py-4 text-sm text-slate">No events recorded.</p>}
             <ul>
-              {data.events.slice(0, 60).map((e, i) => <EventRow key={`${e.at}-${e.kind}-${i}`} e={e} ipInfo={data.ipInfo} />)}
+              {data.events.slice(0, 60).map((e, i) => <EventRow key={`${e.at}-${e.kind}-${i}`} e={e} ipInfo={data.ipInfo} installedAt={installedAtDate} />)}
             </ul>
           </section>
         </div>
@@ -151,7 +161,7 @@ export default function UnitPage({ params }: { params: Promise<{ id: string }> }
             <Row k="IP type" v={network.staticIp ? "Static" : network.staticIp === false ? "Dynamic" : "Unknown"} />
             <Row k="Latest public IP" v={network.ip ?? "—"} mono />
             <Row k="Public IPs, 7 days" v={String(network.ips7d)} warn={network.ips7d > 1} />
-            <Row k="Router restarts, 14 days" v={String(routerRestarts)} warn={routerRestarts >= 2} />
+            <Row k="Router restarts, 7 days" v={String(routerRestarts)} warn={routerRestarts >= 2} />
           </section>
 
           <section className="flex flex-col gap-3 rounded-[14px] border border-border bg-white px-[22px] py-5">
@@ -168,7 +178,12 @@ export default function UnitPage({ params }: { params: Promise<{ id: string }> }
             )}
           </section>
 
-          <UnitSettings data={data} onChanged={load} />
+          <UnitSettings
+            key={settingsRev}
+            data={data}
+            notice={settingsNotice}
+            onChanged={(msg) => { setSettingsNotice(msg); setSettingsRev((n) => n + 1); load(); }}
+          />
         </aside>
       </div>
 
@@ -177,7 +192,7 @@ export default function UnitPage({ params }: { params: Promise<{ id: string }> }
           unit={{ id: unit.id, apName: unit.apName, deviceId: unit.deviceId, latitude: unit.latitude, longitude: unit.longitude, name: unit.name, address: unit.address }}
           sites={sites.sites}
           onClose={() => setLinking(false)}
-          onLinked={() => { setLinking(false); load(); }}
+          onLinked={() => { setLinking(false); setSettingsNotice(undefined); setSettingsRev((n) => n + 1); load(); }}
         />
       )}
     </div>
@@ -203,16 +218,21 @@ function Row({ k, v, mono, warn }: { k: string; v: string; mono?: boolean; warn?
   );
 }
 
-function EventRow({ e, ipInfo }: { e: UnitEvent; ipInfo: UnitDetailResponse["ipInfo"] }) {
+function EventRow({ e, ipInfo, installedAt }: { e: UnitEvent; ipInfo: UnitDetailResponse["ipInfo"]; installedAt: Date | null }) {
   let dot = "bg-[#9aa3b5]", what = "", meta = "";
+  const inInstall = duringInstall(new Date(e.at), installedAt);
   if (e.kind === "boot") {
-    dot = e.scheduled ? "bg-[#8a8f9c]" : "bg-loud";
-    what = e.scheduled ? "Scheduled daily restart" : "Unscheduled restart";
+    dot = e.scheduled ? "bg-[#8a8f9c]" : e.unscheduled ? "bg-loud" : inInstall ? "bg-[#8a8f9c]" : "bg-loud";
+    what = e.scheduled ? "Scheduled daily restart" : e.unscheduled ? "Unscheduled restart" : inInstall ? "Restart during installation" : "Unscheduled restart";
     meta = `${e.resetCause != null ? RESET_CAUSE[e.resetCause] ?? `cause ${e.resetCause}` : ""}${e.uptimeBefore ? ` · after ${(e.uptimeBefore / 3600).toFixed(1)} h` : ""}`;
   } else if (e.kind === "connect") {
-    dot = e.newIp ? "bg-warn" : "bg-[#9aa3b5]";
+    dot = e.routerRestart ? "bg-warn" : "bg-[#9aa3b5]";
     const info = e.ip ? ipInfo[e.ip] : undefined;
-    what = e.newIp ? "Reconnected from a new public IP — the store’s router restarted" : "Connected";
+    what = e.routerRestart
+      ? "Reconnected from a new public IP — the store’s router restarted"
+      : e.newIp && inInstall ? "Connected from a new public IP during installation"
+      : e.newIp ? "Connected from a new public IP"
+      : "Connected";
     meta = `${e.ip ?? ""}${info?.provider ? ` · ${info.provider}` : ""}`;
   } else {
     const timeout = /timeout/i.test(e.reason ?? "");
@@ -232,10 +252,12 @@ function EventRow({ e, ipInfo }: { e: UnitEvent; ipInfo: UnitDetailResponse["ipI
 
 const LANE_W = 100; // percent
 
-function Lanes({ hours, events, start, end, tick, since, labelIps = false }: {
+function Lanes({ hours, events, start, end, tick, since, installedAt, labelIps = false }: {
   hours: UnitHour[]; events: UnitEvent[]; start: number; end: number; tick: "day" | "hour";
   /** Install time: empty hours after it are outages, before it nothing was expected. */
   since: number | null;
+  /** The unit's actual installed_at (null for bench/never-installed): is a boot within the install window? */
+  installedAt: Date | null;
   labelIps?: boolean;
 }) {
   const span = end - start;
@@ -313,9 +335,12 @@ function Lanes({ hours, events, start, end, tick, since, labelIps = false }: {
         ))}
       </Lane>
       <Lane label="Restarts">
-        {boots.map((b, i) => (
-          <span key={i} title={b.scheduled ? "scheduled restart" : "unscheduled restart"} className={`absolute top-0.5 h-[22px] w-[3px] ${b.scheduled ? "bg-[#8a8f9c]" : "bg-loud"}`} style={{ left: `${pos(new Date(b.at).getTime())}%` }} />
-        ))}
+        {boots.map((b, i) => {
+          const inInstall = duringInstall(new Date(b.at), installedAt);
+          const red = b.unscheduled || (!b.scheduled && !inInstall);
+          const title = b.scheduled ? "scheduled restart" : b.unscheduled ? "unscheduled restart" : inInstall ? "restart during installation" : "unscheduled restart";
+          return <span key={i} title={title} className={`absolute top-0.5 h-[22px] w-[3px] ${red ? "bg-loud" : "bg-[#8a8f9c]"}`} style={{ left: `${pos(new Date(b.at).getTime())}%` }} />;
+        })}
       </Lane>
       <Lane label="Battery">
         {inWin.filter((h) => h.batteryMin != null).map((h) => {

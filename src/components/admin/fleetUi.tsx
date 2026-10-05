@@ -1,5 +1,6 @@
 // Small shared pieces of the admin fleet surfaces.
 import type { CellState, FleetStatus } from "@/lib/fleet/status";
+import { needsCharge } from "@/lib/fleet/status";
 
 export const STATUS_META: Record<FleetStatus, { label: string; dot: string; text: string }> = {
   live: { label: "Live", dot: "bg-ok", text: "text-ink" },
@@ -78,4 +79,15 @@ export function athens(iso: string | null): string {
 /** Short box code from the setup-AP name: "Soundwatch-05F3" → "05F3". */
 export function boxCode(apName: string | null): string | null {
   return apName?.replace(/^Soundwatch-/i, "") ?? null;
+}
+
+/** A box to charge before it ships. The battery is the box's last reading —
+ *  for a boxed unit, from the day it was flashed — so the chip says when. */
+export function ChargeChip({ battery, at }: { battery: number | null; at: string | null }) {
+  if (!needsCharge(battery)) return null;
+  return (
+    <span className="inline-flex w-fit items-center rounded-full bg-[#fbe7e5] px-2 py-0.5 text-[11px] font-semibold text-loud">
+      Charge first · {Math.round(battery!)}%{at ? ` on ${athens(at).split(",")[0]}` : ""}
+    </span>
+  );
 }

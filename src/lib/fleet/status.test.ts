@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
   cellState,
+  duringInstall,
   fleetStatus,
+  INSTALL_GRACE_MS,
   isBoot,
   isScheduledBoot,
   lifecycleStatus,
@@ -82,6 +84,22 @@ describe("restarts", () => {
     expect(isScheduledBoot(new Date("2026-09-29T08:58:00Z"))).toBe(false); // 11:58, Δάφνη
     expect(isScheduledBoot(new Date("2026-12-01T02:38:00Z"))).toBe(true); // 04:38 EET, fast clock in winter
     expect(isScheduledBoot(new Date("2026-12-01T04:10:00Z"))).toBe(false); // 06:10 EET is an hour late in winter
+  });
+});
+
+describe("duringInstall", () => {
+  const installedAt = new Date("2026-08-28T12:00:00Z");
+  it("is true within INSTALL_GRACE_MS of installed_at on either side, false further out or never installed", () => {
+    expect(duringInstall(installedAt, installedAt)).toBe(true);
+    // D084: the physical connect lands a little before installed_at is recorded.
+    expect(duringInstall(new Date(installedAt.getTime() - 60_000), installedAt)).toBe(true);
+    expect(duringInstall(new Date(installedAt.getTime() - (INSTALL_GRACE_MS - 1)), installedAt)).toBe(true);
+    expect(duringInstall(new Date(installedAt.getTime() - INSTALL_GRACE_MS), installedAt)).toBe(false);
+    expect(duringInstall(new Date(installedAt.getTime() + INSTALL_GRACE_MS - 1), installedAt)).toBe(true);
+    expect(duringInstall(new Date(installedAt.getTime() + INSTALL_GRACE_MS), installedAt)).toBe(false);
+    // E195/4D93/A0F2: boots 100-213 h before installed_at are not install events.
+    expect(duringInstall(new Date(installedAt.getTime() - 100 * 3600_000), installedAt)).toBe(false);
+    expect(duringInstall(installedAt, null)).toBe(false);
   });
 });
 

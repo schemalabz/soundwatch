@@ -16,6 +16,13 @@ export interface FleetNetwork {
   routerRestarts7d: number;
 }
 
+/** A dated note about a unit, written by us (see UnitNote in the schema). */
+export interface UnitNoteDto {
+  id: string;
+  body: string;
+  createdAt: string;
+}
+
 export interface FleetUnit {
   id: string;
   deviceId: string;
@@ -49,6 +56,8 @@ export interface FleetUnit {
   /** Energy-average level over 7 days (LAeq), from the level rollup. */
   laeq7d: number | null;
   network: FleetNetwork;
+  /** The newest note, shown wherever the unit needs attention. */
+  latestNote: UnitNoteDto | null;
 }
 
 export interface FleetResponse {
@@ -80,8 +89,7 @@ export interface InventoryBox {
     siteName: string | null;
     firmware: string | null;
     batteryLast: number | null;
-    rssiAvg: number | null;
-    bench: { verdict: "passed" | "short" | "none"; text: string } | null;
+    rssiLast: number | null;
   };
   previous: InventoryToken[];
   /** Older tokens still active: retire these. */
@@ -152,8 +160,12 @@ export interface UnitEvent {
   at: string;
   kind: "boot" | "connect" | "disconnect";
   ip?: string;
-  /** connect: the unit came back from a different public IP than last time. */
+  /** connect: a different public IP than the previous connect (shades the lane). */
   newIp?: boolean;
+  /** connect: counted as a store router restart (new IP, unit in service). */
+  routerRestart?: boolean;
+  /** boot: outside the daily window, unit in service. */
+  unscheduled?: boolean;
   reason?: string;
   scheduled?: boolean;
   uptimeBefore?: number;
@@ -182,7 +194,13 @@ export interface UnitDetailResponse {
   events: UnitEvent[];
   ipInfo: Record<string, { provider: string | null; ptr: string | null; staticIp: boolean | null }>;
   lastReading: { receivedAt: string; battery: number | null; rssi: number | null; uptimeS: number | null; laeq: number | null } | null;
-  diagnosis: { headline: string; evidence: { claim: string; detail: string; supports: boolean }[]; ask: string[] } | null;
+  diagnosis: { headline: string; evidence: { claim: string; detail: string; supports: boolean }[] } | null;
+  /** First broker-log connection record; null = none. */
+  brokerRecordsFrom: string | null;
+  /** All notes, newest first. */
+  notes: UnitNoteDto[];
+  /** The linked site's own note, if any. */
+  siteNote: string | null;
 }
 
 export interface AdminIncident {
@@ -195,7 +213,7 @@ export interface AdminIncident {
   /** How the opening was delivered: "discord", "dry-run", or null (not yet). */
   delivery: string | null;
   evidence: Record<string, unknown> | null;
-  unit: { id: string; title: string; apName: string | null; status: FleetStatus };
+  unit: { id: string; title: string; apName: string | null; status: FleetStatus; latestNote: UnitNoteDto | null };
 }
 
 export interface IncidentsResponse {

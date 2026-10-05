@@ -24,6 +24,15 @@ export const ON_TIME_MS = 30 * 60 * 1000;
  *  (Oct 6); D084's first store connect came a minute before installed_at. */
 export const INSTALL_GRACE_MS = 2 * 3600_000;
 
+/** During the installation itself: within INSTALL_GRACE_MS of installed_at,
+ *  on either side — installed_at is recorded by the installer tapping "mark
+ *  installed", which lands a little after the box's own first boot/connect
+ *  (D084's first store connect came a minute before installed_at). */
+export function duringInstall(at: Date, installedAt: Date | null): boolean {
+  if (!installedAt) return false;
+  return Math.abs(at.getTime() - installedAt.getTime()) < INSTALL_GRACE_MS;
+}
+
 /** At or below this, the battery says nothing about power: an empty battery
  *  is "steady" too. 436E read 2% at install (Oct 5) and died the moment
  *  setup ended. Boxes this low should be charged before they ship. */

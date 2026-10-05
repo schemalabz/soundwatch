@@ -81,7 +81,8 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
   async function login(e: React.FormEvent) {
     e.preventDefault();
     const res = await fetch("/api/admin/fleet", { headers: { Authorization: `Bearer ${draft}` } });
-    if (!res.ok) { setError("That token was not accepted."); return; }
+    if (res.status === 401) { setError("That token was not accepted."); return; }
+    if (!res.ok) { setError(`The server answered ${res.status}. The token may be fine: check the deploy logs.`); return; }
     try { localStorage.setItem(ADMIN_TOKEN_STORAGE_KEY, draft); } catch { /* ignore */ }
     setError("");
     setToken(draft);
@@ -135,7 +136,6 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
             })}
           </nav>
           <div className="flex-1" />
-          <Link href="/admin/classic" className="text-xs text-silver hover:text-white">Classic view</Link>
           <button onClick={logout} className="text-xs text-silver hover:text-white">Sign out</button>
         </header>
         <div className="flex-1">{children}</div>
