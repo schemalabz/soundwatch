@@ -234,6 +234,8 @@ Ingester environment (set in `docker-compose.yml`):
   `NEXT_PUBLIC_BASE_URL`).
 - `ALERTS=off` disables the evaluator (a second ingester on the same database).
 
+**Installations** are announced too: within a minute of the installer tapping "installed", Echo posts the box, where it went (site, address, or GPS), its first signal and battery, and links to the admin page and a map. Bench units and retired tokens are never announced; units installed before migration 0022 count as already announced.
+
 **After the first deploy of this**, backfill restarts from stored readings
 once (idempotent), from inside the ingester container:
 

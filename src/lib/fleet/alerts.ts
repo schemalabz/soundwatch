@@ -5,7 +5,7 @@
 //
 // The rule that matters most: a silent unit pages within 30 minutes.
 // Εξάρχεια went silent on Sep 10 and nobody knew for 20 days.
-import { SILENT_CAUSE_TEXT, silentCause, type SilentCause } from "./status";
+import { needsCharge, SILENT_CAUSE_TEXT, silentCause, type SilentCause } from "./status";
 
 export const ALERT_SILENT_MS = 30 * 60 * 1000;
 export const ALERT_ROUTER_RESTARTS_24H = 2;
@@ -30,6 +30,8 @@ export interface AlertUnit {
   rssiAvg1h: number | null;
   unscheduledBoots24h: number;
   routerRestarts24h: number;
+  /** When the installer finished; null = not installed. */
+  installedAt: Date | null;
 }
 
 export interface OpenIncident { id: bigint | number; sensorId: string; kind: IncidentKind }
@@ -56,6 +58,7 @@ export function conditions(u: AlertUnit, now: Date): Map<IncidentKind, Record<st
       batteryLast: u.batteryLast,
       rssiAvg1h: u.rssiAvg1h,
       routerRestarts24h: u.routerRestarts24h,
+      installedAt: u.installedAt?.toISOString() ?? null,
     });
     return out; // a silent unit's other signals are stale; the silence is the incident
   }
@@ -136,32 +139,125 @@ const RESOLVED_LINE: Record<IncidentKind, (open: string) => string> = {
   weak_signal: (d) => `Signal back above ${ALERT_WEAK_RSSI_CLEAR_DBM} dBm (open ${d}).`,
 };
 
+/** A silence this soon after installation is about power, not the store. */
+const STOPPED_AFTER_INSTALL_MS = 3600_000;
+
+/** What the person reading the alert should do next. Starts with a verb. */
+export function whatToDo(inc: { kind: IncidentKind; cause: string | null; evidence: Record<string, unknown> | null }): string {
+  const ev = inc.evidence ?? {};
+  switch (inc.kind) {
+    case "silent": {
+      const installed = typeof ev.installedAt === "string" ? Date.parse(ev.installedAt) : NaN;
+      const last = typeof ev.lastReceivedAt === "string" ? Date.parse(ev.lastReceivedAt) : NaN;
+      if (Math.abs(last - installed) < STOPPED_AFTER_INSTALL_MS) return "Check it is plugged into a socket that has power: it stopped right after installation.";
+      if (inc.cause === "network_lost_powered") return "Ask the store to check its router and internet.";
+      if (inc.cause === "on_battery") return "Check the socket: the unit lost mains power and ran on its battery.";
+      if (typeof ev.batteryLast === "number" && needsCharge(ev.batteryLast)) {
+        return "Check the unit has power, and charge it: its battery is too low to tell a power cut from an internet outage.";
+      }
+      return "Check the unit has power and the store's internet is up.";
+    }
+    case "router_restarts": return "Ask the store about its internet: the router keeps re-dialling.";
+    case "unscheduled_restarts": return "Check the unit's power supply: it keeps restarting on its own.";
+    case "weak_signal": return "Ask the store to move the router closer, or add a wifi extender.";
+  }
+}
+
+/** Markdown links for the message body; each only when it can be built. */
+export function messageLinks(u: { sensorId: string; latitude: number | null; longitude: number | null }, adminBaseUrl: string | null): string {
+  const out: string[] = [];
+  if (adminBaseUrl) out.push(`[Open in admin](${adminBaseUrl.replace(/\/$/, "")}/admin/units/${u.sensorId})`);
+  if (u.latitude != null && u.longitude != null) out.push(`[Map](https://www.google.com/maps?q=${u.latitude},${u.longitude})`);
+  return out.join(" · ");
+}
+
+/** Athens wall time, "28 Sept, 11:37". */
+export function athensTime(d: Date): string {
+  return new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/Athens", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }).format(d);
+}
+const athensDay = (d: Date) => new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/Athens", day: "numeric", month: "short" }).format(d);
+
+export interface MessageUnit {
+  title: string;
+  apName: string | null;
+  sensorId: string;
+  latitude: number | null;
+  longitude: number | null;
+  /** The unit's newest note, shown under the alert. */
+  latestNote: { body: string; createdAt: Date } | null;
+}
+
+export type InstallUnit = MessageUnit & {
+  installedAt: Date;
+  /** The linked planned site's name, if linked at install. */
+  siteName: string | null;
+  address: string | null;
+  batteryLast: number | null;
+  rssiLast: number | null;
+  /** Newest reading so far (the box sends before the installer taps "installed"). */
+  lastReceivedAt: Date | null;
+};
+
+/** The Discord webhook body announcing a new installation. */
+export function installMessage(u: InstallUnit, adminBaseUrl: string | null): { content: string; embeds: object[] } {
+  const box = u.apName?.replace(/^Soundwatch-/, "") ?? u.sensorId.slice(0, 8);
+  const where = u.siteName ? `at ${u.siteName}`
+    : u.address ? `at ${u.address}, not linked to a site`
+    : u.latitude != null ? "by GPS, not linked to a site yet"
+    : "with no location yet";
+  const lines = [`Installed ${athensTime(u.installedAt)}, ${where}.`];
+  if (u.lastReceivedAt) {
+    const facts = [u.rssiLast != null ? `signal ${Math.round(u.rssiLast)} dBm` : null, u.batteryLast != null ? `battery ${Math.round(u.batteryLast)}%` : null].filter(Boolean);
+    lines.push(`Sending${facts.length ? `: ${facts.join(" · ")}` : "."}`);
+  } else {
+    lines.push("No reading yet. If none arrives within 30 minutes, Echo will say it is silent.");
+  }
+  if (needsCharge(u.batteryLast)) {
+    lines.push(`⚠️ Its battery reads ${Math.round(u.batteryLast!)}%: make sure it is on mains power, or it dies the moment it is unplugged.`);
+  }
+  const links = messageLinks(u, adminBaseUrl);
+  if (links) lines.push(links);
+  const url = adminBaseUrl ? `${adminBaseUrl.replace(/\/$/, "")}/admin/units/${u.sensorId}` : undefined;
+  return {
+    content: "",
+    embeds: [{ title: `🟢 New unit installed: ${u.title} (${box})`, description: lines.join("\n"), color: COLOR.resolved, ...(url ? { url } : {}), timestamp: u.installedAt.toISOString() }],
+  };
+}
+
 /** The Discord webhook body for an incident opening or closing. */
 export function discordMessage(
   inc: { kind: IncidentKind; cause: string | null; openedAt: Date; closedAt: Date | null; evidence: Record<string, unknown> | null },
-  unit: { title: string; apName: string | null; sensorId: string },
+  unit: MessageUnit,
   adminBaseUrl: string | null,
 ): { content: string; embeds: object[] } {
   const box = unit.apName?.replace(/^Soundwatch-/, "") ?? unit.sensorId.slice(0, 8);
   const resolved = inc.closedAt != null;
   const ev = inc.evidence ?? {};
   const lines: string[] = [];
-  if (!resolved && inc.kind === "silent") {
-    lines.push(SILENT_CAUSE_TEXT[(inc.cause as SilentCause) ?? "unknown"]);
-    if (typeof ev.batteryLast === "number") lines.push(`Battery ${Math.round(ev.batteryLast)}% at the last reading.`);
-    if (typeof ev.routerRestarts24h === "number" && ev.routerRestarts24h > 0) {
-      lines.push(`The store’s router restarted ${ev.routerRestarts24h}× in the day before.`);
+  if (resolved) {
+    lines.push(RESOLVED_LINE[inc.kind](duration(inc.closedAt!.getTime() - outageStart(inc).getTime())));
+  } else {
+    if (inc.kind === "silent") lines.push(SILENT_CAUSE_TEXT[(inc.cause as SilentCause) ?? "unknown"]);
+    lines.push(`**What to do:** ${whatToDo(inc)}`);
+    const facts: string[] = [];
+    if (inc.kind === "silent") {
+      if (typeof ev.lastReceivedAt === "string") facts.push(`Last heard ${athensTime(new Date(ev.lastReceivedAt))}`);
+      if (typeof ev.batteryLast === "number") facts.push(`battery ${Math.round(ev.batteryLast)}%`);
+      if (typeof ev.routerRestarts24h === "number" && ev.routerRestarts24h > 0) facts.push(`the router restarted ${ev.routerRestarts24h}× in the day before`);
+    } else if (typeof ev.count === "number") {
+      facts.push(`${ev.count} times in the last 24 h`);
+    } else if (typeof ev.rssiAvg1h === "number") {
+      facts.push(`${ev.rssiAvg1h} dBm average over the last hour`);
     }
-  } else if (!resolved && typeof ev.count === "number") {
-    lines.push(`${ev.count} times in the last 24 h.`);
-  } else if (!resolved && typeof ev.rssiAvg1h === "number") {
-    lines.push(`${ev.rssiAvg1h} dBm average over the last hour.`);
+    if (facts.length) lines.push(facts.join(" · "));
+    if (unit.latestNote) lines.push(`📝 *${athensDay(unit.latestNote.createdAt)}: ${unit.latestNote.body.slice(0, 200)}*`);
   }
-  if (resolved) lines.push(RESOLVED_LINE[inc.kind](duration(inc.closedAt!.getTime() - outageStart(inc).getTime())));
+  const links = messageLinks(unit, adminBaseUrl);
+  if (links) lines.push(links);
 
   const title = resolved
-    ? `✓ ${unit.title} (${box}) — resolved`
-    : `${unit.title} (${box}) ${KIND_TITLE[inc.kind]}`;
+    ? `✅ ${unit.title} (${box}) ${inc.kind === "silent" ? "is back" : "— resolved"}`
+    : `${inc.kind === "silent" ? "🔴" : "🟠"} ${unit.title} (${box}) ${KIND_TITLE[inc.kind]}`;
   const url = adminBaseUrl ? `${adminBaseUrl.replace(/\/$/, "")}/admin/units/${unit.sensorId}` : undefined;
   return {
     content: "",

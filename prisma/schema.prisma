@@ -57,6 +57,8 @@ model Sensor {
   // Handed to the installer: between "in box" and "installed". Without it a
   // box in a van and a box on our shelf look identical.
   handedOverAt          DateTime?        @map("handed_over_at") @db.Timestamptz(3)
+  // When the installation was announced on Discord (see mqtt-ingester/alerts.ts).
+  installAnnouncedAt    DateTime?        @map("install_announced_at") @db.Timestamptz(3)
   createdAt             DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
 
   readings  Reading[]

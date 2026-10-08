@@ -9,14 +9,58 @@ type Inc = {
   evidence: Record<string, unknown> | null; notifiedAt: Date | null; resolvedNotifiedAt: Date | null; openSlot: boolean | null;
 };
 const NOW = new Date("2026-09-29T15:30:00Z");
-const sensor = { apName: "Soundwatch-05F3", name: "Skroutz Δάφνη", address: null, deviceId: "tok1", plannedLocation: null };
+const sensor = { apName: "Soundwatch-05F3", name: "Skroutz Δάφνη", address: null, deviceId: "tok1", plannedLocation: null, latitude: null, longitude: null, notes: [] };
 
-function fakeDb(unitRows: object[], incidents: Inc[] = []) {
+// In-memory stand-in for the sensors table, as announceInstalls sees it
+// (plus a `lastReading` field the fake's $queryRaw uses — see below).
+type FakeSensor = {
+  id: string; name: string | null; address: string | null; apName: string | null; deviceId: string;
+  latitude: number | null; longitude: number | null;
+  installedAt: Date | null; installAnnouncedAt: Date | null; retiredAt: Date | null; isExperimental: boolean;
+  plannedLocation: { name: string } | null; notes: { body: string; createdAt: Date }[];
+  lastReading: { battery: number | null; rssi: number | null; received_at: Date } | null;
+};
+const fakeSensor = (over: Partial<FakeSensor> & { id: string }): FakeSensor => ({
+  name: null, address: null, apName: "Soundwatch-05F3", deviceId: "tok-x",
+  latitude: 38.0, longitude: 23.7, installedAt: null, installAnnouncedAt: null, retiredAt: null, isExperimental: false,
+  plannedLocation: null, notes: [], lastReading: null,
+  ...over,
+});
+
+function fakeDb(unitRows: object[], incidents: Inc[] = [], sensors: FakeSensor[] = []) {
   let nextId = BigInt(100);
   const apply = (i: Inc, data: Partial<Inc>) => Object.assign(i, data);
   const db = {
     incidents,
-    $queryRaw: vi.fn(async () => unitRows),
+    sensors,
+    // gather()'s unit-row query and announceInstalls()'s latest-reading query
+    // both touch "FROM readings" (gather joins it twice), so that substring
+    // alone cannot tell them apart. "rssi, received_at" (that exact column
+    // order) appears only in announceInstalls' query, so it is the marker
+    // used to route each call to the right in-memory answer.
+    $queryRaw: vi.fn(async (strings: readonly string[], ...values: unknown[]) => {
+      if (strings.join("").includes("rssi, received_at")) {
+        const s = sensors.find((x) => x.id === values[0]);
+        return s?.lastReading ? [s.lastReading] : [];
+      }
+      return unitRows;
+    }),
+    sensor: {
+      findMany: vi.fn(async ({ where }: { where: { installedAt: { lte: Date }; installAnnouncedAt: null; retiredAt: null; isExperimental: false } }) =>
+        sensors.filter((s) =>
+          s.installedAt != null && s.installedAt <= where.installedAt.lte &&
+          s.installAnnouncedAt === where.installAnnouncedAt &&
+          s.retiredAt === where.retiredAt &&
+          s.isExperimental === where.isExperimental)),
+      updateMany: vi.fn(async ({ where, data }: { where: { id: string; installAnnouncedAt: null }; data: Partial<FakeSensor> }) => {
+        const s = sensors.find((x) => x.id === where.id);
+        if (!s || s.installAnnouncedAt !== where.installAnnouncedAt) return { count: 0 };
+        Object.assign(s, data);
+        return { count: 1 };
+      }),
+      update: vi.fn(async ({ where, data }: { where: { id: string }; data: Partial<FakeSensor> }) =>
+        Object.assign(sensors.find((x) => x.id === where.id)!, data)),
+    },
     incident: {
       findMany: vi.fn(async (args: { where: Record<string, unknown> }) => {
         if ("closedAt" in args.where) return incidents.filter((i) => i.closedAt === null);
@@ -54,7 +98,7 @@ const asPrisma = (db: unknown) => db as PrismaClient;
 const unitRow = (over: Record<string, unknown> = {}) => ({
   sensor_id: "s1", title: "Skroutz Δάφνη", ap_name: "Soundwatch-05F3",
   last_at: new Date(NOW.getTime() - 30_000), battery: 98, bmin: 97, bmax: 98, rssi_avg: -53,
-  boots_24h: BigInt(0), router_24h: BigInt(0), ...over,
+  boots_24h: BigInt(0), router_24h: BigInt(0), installed_at: null, ...over,
 });
 const inc = (over: Partial<Inc>): Inc => ({
   id: BigInt(1), sensorId: "s1", kind: "silent", openedAt: new Date(NOW.getTime() - 3600_000), closedAt: null, cause: null,
@@ -91,12 +135,12 @@ describe("runAlertsOnce", () => {
     expect(db.incidents[0].evidence).toMatchObject({ count: 2 }); // a number, not 2n: JSON evidence cannot hold a bigint
   });
 
-  it("closing frees the open slot and announces 'resolved' exactly once", async () => {
+  it("closing frees the open slot and announces the unit is back exactly once", async () => {
     const db = fakeDb([unitRow()], [inc({})]);
     await runAlertsOnce(asPrisma(db), NOW);
     expect(db.incidents[0]).toMatchObject({ closedAt: NOW, openSlot: null, resolvedNotifiedAt: NOW });
     const body = JSON.parse(fetchMock.mock.calls[0][1].body);
-    expect(body.embeds[0].title).toContain("resolved");
+    expect(body.embeds[0].title).toContain("is back");
     // the slot is free: the same unit can go silent again and open a new incident
     db.$queryRaw.mockResolvedValue([unitRow({ last_at: new Date(NOW.getTime() - 3600_000) })]);
     await runAlertsOnce(asPrisma(db), NOW);
@@ -192,7 +236,7 @@ describe("runAlertsOnce", () => {
     expect(posted).not.toHaveBeenCalled();
   });
 
-  it("an outage that opened and closed while Discord was down is announced once, as resolved", async () => {
+  it("an outage that opened and closed while Discord was down is announced once, as back", async () => {
     process.env.DISCORD_WEBHOOK_URL = "https://discord.test/hook";
     const bodies: string[] = [];
     vi.stubGlobal("fetch", vi.fn(async (_u: string, init: RequestInit) => { bodies.push(String(init.body)); return new Response(null, { status: 204 }); }));
@@ -201,8 +245,42 @@ describe("runAlertsOnce", () => {
       notifiedAt: null, resolvedNotifiedAt: null, openSlot: null };
     await runAlertsOnce(asPrisma(fakeDb([unitRow()], [inc])), NOW);
     expect(bodies).toHaveLength(1);
-    expect(bodies[0]).toContain("resolved");
+    expect(bodies[0]).toContain("is back");
     expect(inc.notifiedAt).toEqual(NOW);
     expect(inc.resolvedNotifiedAt).toEqual(NOW);
+  });
+
+  it("announces a new install once, and never a bench unit", async () => {
+    process.env.DISCORD_WEBHOOK_URL = "https://discord.test/hook";
+    const bodies: string[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (_u: string, init: RequestInit) => { bodies.push(String(init.body)); return new Response(null, { status: 204 }); }));
+    // fresh: installed, not announced; bench: experimental; old: already announced
+    const fresh = fakeSensor({ id: "fresh", installedAt: new Date(NOW.getTime() - 60_000) });
+    const bench = fakeSensor({ id: "bench", installedAt: new Date(NOW.getTime() - 60_000), isExperimental: true });
+    const old = fakeSensor({ id: "old", installedAt: new Date(NOW.getTime() - 86_400_000), installAnnouncedAt: new Date(NOW.getTime() - 86_000_000) });
+    const db = fakeDb([], [], [fresh, bench, old]);
+    await runAlertsOnce(asPrisma(db), NOW);
+    await runAlertsOnce(asPrisma(db), NOW);
+    expect(bodies).toHaveLength(1);
+    expect(bodies[0]).toContain("New unit installed");
+    expect(fresh.installAnnouncedAt).toEqual(NOW);
+  });
+
+  it("gives the install back when Discord fails, so the next tick retries", async () => {
+    process.env.DISCORD_WEBHOOK_URL = "https://discord.test/hook";
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(null, { status: 500 })));
+    const fresh = fakeSensor({ id: "fresh", installedAt: new Date(NOW.getTime() - 60_000) });
+    const db = fakeDb([], [], [fresh]);
+    await runAlertsOnce(asPrisma(db), NOW);
+    expect(fresh.installAnnouncedAt).toBeNull();
+  });
+
+  it("install announcements fail gracefully, so incident alerts are still evaluated", async () => {
+    const db = fakeDb([unitRow({ last_at: new Date(NOW.getTime() - 3600_000) })]);
+    db.sensor.findMany.mockRejectedValueOnce(new Error("db down"));
+    // announceInstalls throws, but runAlertsOnce must resolve and still open the silent incident
+    await expect(runAlertsOnce(asPrisma(db), NOW)).resolves.toBeUndefined();
+    expect(db.incidents).toHaveLength(1);
+    expect(db.incidents[0]).toMatchObject({ kind: "silent", cause: "network_lost_powered" });
   });
 });

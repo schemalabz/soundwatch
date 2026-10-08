@@ -9,7 +9,7 @@ const healthy: AlertUnit = {
   sensorId: "s1", title: "Skroutz Δάφνη", apName: "Soundwatch-05F3",
   lastReceivedAt: new Date(now.getTime() - 30_000),
   batteryLast: 98, batteryMin1h: 97, batteryMax1h: 98, rssiAvg1h: -53,
-  unscheduledBoots24h: 0, routerRestarts24h: 0,
+  unscheduledBoots24h: 0, routerRestarts24h: 0, installedAt: null,
 };
 
 describe("alert boundaries", () => {
@@ -27,18 +27,23 @@ describe("alert boundaries", () => {
 });
 
 describe("discordMessage branches", () => {
-  const unit = { title: "Skroutz Δάφνη", apName: "Soundwatch-05F3", sensorId: "abcdef1234567890" };
+  const unit = { title: "Skroutz Δάφνη", apName: "Soundwatch-05F3", sensorId: "abcdef1234567890", latitude: null, longitude: null, latestNote: null };
   const embed = (m: { embeds: object[] }) => m.embeds[0] as { title: string; description: string; url?: string; color: number; timestamp: string };
   it("count-based and signal incidents say their number", () => {
     expect(embed(discordMessage({ kind: "router_restarts", cause: null, openedAt: now, closedAt: null, evidence: { count: 3 } }, unit, null)))
-      .toMatchObject({ title: "Skroutz Δάφνη (05F3) store router keeps restarting", description: "3 times in the last 24 h." });
+      .toMatchObject({
+        title: "🟠 Skroutz Δάφνη (05F3) store router keeps restarting",
+        description: "**What to do:** Ask the store about its internet: the router keeps re-dialling.\n3 times in the last 24 h",
+      });
     expect(embed(discordMessage({ kind: "weak_signal", cause: null, openedAt: now, closedAt: null, evidence: { rssiAvg1h: -75 } }, unit, null)).description)
-      .toBe("-75 dBm average over the last hour.");
+      .toBe("**What to do:** Ask the store to move the router closer, or add a wifi extender.\n-75 dBm average over the last hour");
   });
   it("no AP name falls back to the first 8 of the sensor id; base URL trailing slash is not doubled", () => {
     const e = embed(discordMessage({ kind: "silent", cause: null, openedAt: now, closedAt: null, evidence: null }, { ...unit, apName: null }, "https://x.gr/"));
-    expect(e.title).toBe("Skroutz Δάφνη (abcdef12) is silent");
-    expect(e.description).toBe("Cause unknown from the data we have.");
+    expect(e.title).toBe("🔴 Skroutz Δάφνη (abcdef12) is silent");
+    expect(e.description).toBe(
+      "Cause unknown from the data we have.\n**What to do:** Check the unit has power and the store's internet is up.\n[Open in admin](https://x.gr/admin/units/abcdef1234567890)",
+    );
     expect(e.url).toBe("https://x.gr/admin/units/abcdef1234567890");
   });
   it("resolved is green and stamped at closing; open silence red, watch kinds amber", () => {

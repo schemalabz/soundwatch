@@ -8,7 +8,7 @@
 // incident marked delivered-as-dry-run — so plugging the webhook in later
 // does not replay the backlog.
 import type { PrismaClient } from "@prisma/client";
-import { ALERT_SILENT_MS, discordMessage, evaluate, type AlertUnit, type IncidentKind } from "../src/lib/fleet/alerts";
+import { ALERT_SILENT_MS, discordMessage, evaluate, installMessage, type AlertUnit, type IncidentKind } from "../src/lib/fleet/alerts";
 import { classifiedEvents } from "../src/lib/fleet/eventsSql";
 
 interface UnitRow {
@@ -22,6 +22,7 @@ interface UnitRow {
   rssi_avg: number | null;
   boots_24h: bigint;
   router_24h: bigint;
+  installed_at: Date | null;
 }
 
 async function gather(prisma: PrismaClient, now: Date): Promise<AlertUnit[]> {
@@ -29,7 +30,7 @@ async function gather(prisma: PrismaClient, now: Date): Promise<AlertUnit[]> {
     WITH ev AS (${classifiedEvents()})
     SELECT s.id AS sensor_id,
            coalesce(p.name, s.name, s.address, 'Box ' || replace(s.ap_name, 'Soundwatch-', ''), s.device_id) AS title,
-           s.ap_name, l.received_at AS last_at, l.battery, h.bmin, h.bmax, h.rssi_avg,
+           s.ap_name, l.received_at AS last_at, l.battery, h.bmin, h.bmax, h.rssi_avg, s.installed_at,
            (SELECT count(*) FROM ev WHERE ev.sensor_id = s.id AND ev.unscheduled
               AND ev.at > ref.t - INTERVAL '24 hours' AND ev.at <= ref.t)::bigint AS boots_24h,
            (SELECT count(*) FROM ev WHERE ev.sensor_id = s.id AND ev.router_restart
@@ -61,6 +62,7 @@ async function gather(prisma: PrismaClient, now: Date): Promise<AlertUnit[]> {
     rssiAvg1h: r.rssi_avg,
     unscheduledBoots24h: Number(r.boots_24h),
     routerRestarts24h: Number(r.router_24h),
+    installedAt: r.installed_at,
   }));
 }
 
@@ -88,7 +90,45 @@ async function deliver(body: object): Promise<"discord" | "dry-run" | "failed"> 
   }
 }
 
+/**
+ * Announce installations the evaluator has not announced yet, within a tick
+ * of the installer tapping "installed". Claimed first (install_announced_at),
+ * like incidents: two evaluators never both post; a failed post gives the
+ * claim back for the next tick. Bench units and retired tokens are never
+ * announced; units installed before migration 0022 count as announced.
+ */
+async function announceInstalls(prisma: PrismaClient, now: Date, base: string | null): Promise<void> {
+  const fresh = await prisma.sensor.findMany({
+    where: { installedAt: { not: null, lte: now }, installAnnouncedAt: null, retiredAt: null, isExperimental: false },
+    include: { plannedLocation: { select: { name: true } }, notes: { orderBy: { createdAt: "desc" }, take: 1, select: { body: true, createdAt: true } } },
+  });
+  for (const s of fresh) {
+    const claim = await prisma.sensor.updateMany({ where: { id: s.id, installAnnouncedAt: null }, data: { installAnnouncedAt: now } });
+    if (claim.count === 0) continue;
+    try {
+      const [last] = await prisma.$queryRaw<{ battery: number | null; rssi: number | null; received_at: Date }[]>`
+        SELECT battery, rssi, received_at FROM readings
+        WHERE sensor_id = ${s.id} AND received_at <= ${now}::timestamptz
+        ORDER BY received_at DESC LIMIT 1`;
+      const result = await deliver(installMessage({
+        title: s.plannedLocation?.name ?? s.name ?? s.address ?? (s.apName ? `Box ${s.apName.replace(/^Soundwatch-/, "")}` : s.deviceId),
+        apName: s.apName, sensorId: s.id, latitude: s.latitude, longitude: s.longitude, latestNote: s.notes[0] ?? null,
+        installedAt: s.installedAt!, siteName: s.plannedLocation?.name ?? null, address: s.address,
+        batteryLast: last?.battery ?? null, rssiLast: last?.rssi ?? null, lastReceivedAt: last?.received_at ?? null,
+      }, base));
+      if (result === "failed") await prisma.sensor.update({ where: { id: s.id }, data: { installAnnouncedAt: null } });
+      else console.log(`[alerts] announced install of ${s.id} (${result})`);
+    } catch (err) {
+      console.error(`[alerts] install announcement for ${s.id} failed (claim returned):`, err);
+      await prisma.sensor.update({ where: { id: s.id }, data: { installAnnouncedAt: null } }).catch(() => {});
+    }
+  }
+}
+
 export async function runAlertsOnce(prisma: PrismaClient, now = new Date()): Promise<void> {
+  // Install announcements never hold up incident alerts.
+  await announceInstalls(prisma, now, process.env.ADMIN_BASE_URL || null)
+    .catch((err) => console.error("[alerts] install announcements failed (incidents still evaluated):", err));
   const units = await gather(prisma, now);
   const open = await prisma.incident.findMany({ where: { closedAt: null }, select: { id: true, sensorId: true, kind: true } });
   const decision = evaluate(units, open.map((i) => ({ ...i, kind: i.kind as IncidentKind })), now);
@@ -124,7 +164,15 @@ export async function runAlertsOnce(prisma: PrismaClient, now = new Date()): Pro
   // claim and post loses that message, which beats posting it twice.
   const pending = await prisma.incident.findMany({
     where: { OR: [{ notifiedAt: null }, { closedAt: { not: null }, resolvedNotifiedAt: null }] },
-    include: { sensor: { select: { apName: true, name: true, address: true, deviceId: true, plannedLocation: { select: { name: true } } } } },
+    include: {
+      sensor: {
+        select: {
+          apName: true, name: true, address: true, deviceId: true, plannedLocation: { select: { name: true } },
+          latitude: true, longitude: true,
+          notes: { orderBy: { createdAt: "desc" }, take: 1, select: { body: true, createdAt: true } },
+        },
+      },
+    },
     orderBy: { openedAt: "asc" },
   });
   const base = process.env.ADMIN_BASE_URL || null;
@@ -134,6 +182,9 @@ export async function runAlertsOnce(prisma: PrismaClient, now = new Date()): Pro
         (inc.sensor.apName ? `Box ${inc.sensor.apName.replace(/^Soundwatch-/, "")}` : inc.sensor.deviceId),
       apName: inc.sensor.apName,
       sensorId: inc.sensorId,
+      latitude: inc.sensor.latitude,
+      longitude: inc.sensor.longitude,
+      latestNote: inc.sensor.notes[0] ?? null,
     };
     const evidence = (inc.evidence ?? {}) as Record<string, unknown>;
     const resolving = inc.notifiedAt != null;
