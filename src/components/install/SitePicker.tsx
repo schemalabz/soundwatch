@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { installStrings as tr } from "@/lib/strings/install";
 import { ATHENS_CENTER, distanceMeters } from "@/lib/geo";
+import { suggestAddress } from "@/lib/dashboard/geocode";
 import MapPinPicker from "./MapPinPicker";
 
 // The install page's location step. Three paths, in order of preference:
@@ -39,6 +40,14 @@ const linkBtn = {
   color: "#2563eb", textDecoration: "underline", padding: "6px 0", cursor: "pointer",
 } as const;
 
+const fieldLabel = { display: "block", fontSize: 14, fontWeight: 600, margin: "0 0 10px" } as const;
+
+// 16 px input text stops iOS from zooming the page on focus.
+const fieldInput = {
+  font: "inherit", fontSize: 16, width: "100%", padding: "10px 12px", borderRadius: 10,
+  border: "1px solid #ccc", boxSizing: "border-box", marginTop: 4, fontWeight: 400,
+} as const;
+
 // Keeps the confirm reachable when "show all" makes the list taller than the
 // viewport: the action sticks to the bottom edge with a white fade behind it.
 const stickyBar = {
@@ -67,6 +76,23 @@ export default function SitePicker({
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [needsForce, setNeedsForce] = useState(false);
+  const [pending, setPending] = useState<{ latitude: number; longitude: number } | null>(null);
+  const [suggestion, setSuggestion] = useState<{ looking: boolean; found: boolean }>({ looking: false, found: false });
+  const [address, setAddress] = useState("");
+  // Guards against a slow suggestAddress for an abandoned pin resolving after
+  // the installer went back to the map and picked another pin, which would
+  // otherwise overwrite the new pin's suggestion with the stale one.
+  const lookupSeq = useRef(0);
+
+  async function pinPicked(c: { latitude: number; longitude: number }) {
+    const seq = ++lookupSeq.current;
+    setPending(c);
+    setSuggestion({ looking: true, found: false });
+    const s = await suggestAddress(c.longitude, c.latitude);
+    if (seq !== lookupSeq.current) return;
+    setAddress(s ?? "");
+    setSuggestion({ looking: false, found: s != null });
+  }
 
   useEffect(() => {
     if (!pinOnly) {
@@ -136,6 +162,30 @@ export default function SitePicker({
     const center = gps ?? (selected
       ? { latitude: selected.latitude, longitude: selected.longitude }
       : { latitude: ATHENS_CENTER.lat, longitude: ATHENS_CENTER.lng });
+    if (pending) {
+      return (
+        <div>
+          <h3 style={{ fontSize: 16, margin: "0 0 6px" }}>{tr.addressTitle}</h3>
+          <p style={{ fontSize: 14, color: "#444", margin: "0 0 10px" }}>
+            {suggestion.looking ? tr.lookingUpAddress : suggestion.found ? tr.addressHint : tr.addressNotFound}
+          </p>
+          <label style={fieldLabel}>{tr.addressLabel}
+            <input style={fieldInput} value={address} maxLength={200} disabled={suggestion.looking}
+              onChange={(e) => setAddress(e.target.value)} />
+          </label>
+          {msg && <p style={{ fontSize: 14, marginTop: 8, color: "#b45309" }}>{msg}</p>}
+          <button style={{ ...(needsForce ? cautionBtn : primaryBtn), ...(busy || suggestion.looking ? { opacity: 0.6, cursor: "wait" } : {}) }}
+            disabled={busy || suggestion.looking}
+            onClick={() => save({ ...pending, ...(address.trim() ? { address: address.trim() } : {}),
+              ...(needsForce ? { force: true } : {}) })}>
+            {busy ? tr.saving : needsForce ? tr.overrideLocation : tr.saveAddress}
+          </button>
+          <p style={{ marginTop: 10 }}>
+            <button style={linkBtn} onClick={() => { lookupSeq.current++; setPending(null); setMsg(null); }}>{tr.backToMap}</button>
+          </p>
+        </div>
+      );
+    }
     return (
       <div>
         <p style={{ fontSize: 14, color: "#444", margin: "0 0 8px" }}>{tr.movePin}</p>
@@ -143,7 +193,7 @@ export default function SitePicker({
           center={center}
           confirmLabel={busy ? tr.saving : tr.pinConfirm}
           busy={busy}
-          onConfirm={(c) => save({ ...c, ...(needsForce ? { force: true } : {}) })}
+          onConfirm={pinPicked}
         />
         {msg && <p style={{ fontSize: 14, marginTop: 8, color: "#b45309" }}>{msg}</p>}
         {!pinOnly && (

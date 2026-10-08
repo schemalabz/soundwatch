@@ -35,6 +35,14 @@ export async function POST(
     return NextResponse.json({ error: "valid latitude and longitude required" }, { status: 400 });
   }
 
+  // name/address come from the installer's confirm step (or a suggestion they
+  // accepted). Public, token-gated route: bound what it will store.
+  for (const [k, v, max] of [["name", name, 120], ["address", address, 200]] as const) {
+    if (v != null && (typeof v !== "string" || v.trim().length > max)) {
+      return NextResponse.json({ error: `${k} must be text of at most ${max} characters` }, { status: 400 });
+    }
+  }
+
   const sensor = await prisma.sensor.findUnique({ where: { deviceId: token } });
   if (!sensor) {
     return NextResponse.json({ error: "unknown token" }, { status: 404 });
@@ -72,6 +80,9 @@ export async function POST(
     );
   }
 
+  const cleanName = typeof name === "string" ? name.trim() : "";
+  const cleanAddress = typeof address === "string" ? address.trim() : "";
+
   const updated = await prisma.sensor.update({
     where: { deviceId: token },
     data: {
@@ -79,7 +90,7 @@ export async function POST(
       longitude: lon,
       ...(site
         ? { plannedLocationId: site.id, name: site.name, ...(site.address ? { address: site.address } : {}) }
-        : { ...(address ? { address } : {}), ...(name ? { name } : {}) }),
+        : { ...(cleanAddress ? { address: cleanAddress } : {}), ...(cleanName ? { name: cleanName } : {}) }),
       installedAt: new Date(),
     },
   });

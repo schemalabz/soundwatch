@@ -11,6 +11,7 @@ interface V6Feature {
     name?: string;
     place_formatted?: string;
     coordinates?: { longitude: number; latitude: number };
+    context?: { place?: { name?: string } };
   };
 }
 
@@ -26,6 +27,37 @@ export async function reverseGeocode(lng: number, lat: number): Promise<string |
     if (!res.ok) return null;
     const body: { features?: V6Feature[] } = await res.json();
     return body.features?.[0]?.properties.name ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** A Mapbox reverse hit as the address a unit is saved with — and shown by,
+ *  when it has no separate name: "Κυδωνιών 34, Νέα Ιωνία". Mapbox names
+ *  places with their region ("Νέα Ιωνία Αττικής"); the suffix is dropped. */
+export function formatSuggestion(p: {
+  name?: string;
+  context?: { place?: { name?: string } };
+}): string | null {
+  const street = p.name?.trim();
+  if (!street) return null;
+  const area = p.context?.place?.name?.replace(/\s+Αττικής$/, "").trim() || null;
+  return area ? `${street}, ${area}` : street;
+}
+
+/** Reverse-geocode a point into a suggested address, or null. */
+export async function suggestAddress(lng: number, lat: number): Promise<string | null> {
+  const token = process.env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN;
+  if (!token) return null;
+  try {
+    const url =
+      `${V6}/reverse?longitude=${lng.toFixed(6)}&latitude=${lat.toFixed(6)}` +
+      `&access_token=${token}&language=el&types=address,street&limit=1`;
+    const res = await fetch(url);
+    if (!res.ok) return null;
+    const body: { features?: V6Feature[] } = await res.json();
+    const p = body.features?.[0]?.properties;
+    return p ? formatSuggestion(p) : null;
   } catch {
     return null;
   }
