@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
+import { isSetupReading } from "@/lib/locations";
 
 export const dynamic = "force-dynamic";
 
@@ -16,6 +17,11 @@ const LIVE_WINDOW_MS = 5 * 60 * 1000;
  * Unauthenticated on purpose: knowing the token is the price of entry, and the
  * token is already printed on the box the installer is holding. It exposes only
  * liveness and the latest level — no history, no credentials, no control.
+ *
+ * never_seen covers both "installed but not yet reporting" and "its only
+ * reading(s) so far are the office bench check" — readings sent while the box
+ * was flashed, which never happened where it is now and must not read as
+ * "worked, now silent" (stale).
  */
 export async function GET(
   _request: Request,
@@ -57,7 +63,11 @@ export async function GET(
 
   // never_seen distinguishes "installed but not yet reporting" from "was working
   // and stopped" — the installer needs to know which of those they are looking at.
-  const state = live ? "live" : latest ? "stale" : "never_seen";
+  // It also covers the box's only reading(s) being the office bench check: a few
+  // readings sent while it was flashed, within SETUP_WINDOW_MS of provisionedAt,
+  // are not a sign it ever worked where it is now.
+  const atSetup = latest != null && isSetupReading(latest.receivedAt, sensor.provisionedAt);
+  const state = live ? "live" : latest && !atSetup ? "stale" : "never_seen";
 
   return NextResponse.json({
     token,
@@ -76,6 +86,7 @@ export async function GET(
           rssi: latest.rssi,
           freeHeapBytes: latest.freeHeapBytes,
           resetCause: latest.resetCause,
+          atSetup,
         }
       : null,
   });

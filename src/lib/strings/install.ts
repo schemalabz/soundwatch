@@ -2,6 +2,24 @@
 // single-locale for now; when proper i18n lands, this module is the
 // extraction point — every install-facing string lives here and nowhere else.
 
+// Readable Greek duration for "how long ago", picking the coarsest unit that
+// keeps the number small: seconds under 90s, then minutes, then hours, then
+// days — each bucket's value floors against the next unit up, so the
+// boundary itself reads as "1" (e.g. exactly 90 min reads as "1 ώρα").
+export function agoEl(s: number): string {
+  if (s < 90) return "λίγα δευτερόλεπτα";
+  if (s < 90 * 60) {
+    const m = Math.floor(s / 60);
+    return m === 1 ? "1 λεπτό" : `${m} λεπτά`;
+  }
+  if (s < 36 * 3600) {
+    const h = Math.floor(s / 3600);
+    return h === 1 ? "1 ώρα" : `${h} ώρες`;
+  }
+  const d = Math.floor(s / 86400);
+  return d === 1 ? "1 ημέρα" : `${d} ημέρες`;
+}
+
 export const installStrings = {
   title: "Εγκατάσταση Soundwatch",
   device: (token: string) => `Συσκευή ${token}`,
@@ -12,7 +30,8 @@ export const installStrings = {
   stale: "⚠ Λειτουργούσε, τώρα σίγησε",
   neverSeen: "… Δεν στέλνει ακόμα",
   unknownToken: "✕ Άγνωστη συσκευή",
-  lastReading: (s: number) => `τελευταία μέτρηση πριν από ${s}s`,
+  lastReading: (s: number) => `τελευταία μέτρηση πριν από ${agoEl(s)}`,
+  setupReading: (when: string) => `Η μόνη του μέτρηση μέχρι τώρα ήταν στη ρύθμιση, στο γραφείο (${when}).`,
   battery: (n: number) => ` · μπαταρία ${n}%`,
   wifi: (n: number) => ` · wifi ${n} dBm`,
   // steps 1-3 carry inline <b> emphasis and live directly in the page JSX

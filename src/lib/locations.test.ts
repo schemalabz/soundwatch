@@ -3,6 +3,7 @@ import {
   computeStage,
   decideLocationWrite,
   displayName,
+  isSetupReading,
   parseImportRows,
   PUBLIC_SENSOR_WHERE,
   slugifyKey,
@@ -114,6 +115,22 @@ describe("computeStage", () => {
     expect(computeStage({ provisionedAt: stale, installedAt: null, lastSeenAt: recent, isExperimental: true }, now)).toBe("bench");
     expect(computeStage({ provisionedAt: null, installedAt: stale, lastSeenAt: stale, isExperimental: true }, now)).toBe("bench");
     expect(computeStage({ provisionedAt: null, installedAt: null, lastSeenAt: null, isExperimental: true }, now)).toBe("bench");
+  });
+});
+
+describe("isSetupReading", () => {
+  const provisionedAt = new Date("2026-08-03T12:00:00Z");
+  it("a reading 15 minutes before provisioning is a setup reading", () => {
+    expect(isSetupReading(new Date("2026-08-03T11:45:00Z"), provisionedAt)).toBe(true);
+  });
+  it("a reading 5 minutes after provisioning is a setup reading", () => {
+    expect(isSetupReading(new Date("2026-08-03T12:05:00Z"), provisionedAt)).toBe(true);
+  });
+  it("a reading 2 hours after provisioning is not a setup reading", () => {
+    expect(isSetupReading(new Date("2026-08-03T14:00:00Z"), provisionedAt)).toBe(false);
+  });
+  it("is false when the sensor was never provisioned", () => {
+    expect(isSetupReading(new Date("2026-08-03T11:45:00Z"), null)).toBe(false);
   });
 });
 

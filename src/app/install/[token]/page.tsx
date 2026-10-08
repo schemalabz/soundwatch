@@ -17,7 +17,7 @@ type Status = {
              address: string | null; latitude: number | null; longitude: number | null;
              isExperimental?: boolean };
   lastReading?: { secondsAgo: number; laeq: number | null; battery: number | null;
-                  rssi: number | null } | null;
+                  rssi: number | null; receivedAt: string; atSetup?: boolean } | null;
 };
 
 export default function InstallPage({ params }: { params: Promise<{ token: string }> }) {
@@ -85,10 +85,19 @@ export default function InstallPage({ params }: { params: Promise<{ token: strin
         <div style={{ fontSize: 20, fontWeight: 650, color: tone }}>{headline}</div>
         {s?.lastReading && (
           <div style={{ marginTop: 6, fontSize: 14, color: "#444" }}>
-            {tr.lastReading(s.lastReading.secondsAgo)}
-            {s.lastReading.laeq != null && <> · {s.lastReading.laeq.toFixed(1)} dB</>}
-            {s.lastReading.battery != null && tr.battery(s.lastReading.battery)}
-            {s.lastReading.rssi != null && tr.wifi(s.lastReading.rssi)}
+            {s.lastReading.atSetup ? (
+              tr.setupReading(
+                new Intl.DateTimeFormat("el-GR", { timeZone: "Europe/Athens", day: "numeric", month: "short" })
+                  .format(new Date(s.lastReading.receivedAt))
+              )
+            ) : (
+              <>
+                {tr.lastReading(s.lastReading.secondsAgo)}
+                {s.lastReading.laeq != null && <> · {s.lastReading.laeq.toFixed(1)} dB</>}
+                {s.lastReading.battery != null && tr.battery(s.lastReading.battery)}
+                {s.lastReading.rssi != null && tr.wifi(s.lastReading.rssi)}
+              </>
+            )}
           </div>
         )}
         {st === "never_seen" && (

@@ -101,6 +101,14 @@ export function computeStage(
   return live ? "installed_live" : "installed_silent";
 }
 
+/** Readings a box sends at the office while it is flashed — the bench check —
+ *  arrive around provisioning. Up to an hour after provisioned_at, a reading
+ *  is a setup reading, not a sign the box ever worked where it is now. */
+export const SETUP_WINDOW_MS = 3600_000;
+export function isSetupReading(receivedAt: Date, provisionedAt: Date | null): boolean {
+  return provisionedAt != null && receivedAt.getTime() <= provisionedAt.getTime() + SETUP_WINDOW_MS;
+}
+
 // Two independent conflicts, two independent confirmations:
 //   force          -> "yes, overwrite THIS sensor's existing location"
 //   acceptOccupied -> "yes, this SITE already has a unit, bind anyway"
