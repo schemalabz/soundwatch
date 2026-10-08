@@ -67,6 +67,17 @@ export function parseImportRows(body: unknown): { rows: ImportRow[] } | { error:
   return { rows };
 }
 
+// A unit with no name is shown by its address instead — never "no name" as
+// long as it has either. Empty/whitespace-only strings count as absent, the
+// same as null: a blank name typed into a form must not win over a real
+// address.
+export function displayName(u: { name: string | null; address: string | null }): string | null {
+  const name = u.name?.trim();
+  if (name) return name;
+  const address = u.address?.trim();
+  return address || null;
+}
+
 // in_box deliberately ignores lastSeenAt: a field unit publishes during its
 // office prove phase, and that must not make a boxed unit look like a dead
 // deployment.

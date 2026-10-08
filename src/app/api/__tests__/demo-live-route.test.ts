@@ -68,4 +68,13 @@ describe("GET /api/demo/live", () => {
       })
     );
   });
+
+  it("a sensor with no name is emitted with its address", async () => {
+    mocked.sensor.findMany.mockResolvedValue([
+      { id: "s1", deviceId: "5hvdyx9a8gkxd4aa", name: null, address: "Κυδωνιών 28, Νέα Ιωνία", lastSeenAt: null },
+    ] as never);
+    const res = await GET(new Request("http://test/api/demo/live"));
+    const body = (await res.json()) as { devices: { sensorId: string; name: string | null }[] };
+    expect(body.devices[0].name).toBe("Κυδωνιών 28, Νέα Ιωνία");
+  });
 });

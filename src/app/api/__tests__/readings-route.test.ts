@@ -190,4 +190,13 @@ describe("GET /api/sensors/[id]/readings", () => {
     expect(/^[\x00-\x7F]*$/.test(beforeStar)).toBe(true);
     expect(disposition).toContain("filename*=UTF-8''soundwatch-%CE%B2");
   });
+
+  it("uses the address as the filename when sensor has no name", async () => {
+    mocked.sensor.findUnique.mockResolvedValue({ ...SENSOR, name: null, address: "Κυδωνιών 28, Νέα Ιωνία" } as never);
+    const res = await call("?format=csv&from=2026-08-12T09:00:00Z");
+    expect(res.status).toBe(200);
+    const disposition = res.headers.get("content-disposition") ?? "";
+    // The address slug replaces the missing name in the filename
+    expect(disposition).toContain("filename*=UTF-8''soundwatch-%CE%BA%CF%85%CE%B4%CF%89%CE%BD%CE%B9%CF%8E%CE%BD");
+  });
 });

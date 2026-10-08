@@ -17,7 +17,7 @@ const mocked = vi.mocked(prisma, true);
 const DB_SENSOR = {
   id: "s1",
   deviceId: "5hvdyx9a8gkxd4aa",
-  name: "Skroutz Store 1",
+  name: "Skroutz Store 1" as string | null,
   latitude: 37.98,
   longitude: 23.73,
   address: "Athens",
@@ -135,6 +135,12 @@ describe("GET /api/sensors/[id]", () => {
   it("reports whether the sensor is a bench unit", async () => {
     const body = SensorDetailSchema.parse(await (await call()).json());
     expect(body.isExperimental).toBe(false);
+  });
+
+  it("a sensor with no name is shown by its address", async () => {
+    mockSensor({ ...DB_SENSOR, name: null, address: "Κυδωνιών 28, Νέα Ιωνία" });
+    const body = SensorDetailSchema.parse(await (await call()).json());
+    expect(body.name).toBe("Κυδωνιών 28, Νέα Ιωνία");
   });
 
   it("serves a bench unit to its share-key holder, and never echoes the key", async () => {

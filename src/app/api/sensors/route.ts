@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { PUBLIC_SENSOR_WHERE } from "@/lib/locations";
+import { displayName, PUBLIC_SENSOR_WHERE } from "@/lib/locations";
 import { checkAdminAuth } from "../admin/auth";
 import { READING_COLUMNS, serializeReading, type ReadingRow } from "@/lib/api/readings";
 import { PUBLIC_SENSOR_SQL } from "@/lib/server/filterSql";
@@ -72,7 +72,7 @@ export async function GET(request: Request) {
       const row = latestBySensor.get(sensor.id);
       return {
         id: sensor.id,
-        name: sensor.name,
+        name: displayName(sensor),
         latitude: sensor.latitude,
         longitude: sensor.longitude,
         address: sensor.address,

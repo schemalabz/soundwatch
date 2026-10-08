@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { checkAdminAuth } from "@/app/api/admin/auth";
-import { PUBLIC_SENSOR_WHERE } from "@/lib/locations";
+import { displayName, PUBLIC_SENSOR_WHERE } from "@/lib/locations";
 
 // Bench demo endpoint: exposes the Soundwatch acoustic measurements that the
 // product API deliberately does not carry yet (it still selects the stock
@@ -35,7 +35,7 @@ export async function GET(request: Request) {
     // deviceId is the install credential (POST /api/install/{token}/location
     // authenticates with nothing else), so it never leaves an unauthenticated
     // route. The public id keys this feed instead.
-    select: { id: true, name: true, lastSeenAt: true },
+    select: { id: true, name: true, address: true, lastSeenAt: true },
     orderBy: { id: "asc" },
   });
 
@@ -75,21 +75,24 @@ export async function GET(request: Request) {
     windowMinutes: minutes,
     devices: [...devices.entries()]
       .sort(([a], [b]) => a.localeCompare(b))
-      .map(([sensorId, rows]) => ({
-        sensorId,
-        name: sensors.find((s) => s.id === sensorId)?.name ?? null,
-        lastSeenAt: sensors.find((s) => s.id === sensorId)?.lastSeenAt ?? null,
-        count: rows.length,
-        latest: rows[rows.length - 1] ?? null,
-        series: rows.map((r) => ({
-          t: r.receivedAt,
-          laeq: r.laeq,
-          l10: r.l10,
-          l50: r.l50,
-          l90: r.l90,
-          duty: r.realizedDuty,
-          frames: r.frameCount,
-        })),
-      })),
+      .map(([sensorId, rows]) => {
+        const sensor = sensors.find((s) => s.id === sensorId);
+        return {
+          sensorId,
+          name: sensor ? displayName(sensor) : null,
+          lastSeenAt: sensor?.lastSeenAt ?? null,
+          count: rows.length,
+          latest: rows[rows.length - 1] ?? null,
+          series: rows.map((r) => ({
+            t: r.receivedAt,
+            laeq: r.laeq,
+            l10: r.l10,
+            l50: r.l50,
+            l90: r.l90,
+            duty: r.realizedDuty,
+            frames: r.frameCount,
+          })),
+        };
+      }),
   });
 }

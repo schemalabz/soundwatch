@@ -23,8 +23,10 @@ interface FreshnessSqlRow {
 }
 
 export async function GET() {
+  // A unit with no name is shown by its address instead (displayName's SQL
+  // equivalent): coalesce(nullif(btrim(name), ''), nullif(btrim(address), '')).
   const rows = await prisma.$queryRaw<FreshnessSqlRow[]>`
-    SELECT s.id, s.name,
+    SELECT s.id, coalesce(nullif(btrim(s.name), ''), nullif(btrim(s.address), '')) AS name,
            last.received_at AS last_at, last.laeq AS last_laeq,
            first.recorded_at AS first_at
     FROM sensors s
@@ -37,7 +39,7 @@ export async function GET() {
       WHERE r.sensor_id = s.id ORDER BY recorded_at ASC LIMIT 1
     ) first ON true
     WHERE ${PUBLIC_SENSOR_RAW}
-    ORDER BY s.name NULLS LAST, s.id`;
+    ORDER BY coalesce(nullif(btrim(s.name), ''), nullif(btrim(s.address), '')) NULLS LAST, s.id`;
 
   // Staleness reads received_at (server insert time): device clocks drift up to
   // ~10 min FORWARD between NTP syncs, so recorded_at would report a drifted

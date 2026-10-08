@@ -2,10 +2,27 @@ import { describe, expect, it } from "vitest";
 import {
   computeStage,
   decideLocationWrite,
+  displayName,
   parseImportRows,
   PUBLIC_SENSOR_WHERE,
   slugifyKey,
 } from "./locations";
+
+describe("displayName", () => {
+  it("the name wins when present", () => {
+    expect(displayName({ name: "Skroutz Δάφνη", address: "Λεωφ. Βουλιαγμένης 1" })).toBe("Skroutz Δάφνη");
+  });
+  it("falls back to the address when there is no name", () => {
+    expect(displayName({ name: null, address: "Κυδωνιών 28, Νέα Ιωνία" })).toBe("Κυδωνιών 28, Νέα Ιωνία");
+  });
+  it("treats empty or whitespace-only strings as absent", () => {
+    expect(displayName({ name: "   ", address: "Κυδωνιών 28, Νέα Ιωνία" })).toBe("Κυδωνιών 28, Νέα Ιωνία");
+    expect(displayName({ name: "", address: "  " })).toBeNull();
+  });
+  it("is null when both are missing", () => {
+    expect(displayName({ name: null, address: null })).toBeNull();
+  });
+});
 
 describe("PUBLIC_SENSOR_WHERE", () => {
   it("public existence = active + not experimental + has a location", () => {

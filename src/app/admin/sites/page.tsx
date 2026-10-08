@@ -56,7 +56,7 @@ export default function SitesPage() {
   function startFromUnit(u: UnlinkedUnit) {
     setDraft({
       ...EMPTY,
-      name: u.name ?? "",
+      name: u.name ?? u.address ?? "",
       address: u.address ?? "",
       latitude: u.latitude.toFixed(6),
       longitude: u.longitude.toFixed(6),
@@ -113,7 +113,7 @@ export default function SitesPage() {
                   <StatusDot status={u.status} />
                   <Link href={`/admin/units/${u.id}`} className="w-36 font-mono text-sm font-medium text-ink">{u.apName ?? u.deviceId.slice(0, 10)}</Link>
                   <span className="min-w-0 flex-1 text-sm text-ink">
-                    {u.name ?? <span className="text-slate">no name</span>}
+                    {u.name ?? u.address ?? <span className="text-slate">no name</span>}
                     <span className="ml-2 font-mono text-xs text-slate">{u.latitude.toFixed(5)}, {u.longitude.toFixed(5)}</span>
                   </span>
                   <span className="text-xs text-slate">installed {athens(u.installedAt)}</span>
