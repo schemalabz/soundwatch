@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { decideLocationWrite } from "@/lib/locations";
+import { loadSiteForBinding } from "@/lib/server/siteBinding";
 
 /**
  * The installer tells us where the unit ended up.
@@ -34,6 +35,14 @@ export async function POST(
     return NextResponse.json({ error: "valid latitude and longitude required" }, { status: 400 });
   }
 
+  // name/address come from the installer's confirm step (or a suggestion they
+  // accepted). Public, token-gated route: bound what it will store.
+  for (const [k, v, max] of [["name", name, 120], ["address", address, 200]] as const) {
+    if (v != null && (typeof v !== "string" || v.trim().length > max)) {
+      return NextResponse.json({ error: `${k} must be text of at most ${max} characters` }, { status: 400 });
+    }
+  }
+
   const sensor = await prisma.sensor.findUnique({ where: { deviceId: token } });
   if (!sensor) {
     return NextResponse.json({ error: "unknown token" }, { status: 404 });
@@ -43,15 +52,10 @@ export async function POST(
   let site: { id: string; name: string; address: string | null } | null = null;
   let siteOccupiedByOther = false;
   if (plannedLocationId != null) {
-    const found = await prisma.plannedLocation.findUnique({
-      where: { id: String(plannedLocationId) },
-      include: { sensors: { select: { deviceId: true } } },
-    });
-    if (!found || !found.isActive) {
-      return NextResponse.json({ error: "unknown or retired planned location" }, { status: 400 });
-    }
-    site = { id: found.id, name: found.name, address: found.address };
-    siteOccupiedByOther = found.sensors.some((s) => s.deviceId !== token);
+    const found = await loadSiteForBinding(prisma, String(plannedLocationId), { deviceId: token });
+    if (!found.ok) return NextResponse.json({ error: found.error }, { status: 400 });
+    site = found.site;
+    siteOccupiedByOther = found.occupiedBy.length > 0;
   }
 
   const decision = decideLocationWrite({
@@ -76,6 +80,9 @@ export async function POST(
     );
   }
 
+  const cleanName = typeof name === "string" ? name.trim() : "";
+  const cleanAddress = typeof address === "string" ? address.trim() : "";
+
   const updated = await prisma.sensor.update({
     where: { deviceId: token },
     data: {
@@ -83,7 +90,7 @@ export async function POST(
       longitude: lon,
       ...(site
         ? { plannedLocationId: site.id, name: site.name, ...(site.address ? { address: site.address } : {}) }
-        : { ...(address ? { address } : {}), ...(name ? { name } : {}) }),
+        : { ...(cleanAddress ? { address: cleanAddress } : {}), ...(cleanName ? { name: cleanName } : {}) }),
       installedAt: new Date(),
     },
   });

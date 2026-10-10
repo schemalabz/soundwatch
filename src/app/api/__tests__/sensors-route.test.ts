@@ -92,4 +92,13 @@ describe("GET /api/sensors", () => {
     const item = SensorListItemSchema.parse(((await res.json()) as unknown[])[0]);
     expect(item.latestReading).toBeNull();
   });
+
+  it("a sensor with no name is listed by its address", async () => {
+    mocked.sensor.findMany.mockResolvedValue([
+      { ...DB_SENSOR, name: null, address: "Κυδωνιών 28, Νέα Ιωνία" },
+    ] as never);
+    const res = await GET(new Request("http://test/api/sensors"));
+    const item = SensorListItemSchema.parse(((await res.json()) as unknown[])[0]);
+    expect(item.name).toBe("Κυδωνιών 28, Νέα Ιωνία");
+  });
 });

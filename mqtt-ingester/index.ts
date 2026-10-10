@@ -3,6 +3,8 @@ import { PrismaClient } from "@prisma/client";
 import { extractDeviceId, parseSensorPayload } from "./parser";
 import { deriveReadingRow } from "./row";
 import { parseFrameLogChunk } from "./framelog";
+import { recordBootIfAny, tailBrokerLog } from "./events";
+import { startAlerts } from "./alerts";
 
 const MQTT_BROKER_URL = process.env.MQTT_BROKER_URL || "mqtt://localhost:1883";
 // Stock SmartCitizen firmware readings topic: device/sck/<token>/readings/raw.
@@ -26,6 +28,10 @@ const INVENTORY_TOPIC = "device/inventory";
 // device — device/inventory alone is unattributable.
 const INFO_TOPIC = "device/sck/+/info";
 const INFO_TOPIC_REGEX = /^device\/sck\/([^/]+)\/info$/;
+
+// The broker's log file, mounted read-only from the mosquitto_log volume.
+// Unset = no connection events (local dev without a broker log).
+const BROKER_LOG_PATH = process.env.BROKER_LOG_PATH;
 
 const prisma = new PrismaClient();
 
@@ -53,7 +59,8 @@ async function handleMessage(topic: string, message: Buffer): Promise<void> {
 
   // All derivation (v2/v3 interval normalization, flavor 1/2 math, diag
   // decode) lives in row.ts, shared with the simulator's bulk backfill.
-  const row = deriveReadingRow(reading, new Date());
+  const receivedAt = new Date();
+  const row = deriveReadingRow(reading, receivedAt);
 
   try {
     const sensorId = await upsertSensor(deviceId);
@@ -63,6 +70,10 @@ async function handleMessage(topic: string, message: Buffer): Promise<void> {
     await prisma.reading.create({
       data: { sensorId, ...row, bandsDb: row.bandsDb ?? undefined },
     });
+    // After the insert: a failed restart check must never cost a reading.
+    await recordBootIfAny(prisma, sensorId, row, receivedAt).catch((err) =>
+      console.error(`boot check failed for ${deviceId}:`, err)
+    );
 
     console.log(
       row.laeq != null
@@ -204,6 +215,11 @@ function main(): void {
     }
   });
 
+  const stopTail = BROKER_LOG_PATH ? tailBrokerLog(prisma, BROKER_LOG_PATH) : () => {};
+  if (BROKER_LOG_PATH) console.log(`Following broker log at ${BROKER_LOG_PATH}`);
+  // Fleet alerts. ALERTS=off disables (e.g. a second ingester pointed at the same DB).
+  const stopAlerts = process.env.ALERTS === "off" ? () => {} : startAlerts(prisma, Number(process.env.ALERTS_INTERVAL_MS) || 60_000);
+
   client.on("error", (err) => {
     console.error("MQTT connection error:", err);
   });
@@ -214,6 +230,8 @@ function main(): void {
 
   process.on("SIGINT", async () => {
     console.log("Shutting down...");
+    stopTail();
+    stopAlerts();
     client.end();
     await prisma.$disconnect();
     process.exit(0);
@@ -221,6 +239,8 @@ function main(): void {
 
   process.on("SIGTERM", async () => {
     console.log("Shutting down...");
+    stopTail();
+    stopAlerts();
     client.end();
     await prisma.$disconnect();
     process.exit(0);

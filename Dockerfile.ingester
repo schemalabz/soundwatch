@@ -13,6 +13,9 @@ RUN npx prisma generate
 COPY mqtt-ingester ./mqtt-ingester
 COPY scripts ./scripts
 COPY src/types ./src/types
+# Fleet status rules (restart detection, on-time threshold) shared with the
+# admin UI — one definition, imported by mqtt-ingester/events.ts.
+COPY src/lib/fleet ./src/lib/fleet
 COPY tsconfig.json ./
 COPY vitest.config.ts ./
 

@@ -4,6 +4,7 @@ import { canViewSensor, NO_SHARED_CACHE } from "@/lib/server/sensorAccess";
 import { READING_SELECT, serializeReading } from "@/lib/api/readings";
 import { ReadingsQuerySchema, type ApiReadingsResponse } from "@/lib/api/schemas";
 import { csvFilename, readingsToCsv } from "@/lib/api/csv";
+import { displayName } from "@/lib/locations";
 
 // Every response below carries NO_SHARED_CACHE — the 200s, the 404 and the
 // 400 alike, the CSV included. The rule lives beside the gate that makes it
@@ -78,15 +79,16 @@ export async function GET(
   const serialized = readings.map(serializeReading);
 
   if (parsed.data.format === "csv") {
-    const name = csvFilename(sensor.name, id, from, to);
+    const name = csvFilename(displayName(sensor), id, from, to);
     // Header values are ByteStrings: a Greek name in the plain filename= would
     // throw before the response is built. RFC 6266: an ASCII fallback in
     // filename=, the real name percent-encoded in filename*=. A name with no
     // ASCII letter or digit at all (fully Greek, say) leaves nothing between
     // "soundwatch-" and the window part once stripped to ASCII — fall back to
     // the id there instead of shipping a filename of bare dashes.
+    const displayedName = displayName(sensor);
     const asciiSafeName =
-      !sensor.name || /[A-Za-z0-9]/.test(sensor.name) ? name : csvFilename(null, id, from, to);
+      !displayedName || /[A-Za-z0-9]/.test(displayedName) ? name : csvFilename(null, id, from, to);
     const ascii = asciiSafeName.replace(/[^\x20-\x7E]/g, "-").replace(/["\\]/g, "");
     // The CSV body is buffered in memory, not streamed — fine at fleet size.
     return new Response(readingsToCsv(serialized), {

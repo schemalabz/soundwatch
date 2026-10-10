@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
+import { checkFields, parseLatLon, readBody } from "@/lib/api/adminInput";
 import { checkAdminAuth } from "../../auth";
 
 export async function PATCH(
@@ -10,42 +11,39 @@ export async function PATCH(
   if (authError) return authError;
 
   const { id } = await params;
-  const body = await request.json();
+  const body = await readBody(request);
+  if (!body) return NextResponse.json({ error: "Send a JSON object" }, { status: 400 });
 
   const sensor = await prisma.sensor.findUnique({ where: { id } });
   if (!sensor) {
     return NextResponse.json({ error: "Sensor not found" }, { status: 404 });
   }
 
-  const allowedFields = [
-    "name",
-    "latitude",
-    "longitude",
-    "address",
-    "isActive",
-    "readingIntervalS",
-    "targetFirmwareVersion",
-    // Was missing, and its absence was invisible: an unknown field is dropped
-    // and the request still returns 200 with the unchanged sensor, so "flag this
-    // bench unit experimental" looked like it had worked while the unit stayed
-    // on the public map. Minting has always accepted isExperimental; only the
-    // edit path could not change it.
-    "isExperimental",
-  ] as const;
+  // A field dropped silently is how a no-op passes for success: a 400 naming
+  // the field (unknown, or the wrong type) is recoverable; a 200 that
+  // changed nothing is not. isExperimental was missing here once — minting
+  // always accepted it, only the edit path could not change it.
+  const fieldError = checkFields(body, {
+    name: "string|null",
+    address: "string|null",
+    targetFirmwareVersion: "string|null",
+    latitude: "number",
+    longitude: "number",
+    isActive: "boolean",
+    isExperimental: "boolean",
+    readingIntervalS: "number",
+  });
+  if (fieldError) return NextResponse.json({ error: fieldError }, { status: 400 });
 
-  const data: Record<string, unknown> = {};
-  const rejected: string[] = [];
-  for (const key of Object.keys(body)) {
-    if ((allowedFields as readonly string[]).includes(key)) data[key] = body[key];
-    else rejected.push(key);
+  const data: Record<string, unknown> = { ...body };
+
+  if (data.isActive === true && sensor.retiredAt) {
+    return NextResponse.json({ error: "This token is retired; undo the retirement to show it again." }, { status: 409 });
   }
-  // Dropping a field the caller clearly meant is how a no-op passes for success.
-  // A 400 naming the field is recoverable; a 200 that changed nothing is not.
-  if (rejected.length > 0) {
-    return NextResponse.json(
-      { error: `Unknown or non-editable field(s): ${rejected.join(", ")}` },
-      { status: 400 }
-    );
+  if ("latitude" in data || "longitude" in data) {
+    const at = parseLatLon(data.latitude, data.longitude);
+    if (!at) return NextResponse.json({ error: "Send both latitude and longitude, as real coordinates." }, { status: 400 });
+    Object.assign(data, at);
   }
 
   const updated = await prisma.sensor.update({ where: { id }, data });

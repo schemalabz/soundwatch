@@ -1,694 +1,325 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+// Fleet: what is wrong, why, and everything else at a glance. Layout follows
+// the design canvas (Main.dc.html): headline sentence, four numbers, "needs
+// attention" with a diagnosis per unit, a where-they-are map, then the unit
+// table behind status tabs.
+
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import DeviceLabel from "@/components/admin/DeviceLabel";
-import { ADMIN_TOKEN_STORAGE_KEY } from "@/lib/adminToken";
-import { sensorPagePath, sensorShareUrl } from "@/lib/sensor/api";
+import { useAdmin } from "@/components/admin/AdminShell";
+import { STATUS_META, Strip, StripLegend, StatusDot, ChargeChip, ago, athens, boxCode } from "@/components/admin/fleetUi";
+import { NoteLine } from "@/components/admin/UnitNotes";
+import type { FleetResponse, FleetUnit } from "@/lib/api/admin";
+import { SILENT_CAUSE_TEXT, type FleetStatus } from "@/lib/fleet/status";
 
-/** The fallback for a sensor whose share link was not minted this session —
- *  the same builder the mint endpoint uses, against this browser's origin. */
-function shareUrlFor(id: string, key: string): string {
-  return sensorShareUrl(id, key, window.location.origin);
+/** The pilot's target: 50 units at Skroutz stores. */
+const TARGET_SITES = 50;
+
+type TabId = "deployed" | "live" | "watch" | "silent" | "boxed" | "bench" | "retired";
+const TABS: { id: TabId; label: string; dot: string; match: (s: FleetStatus) => boolean }[] = [
+  { id: "deployed", label: "Deployed", dot: "bg-ink", match: (s) => s === "live" || s === "watch" || s === "silent" },
+  { id: "live", label: "Live", dot: "bg-ok", match: (s) => s === "live" },
+  { id: "watch", label: "Watch", dot: "bg-warn", match: (s) => s === "watch" },
+  { id: "silent", label: "Silent", dot: "bg-loud", match: (s) => s === "silent" },
+  { id: "boxed", label: "In box", dot: "bg-slate", match: (s) => s === "in_box" || s === "with_installer" || s === "minted" },
+  { id: "bench", label: "Bench", dot: "bg-[#9aa3b5]", match: (s) => s === "bench" },
+  { id: "retired", label: "Retired", dot: "bg-[#dcdde0]", match: (s) => s === "retired" },
+];
+
+const ORDER: Record<FleetStatus, number> = { silent: 0, watch: 1, live: 2, with_installer: 3, in_box: 4, minted: 5, bench: 6, retired: 7 };
+
+function unitTitle(u: FleetUnit): string {
+  const named = u.site?.name ?? u.name ?? u.address;
+  if (named) return named;
+  const box = boxCode(u.apName);
+  return box ? `Box ${box}` : u.deviceId;
 }
 
-interface SensorWithStatus {
-  id: string;
-  deviceId: string;
-  name: string | null;
-  address: string | null;
-  latitude: number | null;
-  longitude: number | null;
-  firmwareVersion: string | null;
-  targetFirmwareVersion: string | null;
-  readingIntervalS: number;
-  isActive: boolean;
-  lastSeenAt: string | null;
-  createdAt: string;
-  status: "online" | "offline" | "never_seen";
-  stage: "minted" | "in_box" | "installed_live" | "installed_silent" | "bench";
-  hardwareId: string | null;
-  apName: string | null;
-  provisionedAt: string | null;
-  installedAt: string | null;
-  isExperimental: boolean;
-  plannedLocation: { name: string } | null;
-  shareKey: string | null;
+/** The line under the title: where it is, or why we cannot say. */
+function unitSubtitle(u: FleetUnit): string {
+  if (u.site || u.name || u.address) return `${boxCode(u.apName) ?? "—"} · ${u.deviceId.slice(0, 8)}`;
+  if (u.latitude != null) return `not linked to a site · ${u.deviceId.slice(0, 8)}`;
+  return u.deviceId.slice(0, 8);
 }
 
-const STAGE_BADGE: Record<SensorWithStatus["stage"], { label: string; cls: string }> = {
-  minted: { label: "minted", cls: "bg-[#e7e5e4] text-[#57534e]" },
-  in_box: { label: "in box", cls: "bg-[#fef3c7] text-[#b45309]" },
-  installed_live: { label: "live", cls: "bg-[#dcfce7] text-[#15803d]" },
-  installed_silent: { label: "silent", cls: "bg-[#fee2e2] text-[#b91c1c]" },
-  bench: { label: "bench", cls: "bg-[#dbeafe] text-[#1d4ed8]" },
-};
-
-// Liveness dot: is the device talking right now? Deliberately separate from the
-// stage badge — an in_box unit publishes during its prove phase, and the dot is
-// where that shows without corrupting lifecycle semantics.
-const STATUS_DOT: Record<SensorWithStatus["status"], string> = {
-  online: "bg-[#22c55e]",
-  offline: "bg-[#ef4444]",
-  never_seen: "bg-[#a8a29e]",
-};
-
-interface EditForm {
-  name: string;
-  address: string;
-  latitude: string;
-  longitude: string;
-  readingIntervalS: string;
-  targetFirmwareVersion: string;
-  isActive: boolean;
-}
-
-export default function AdminPage() {
-  const [sensors, setSensors] = useState<SensorWithStatus[]>([]);
-  const [token, setToken] = useState("");
-  const [authenticated, setAuthenticated] = useState(false);
+export default function FleetPage() {
+  const { api } = useAdmin();
+  const [fleet, setFleet] = useState<FleetResponse | null>(null);
   const [error, setError] = useState("");
-  const [editingSensor, setEditingSensor] = useState<SensorWithStatus | null>(null);
-  const [editForm, setEditForm] = useState<EditForm | null>(null);
-  const [saving, setSaving] = useState(false);
-  const [showExperimental, setShowExperimental] = useState(false);
-  const [labelSensor, setLabelSensor] = useState<SensorWithStatus | null>(null);
-  const [deleteInfo, setDeleteInfo] = useState<{ readings: number; framelogChunks: number } | null>(null);
-  const [deleteTyped, setDeleteTyped] = useState("");
-  const [deleting, setDeleting] = useState(false);
-  const [shareBusy, setShareBusy] = useState(false);
-  const [shareCopied, setShareCopied] = useState(false);
-  const [shareError, setShareError] = useState("");
-  // Minted-this-session share URLs, keyed by sensor id — the mint route's own
-  // `url` (which honours NEXT_PUBLIC_BASE_URL) rather than a rebuilt one. Kept
-  // with the key it was minted for, so a rotation from another admin session
-  // (visible here as a different sensor.shareKey after the list refresh)
-  // never serves a dead link.
-  const [shareUrls, setShareUrls] = useState<Record<string, { key: string; url: string }>>({});
-  const copyTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const [tab, setTab] = useState<TabId>("deployed");
+  const [q, setQ] = useState("");
 
-  useEffect(() => () => clearTimeout(copyTimeoutRef.current), []);
-
-  async function fetchSensors(adminToken: string) {
-    const res = await fetch("/api/admin/sensors", {
-      headers: { Authorization: `Bearer ${adminToken}` },
-    });
-    if (!res.ok) {
-      setError("Authentication failed");
-      setAuthenticated(false);
-      localStorage.removeItem(ADMIN_TOKEN_STORAGE_KEY);
-      return;
-    }
-    const data = await res.json();
-    setSensors(data);
-    setAuthenticated(true);
-    setError("");
-    // Stay logged in across visits; a 401 above clears it again.
-    localStorage.setItem(ADMIN_TOKEN_STORAGE_KEY, adminToken);
-  }
-
-  // Auto-login from a previous session. Deferred a microtask so the effect
-  // body itself never sets state (react-hooks/set-state-in-effect).
-  useEffect(() => {
-    const saved = localStorage.getItem(ADMIN_TOKEN_STORAGE_KEY);
-    if (saved) {
-      void Promise.resolve().then(() => {
-        setToken(saved);
-        fetchSensors(saved);
-      });
-    }
-  }, []);
-
-  function handleLogin(e: React.FormEvent) {
-    e.preventDefault();
-    fetchSensors(token);
-  }
-
-  // First call is unacknowledged on purpose: the API answers with what would
-  // be lost, and only an acknowledged call deletes. See the route's contract.
-  async function requestDelete() {
-    if (!editingSensor) return;
-    const res = await fetch(`/api/admin/sensors/${editingSensor.id}`, {
-      method: "DELETE",
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    const j = await res.json();
-    if (res.status === 409) setDeleteInfo(j.wouldDelete);
-  }
-
-  async function confirmDelete() {
-    if (!editingSensor) return;
-    setDeleting(true);
-    const res = await fetch(`/api/admin/sensors/${editingSensor.id}`, {
-      method: "DELETE",
-      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ acknowledge: editingSensor.deviceId }),
-    });
-    setDeleting(false);
-    if (res.ok) {
-      setEditingSensor(null);
-      setEditForm(null);
-      setDeleteInfo(null);
-      setDeleteTyped("");
-      fetchSensors(token);
-    }
-  }
-
-  // The share link: a read-only credential for ONE sensor's live page, for
-  // someone outside who must hold neither the admin token nor the MQTT token.
-  // `confirmMsg`, when given, gates the mint on a window.confirm — used for
-  // Rotate (which invalidates the current link at once), not for the first
-  // Create.
-  async function mintShareKey(confirmMsg?: string) {
-    if (!editingSensor) return;
-    if (confirmMsg && !window.confirm(confirmMsg)) return;
-    const id = editingSensor.id;
-    setShareBusy(true);
-    setShareCopied(false);
-    clearTimeout(copyTimeoutRef.current);
-    try {
-      const res = await fetch(`/api/admin/sensors/${id}/share-key`, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (res.ok) {
-        const { shareKey, url } = await res.json();
-        setEditingSensor((prev) => (prev && prev.id === id ? { ...prev, shareKey } : prev));
-        setShareUrls((prev) => ({ ...prev, [id]: { key: shareKey, url } }));
-        setShareError("");
-        await fetchSensors(token);
-      } else {
-        setShareError(`Failed (${res.status}) — is your admin token still valid?`);
-      }
-    } catch {
-      setShareError("Network error — could not reach the server.");
-    } finally {
-      setShareBusy(false);
-    }
-  }
-
-  async function revokeShareKey() {
-    if (!editingSensor) return;
-    if (!window.confirm("Revoke the link? Anyone holding it loses access immediately.")) return;
-    const id = editingSensor.id;
-    setShareBusy(true);
-    setShareCopied(false);
-    clearTimeout(copyTimeoutRef.current);
-    try {
-      const res = await fetch(`/api/admin/sensors/${id}/share-key`, {
-        method: "DELETE",
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (res.ok) {
-        setEditingSensor((prev) => (prev && prev.id === id ? { ...prev, shareKey: null } : prev));
-        setShareError("");
-        await fetchSensors(token);
-      } else {
-        setShareError(`Failed (${res.status}) — is your admin token still valid?`);
-      }
-    } catch {
-      setShareError("Network error — could not reach the server.");
-    } finally {
-      setShareBusy(false);
-    }
-  }
-
-  /**
-   * The minted-this-session URL when there is one, it still matches the
-   * sensor's current share key, and the server knows its own public address
-   * (NEXT_PUBLIC_BASE_URL — inlined client-side, so this reads at build time);
-   * otherwise rebuilt from the list's key against window.location.origin,
-   * which a browser can always open.
-   */
-  function shareUrlForSensor(sensor: SensorWithStatus): string | null {
-    if (!sensor.shareKey) return null;
-    const minted = shareUrls[sensor.id];
-    if (process.env.NEXT_PUBLIC_BASE_URL && minted && minted.key === sensor.shareKey) {
-      return minted.url;
-    }
-    return shareUrlFor(sensor.id, sensor.shareKey);
-  }
-
-  async function copyShareUrl() {
-    if (!editingSensor) return;
-    const url = shareUrlForSensor(editingSensor);
-    if (!url) return;
-    try {
-      await navigator.clipboard.writeText(url);
-      setShareCopied(true);
-      clearTimeout(copyTimeoutRef.current);
-      copyTimeoutRef.current = setTimeout(() => setShareCopied(false), 1500);
-    } catch {
-      setShareError("Failed to copy the link — copy it from the field instead.");
-    }
-  }
-
-  function openEdit(sensor: SensorWithStatus) {
-    setDeleteInfo(null);
-    setDeleteTyped("");
-    setShareError("");
-    setEditingSensor(sensor);
-    setEditForm({
-      name: sensor.name || "",
-      address: sensor.address || "",
-      latitude: sensor.latitude?.toString() || "",
-      longitude: sensor.longitude?.toString() || "",
-      readingIntervalS: sensor.readingIntervalS.toString(),
-      targetFirmwareVersion: sensor.targetFirmwareVersion || "",
-      isActive: sensor.isActive,
-    });
-  }
-
-  async function handleSave() {
-    if (!editingSensor || !editForm) return;
-    setSaving(true);
-
-    const body: Record<string, unknown> = {
-      name: editForm.name || null,
-      address: editForm.address || null,
-      latitude: editForm.latitude ? parseFloat(editForm.latitude) : null,
-      longitude: editForm.longitude ? parseFloat(editForm.longitude) : null,
-      readingIntervalS: parseInt(editForm.readingIntervalS, 10),
-      targetFirmwareVersion: editForm.targetFirmwareVersion || null,
-      isActive: editForm.isActive,
-    };
-
-    const res = await fetch(`/api/admin/sensors/${editingSensor.id}`, {
-      method: "PATCH",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(body),
-    });
-
-    if (res.ok) {
-      if (parseInt(editForm.readingIntervalS, 10) !== editingSensor.readingIntervalS) {
-        await fetch(`/api/admin/sensors/${editingSensor.id}/config`, {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            command: "update_config",
-            readingIntervalS: parseInt(editForm.readingIntervalS, 10),
-          }),
-        });
-      }
-      setEditingSensor(null);
-      setEditForm(null);
-      fetchSensors(token);
-    }
-
-    setSaving(false);
-  }
+  const load = useCallback(() => {
+    api<FleetResponse>("/api/admin/fleet").then((f) => { setFleet(f); setError(""); }, () => setError("Could not load the fleet."));
+  }, [api]);
 
   useEffect(() => {
-    if (authenticated) {
-      const interval = setInterval(() => fetchSensors(token), 30000);
-      return () => clearInterval(interval);
-    }
-  }, [authenticated, token]);
+    load();
+    const t = setInterval(load, 30_000);
+    return () => clearInterval(t);
+  }, [load]);
 
-  if (!authenticated) {
-    return (
-      <div className="max-w-md mx-auto p-6 mt-20">
-        <h1 className="text-2xl font-bold mb-6">Admin Login</h1>
-        <form onSubmit={handleLogin} className="space-y-4">
-          <input
-            type="password"
-            value={token}
-            onChange={(e) => setToken(e.target.value)}
-            placeholder="Admin token"
-            className="w-full px-4 py-2 border border-border rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
-          />
-          {error && <p className="text-[#ef4444] text-sm">{error}</p>}
-          <button
-            type="submit"
-            className="w-full bg-primary text-white py-2 rounded-lg font-semibold hover:bg-primary-dark transition-colors"
-          >
-            Login
-          </button>
-        </form>
-      </div>
-    );
-  }
+  const units = useMemo(() => fleet?.units ?? [], [fleet]);
+  // The server's "now" (honours ADMIN_NOW in dev), so relative times agree with statuses.
+  const now = fleet ? new Date(fleet.generatedAt).getTime() : 0;
 
-  const visibleSensors = sensors.filter((s) => showExperimental || !s.isExperimental);
-  const count = (stage: SensorWithStatus["stage"]) =>
-    visibleSensors.filter((s) => s.stage === stage).length;
+  const deployed = units.filter((u) => u.status === "live" || u.status === "watch" || u.status === "silent");
+  const live = deployed.filter((u) => u.status !== "silent");
+  const silent = deployed.filter((u) => u.status === "silent");
+  const watch = deployed.filter((u) => u.status === "watch");
+  const comp = deployed.filter((u) => u.completeness7d != null);
+  const avgComp = comp.length ? comp.reduce((a, u) => a + (u.completeness7d ?? 0), 0) / comp.length : null;
+  const routerRestarts = deployed.reduce((a, u) => a + u.network.routerRestarts7d, 0);
+  const restartStores = deployed.filter((u) => u.network.routerRestarts7d > 0).length;
+  const boxed = units.filter((u) => u.status === "in_box" || u.status === "with_installer");
+
+  const attention = [...silent, ...watch].sort((a, b) => ORDER[a.status] - ORDER[b.status] || (a.lastReceivedAt ?? "").localeCompare(b.lastReceivedAt ?? ""));
+
+  const active = TABS.find((t) => t.id === tab)!;
+  const needle = q.trim().toLowerCase();
+  const rows = units
+    .filter((u) => active.match(u.status))
+    .filter((u) => !needle || [unitTitle(u), u.apName, u.deviceId, u.address].some((v) => v?.toLowerCase().includes(needle)))
+    .sort((a, b) => ORDER[a.status] - ORDER[b.status] || unitTitle(a).localeCompare(unitTitle(b), "el"));
+
+  const headline = fleet
+    ? silent.length === 0
+      ? `All ${deployed.length} installed units are sending data.`
+      : `${live.length} of ${deployed.length} installed units are sending data. ${silent.length} ${silent.length === 1 ? "is" : "are"} silent` +
+        (silent.every((u) => u.silentCause === "network_lost_powered") ? " with the sensor still powered — the store’s internet dropped." : ".")
+    : "";
 
   return (
-    <div className="max-w-6xl mx-auto p-6">
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <Link href="/" className="text-primary text-sm hover:underline">
-            ← Back to map
-          </Link>
-          <h1 className="text-2xl font-bold mt-2">Sensor Admin</h1>
+    <div className="mx-auto flex max-w-[1440px] flex-col gap-6 px-4 py-6 sm:gap-7 sm:px-6 sm:py-9 lg:px-12">
+      <section className="flex flex-wrap items-end gap-6">
+        <div className="flex min-w-0 flex-1 flex-col gap-2">
+          <h1 className="text-[32px] font-bold tracking-tight text-ink">Fleet</h1>
+          <p className="max-w-[780px] text-base text-slate">{error || headline || "Loading…"}</p>
         </div>
-        <div className="flex items-center gap-4 text-sm font-medium">
-          <span className="text-muted-foreground">{count("minted")} minted</span>
-          <span className="text-[#b45309]">{count("in_box")} in box</span>
-          <span className="text-[#22c55e]">{count("installed_live")} live</span>
-          <span className="text-[#ef4444]">{count("installed_silent")} silent</span>
-          {showExperimental && (
-            <span className="text-[#1d4ed8]">{count("bench")} bench</span>
-          )}
-          <label className="flex items-center gap-1.5 text-muted-foreground font-normal cursor-pointer">
-            <input
-              type="checkbox"
-              checked={showExperimental}
-              onChange={(e) => setShowExperimental(e.target.checked)}
-              className="rounded border-border"
-            />
-            show experimental
-          </label>
-        </div>
-      </div>
+        <Link href="/admin/sites" className="flex h-11 items-center rounded-[10px] bg-ink px-[18px] text-sm font-semibold text-white">Sites</Link>
+      </section>
 
-      <div className="flex gap-6">
-        <div className="flex-1 bg-white rounded-xl border border-border overflow-hidden">
-          <table className="w-full text-sm">
-            <thead className="bg-muted border-b border-border">
-              <tr>
-                <th className="text-left p-3 text-muted-foreground font-medium">Stage</th>
-                <th className="text-left p-3 text-muted-foreground font-medium">Device ID</th>
-                <th className="text-left p-3 text-muted-foreground font-medium">HW</th>
-                <th className="text-left p-3 text-muted-foreground font-medium">AP</th>
-                <th className="text-left p-3 text-muted-foreground font-medium">Site</th>
-                <th className="text-left p-3 text-muted-foreground font-medium">Name</th>
-                <th className="text-left p-3 text-muted-foreground font-medium">Interval</th>
-                <th className="text-left p-3 text-muted-foreground font-medium">Last Seen</th>
-                <th className="p-3"></th>
+      <section className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
+        <Tile label="Installed units sending data" value={fleet ? `${live.length}` : "—"} unit={`of ${deployed.length}`}>
+          <div className="flex h-2 gap-[3px]">
+            <div className="rounded-[3px] bg-ok" style={{ flexGrow: live.length }} />
+            <div className="rounded-[3px] bg-loud" style={{ flexGrow: silent.length }} />
+          </div>
+        </Tile>
+        <Tile label="Data completeness, 7 days" value={avgComp == null ? "—" : `${Math.round(avgComp * 100)}%`} unit="installed units">
+          <span className="text-[13px] text-slate">Share of hours with any reading</span>
+        </Tile>
+        <Tile label="Store router restarts, 7 days" value={`${routerRestarts}`} unit={`at ${restartStores} ${restartStores === 1 ? "store" : "stores"}`}>
+          <span className="text-[13px] text-slate">A unit reconnecting from a new public IP</span>
+        </Tile>
+        <Tile label="Deployment" value={`${deployed.length}`} unit={`of ${TARGET_SITES} installed`}>
+          <div className="flex h-2 overflow-hidden rounded-[3px] bg-[#eceded]">
+            <div className="bg-ok" style={{ width: `${(deployed.length / TARGET_SITES) * 100}%` }} />
+            <div className="bg-slate" style={{ width: `${(boxed.length / TARGET_SITES) * 100}%` }} />
+          </div>
+          <span className="text-[13px] text-slate">{boxed.length} more boxed, ready to ship</span>
+        </Tile>
+      </section>
+
+      <section className="flex flex-col gap-6 xl:flex-row">
+        <div className="flex min-w-0 flex-[2] flex-col gap-3">
+          <div className="flex items-baseline gap-3">
+            <h2 className="text-lg font-bold text-ink">Needs attention</h2>
+            <span className="text-[13px] text-slate">Diagnosis from battery, signal and broker records</span>
+          </div>
+          {fleet && attention.length === 0 && (
+            <p className="rounded-xl border border-border bg-white px-5 py-4 text-sm text-slate">Nothing needs attention right now.</p>
+          )}
+          {attention.map((u) => <AttentionCard key={u.id} u={u} now={now} />)}
+        </div>
+        <aside className="flex min-w-0 flex-1 flex-col gap-3">
+          <h2 className="text-lg font-bold text-ink">Where they are</h2>
+          <MiniMap units={deployed} />
+        </aside>
+      </section>
+
+      <section className="overflow-hidden rounded-xl border border-border bg-white">
+        <div className="flex flex-wrap items-center gap-2 border-b border-border px-3">
+          <div role="tablist" aria-label="Filter units by status" className="flex flex-wrap gap-1">
+            {TABS.map((t) => {
+              const count = units.filter((u) => t.match(u.status)).length;
+              const sel = t.id === tab;
+              return (
+                <button
+                  key={t.id}
+                  role="tab"
+                  aria-selected={sel}
+                  onClick={() => setTab(t.id)}
+                  className={`flex h-[52px] items-center gap-2 border-b-[3px] px-3.5 text-sm text-ink ${sel ? "border-sound font-bold" : "border-transparent font-medium hover:bg-muted/60"}`}
+                >
+                  <span className={`size-2 rounded-full ${t.dot}`} />
+                  {t.label}
+                  <span className="rounded-full bg-[#f0f1f3] px-2 py-px text-xs text-slate">{count}</span>
+                </button>
+              );
+            })}
+          </div>
+          <div className="flex-1" />
+          <input
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            aria-label="Search units"
+            placeholder="Store, box code, token…"
+            className="my-2 h-9 w-56 rounded-lg border border-border px-3 text-sm"
+          />
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[1180px] text-left">
+            <thead>
+              <tr className="border-b border-border bg-[#fafafb] text-xs font-semibold uppercase tracking-[0.4px] text-slate">
+                <th className="px-5 py-2.5">Unit</th>
+                <th className="px-3 py-2.5">Last 30 days</th>
+                <th className="px-3 py-2.5">Last data</th>
+                <th className="px-3 py-2.5">Data, 7 d</th>
+                <th className="px-3 py-2.5">Wifi signal</th>
+                <th className="px-3 py-2.5">Store network</th>
+                <th className="px-3 py-2.5">Battery</th>
+                <th className="px-3 py-2.5">Level, 7 d</th>
               </tr>
             </thead>
             <tbody>
-              {visibleSensors.map((sensor) => (
-                <tr
-                  key={sensor.id}
-                  onClick={() => openEdit(sensor)}
-                  className={`border-b border-border/50 cursor-pointer transition-colors ${
-                    editingSensor?.id === sensor.id
-                      ? "bg-muted"
-                      : "hover:bg-muted/50"
-                  }`}
-                >
-                  <td className="p-3 whitespace-nowrap">
-                    <span
-                      className={`inline-block w-2 h-2 rounded-full mr-2 ${STATUS_DOT[sensor.status]}`}
-                      title={sensor.status === "online" ? "publishing now" : sensor.status === "offline" ? "not publishing" : "never seen"}
-                    />
-                    <span
-                      className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${STAGE_BADGE[sensor.stage].cls}`}
-                    >
-                      {STAGE_BADGE[sensor.stage].label}
-                    </span>
-                  </td>
-                  <td className="p-3 font-mono text-xs">{sensor.deviceId}</td>
-                  <td className="p-3 font-mono text-xs">{sensor.hardwareId ? sensor.hardwareId.slice(-4) : "—"}</td>
-                  <td className="p-3 text-muted-foreground text-xs">{sensor.apName || "—"}</td>
-                  <td className="p-3">
-                    {sensor.plannedLocation?.name ??
-                      (sensor.latitude != null
-                        ? <span className="text-[#b45309]">unplanned</span>
-                        : "—")}
-                  </td>
-                  <td className="p-3">{sensor.name || "—"}</td>
-                  <td className="p-3">{sensor.readingIntervalS}s</td>
-                  <td className="p-3 text-muted-foreground">
-                    {sensor.lastSeenAt
-                      ? new Date(sensor.lastSeenAt).toLocaleString()
-                      : "Never"}
-                  </td>
-                  <td className="p-3">
-                    <Link
-                      href={sensorPagePath(sensor.id)}
-                      onClick={(e) => e.stopPropagation()}
-                      className="mr-1.5 inline-flex items-center gap-1.5 rounded border border-sound/40 px-2 py-1 text-xs text-sound hover:bg-sound/10"
-                    >
-                      <span className="size-1.5 rounded-full bg-sound" />
-                      Live
-                    </Link>
-                    <button
-                      onClick={(e) => { e.stopPropagation(); setLabelSensor(sensor); }}
-                      disabled={!sensor.apName}
-                      title={sensor.apName ? "Print label" : "Provision first — label needs the setup AP name"}
-                      className="text-xs border border-border rounded px-2 py-1 hover:bg-muted disabled:opacity-40 disabled:cursor-not-allowed"
-                    >
-                      Label
-                    </button>
-                  </td>
-                </tr>
-              ))}
+              {rows.map((u) => <UnitRow key={u.id} u={u} now={now} />)}
+              {fleet && rows.length === 0 && (
+                <tr><td colSpan={8} className="px-5 py-6 text-sm text-slate">No units here.</td></tr>
+              )}
             </tbody>
           </table>
         </div>
+        <div className="flex flex-wrap items-center gap-4 px-5 py-3">
+          <StripLegend />
+          <span className="flex-1" />
+          <span className="text-xs text-slate">12-hour cells · level = LAeq, energy average over 7 days</span>
+        </div>
+      </section>
+    </div>
+  );
+}
 
-        {/* The panel is sticky, not merely top-aligned: the sensor table runs
-            to dozens of rows, and a panel pinned to the top of the page leaves
-            you editing a sensor you have already scrolled past. `self-start`
-            keeps its natural height (a stretched flex item cannot stick),
-            `top-6` holds it just inside the viewport, and the max-height lets a
-            tall panel scroll on its own instead of spilling past the fold. */}
-        {editForm && editingSensor && (
-          <div className="w-80 shrink-0 bg-white rounded-xl border border-border p-5 space-y-4 self-start sticky top-6 max-h-[calc(100vh-3rem)] overflow-y-auto">
-            <div className="flex items-center justify-between">
-              <h3 className="font-bold">Edit Sensor</h3>
-              <button
-                onClick={() => { setEditingSensor(null); setEditForm(null); }}
-                className="text-muted-foreground hover:text-foreground text-lg"
-              >
-                ✕
-              </button>
-            </div>
-
-            <p className="font-mono text-xs text-muted-foreground">{editingSensor.deviceId}</p>
-
-            <Link
-              href={sensorPagePath(editingSensor.id)}
-              className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-sound/40 py-2 text-sm font-medium text-sound transition-colors hover:bg-sound/10"
-            >
-              <span className="size-1.5 rounded-full bg-sound" />
-              Open live page
-            </Link>
-
-            <div className="text-xs text-muted-foreground space-y-1">
-              {editingSensor.hardwareId && (
-                <p>hardware <span className="font-mono">{editingSensor.hardwareId}</span></p>
-              )}
-              {editingSensor.apName && <p>setup AP {editingSensor.apName}</p>}
-              {editingSensor.provisionedAt && (
-                <p>provisioned {new Date(editingSensor.provisionedAt).toLocaleString()}</p>
-              )}
-              {editingSensor.installedAt && (
-                <p>installed {new Date(editingSensor.installedAt).toLocaleString()}</p>
-              )}
-            </div>
-
-            <label className="block">
-              <span className="text-xs text-muted-foreground">Name</span>
-              <input
-                value={editForm.name}
-                onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
-                className="w-full mt-1 px-3 py-1.5 border border-border rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary/30"
-              />
-            </label>
-
-            <label className="block">
-              <span className="text-xs text-muted-foreground">Address</span>
-              <input
-                value={editForm.address}
-                onChange={(e) => setEditForm({ ...editForm, address: e.target.value })}
-                className="w-full mt-1 px-3 py-1.5 border border-border rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary/30"
-              />
-            </label>
-
-            <div className="grid grid-cols-2 gap-3">
-              <label className="block">
-                <span className="text-xs text-muted-foreground">Latitude</span>
-                <input
-                  value={editForm.latitude}
-                  onChange={(e) => setEditForm({ ...editForm, latitude: e.target.value })}
-                  className="w-full mt-1 px-3 py-1.5 border border-border rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary/30"
-                />
-              </label>
-              <label className="block">
-                <span className="text-xs text-muted-foreground">Longitude</span>
-                <input
-                  value={editForm.longitude}
-                  onChange={(e) => setEditForm({ ...editForm, longitude: e.target.value })}
-                  className="w-full mt-1 px-3 py-1.5 border border-border rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary/30"
-                />
-              </label>
-            </div>
-
-            <label className="block">
-              <span className="text-xs text-muted-foreground">Reading Interval (seconds)</span>
-              <input
-                type="number"
-                value={editForm.readingIntervalS}
-                onChange={(e) => setEditForm({ ...editForm, readingIntervalS: e.target.value })}
-                className="w-full mt-1 px-3 py-1.5 border border-border rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary/30"
-              />
-            </label>
-
-            <label className="block">
-              <span className="text-xs text-muted-foreground">Target Firmware Version</span>
-              <input
-                value={editForm.targetFirmwareVersion}
-                onChange={(e) => setEditForm({ ...editForm, targetFirmwareVersion: e.target.value })}
-                placeholder="Leave empty for latest"
-                className="w-full mt-1 px-3 py-1.5 border border-border rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary/30"
-              />
-            </label>
-
-            <label className="flex items-center gap-2">
-              <input
-                type="checkbox"
-                checked={editForm.isActive}
-                onChange={(e) => setEditForm({ ...editForm, isActive: e.target.checked })}
-                className="rounded border-border"
-              />
-              <span className="text-sm">Active</span>
-            </label>
-
-            <div className="flex gap-2 pt-2">
-              <button
-                onClick={handleSave}
-                disabled={saving}
-                className="flex-1 bg-primary text-white py-2 rounded-lg font-semibold hover:bg-primary-dark transition-colors disabled:opacity-50"
-              >
-                {saving ? "Saving..." : "Save"}
-              </button>
-              <button
-                onClick={() => { setEditingSensor(null); setEditForm(null); }}
-                className="px-4 py-2 border border-border rounded-lg text-sm hover:bg-muted transition-colors"
-              >
-                Cancel
-              </button>
-            </div>
-
-            <div className="rounded-lg border border-border p-3 space-y-2">
-              <p className="text-sm font-semibold">Live page link</p>
-              <p className="text-xs text-muted-foreground">
-                Whoever has this link sees only this sensor&apos;s readings, read-only. It reveals neither the
-                MQTT token nor the admin token. If it leaks, rotate it — the old link stops at once.
-              </p>
-              {editingSensor.shareKey ? (
-                <>
-                  <div className="flex gap-1.5">
-                    <input
-                      readOnly
-                      value={shareUrlForSensor(editingSensor) ?? ""}
-                      onFocus={(e) => e.currentTarget.select()}
-                      className="min-w-0 flex-1 rounded-lg border border-border bg-muted px-2 py-1.5 font-mono text-[11px]"
-                    />
-                    <button
-                      type="button"
-                      onClick={copyShareUrl}
-                      className="rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-white"
-                    >
-                      {shareCopied ? "Copied" : "Copy"}
-                    </button>
-                  </div>
-                  <div className="flex gap-1.5">
-                    <button
-                      type="button"
-                      onClick={() => mintShareKey("Rotate the link? The current link stops working immediately.")}
-                      disabled={shareBusy}
-                      className="rounded-lg border border-border px-3 py-1.5 text-xs hover:bg-muted disabled:opacity-50"
-                    >
-                      Rotate link
-                    </button>
-                    <button
-                      type="button"
-                      onClick={revokeShareKey}
-                      disabled={shareBusy}
-                      className="rounded-lg border border-[#fca5a5] px-3 py-1.5 text-xs text-[#b91c1c] hover:bg-[#fef2f2] disabled:opacity-50"
-                    >
-                      Revoke
-                    </button>
-                  </div>
-                </>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => mintShareKey()}
-                  disabled={shareBusy}
-                  className="w-full rounded-lg bg-primary py-1.5 text-xs font-semibold text-white disabled:opacity-50"
-                >
-                  {shareBusy ? "Creating…" : "Create link"}
-                </button>
-              )}
-            </div>
-            {shareError && <p className="text-xs text-[#b91c1c]">{shareError}</p>}
-
-            {editingSensor.firmwareVersion && (
-              <p className="text-xs text-muted-foreground pt-2">
-                Current firmware: {editingSensor.firmwareVersion}
-              </p>
-            )}
-
-            <button
-              onClick={() => setLabelSensor(editingSensor)}
-              disabled={!editingSensor.apName}
-              title={editingSensor.apName ? "Print label" : "Provision first — label needs the setup AP name"}
-              className="w-full border border-border rounded-lg py-2 text-sm hover:bg-muted disabled:opacity-40 disabled:cursor-not-allowed"
-            >
-              Print label
-            </button>
-
-            {deleteInfo === null ? (
-              <button
-                onClick={requestDelete}
-                className="w-full border border-[#fca5a5] text-[#b91c1c] rounded-lg py-2 text-sm hover:bg-[#fef2f2]"
-              >
-                Delete sensor…
-              </button>
-            ) : (
-              <div className="border border-[#fca5a5] bg-[#fef2f2] rounded-lg p-3 space-y-2">
-                <p className="text-sm text-[#b91c1c] font-medium">
-                  Permanently deletes {deleteInfo.readings} readings
-                  {deleteInfo.framelogChunks > 0 ? ` and ${deleteInfo.framelogChunks} framelog chunks` : ""}.
-                  {editingSensor.status === "online" && (
-                    <> This device is publishing NOW — its row will reappear (empty) on its next message.</>
-                  )}
-                </p>
-                <p className="text-xs text-[#7f1d1d]">
-                  Type the last 4 characters of <span className="font-mono">{editingSensor.deviceId}</span> to confirm:
-                </p>
-                <input
-                  value={deleteTyped}
-                  onChange={(e) => setDeleteTyped(e.target.value)}
-                  className="w-full px-3 py-1.5 border border-[#fca5a5] rounded-lg text-sm font-mono bg-white"
-                  placeholder={editingSensor.deviceId.slice(-4).replace(/./g, "•")}
-                />
-                <div className="flex gap-2">
-                  <button
-                    onClick={confirmDelete}
-                    disabled={deleting || deleteTyped !== editingSensor.deviceId.slice(-4)}
-                    className="flex-1 bg-[#b91c1c] text-white py-2 rounded-lg text-sm font-semibold disabled:opacity-40 disabled:cursor-not-allowed"
-                  >
-                    {deleting ? "Deleting…" : "Delete permanently"}
-                  </button>
-                  <button
-                    onClick={() => { setDeleteInfo(null); setDeleteTyped(""); }}
-                    className="px-4 py-2 border border-border rounded-lg text-sm hover:bg-muted"
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-        )}
+function Tile({ label, value, unit, children }: { label: string; value: string; unit: string; children?: React.ReactNode }) {
+  return (
+    <div className="flex flex-col gap-2 rounded-xl border border-border bg-white px-3.5 py-3.5 sm:gap-2.5 sm:px-5 sm:py-[18px]">
+      <span className="text-[13px] text-slate">{label}</span>
+      <div className="flex flex-wrap items-baseline gap-x-1.5">
+        <span className="text-2xl font-bold tabular-nums text-ink sm:text-[30px]">{value}</span>
+        <span className="text-sm text-slate sm:text-base">{unit}</span>
       </div>
+      {children}
+    </div>
+  );
+}
 
-      {labelSensor && (
-        <DeviceLabel sensor={labelSensor} onClose={() => setLabelSensor(null)} />
-      )}
+function AttentionCard({ u, now }: { u: FleetUnit; now: number }) {
+  const meta = STATUS_META[u.status];
+  const why =
+    u.status === "silent"
+      ? SILENT_CAUSE_TEXT[u.silentCause ?? "unknown"]
+      : `On the watch list: ${u.watchReasons.join(", ")}.`;
+  const evidence = [
+    u.batteryLast != null && `battery ${Math.round(u.batteryLast)}% at the last reading`,
+    u.network.routerRestarts7d > 0 && `${u.network.routerRestarts7d} router ${u.network.routerRestarts7d === 1 ? "restart" : "restarts"} in 7 days`,
+    u.unscheduledBoots7d > 0 && `${u.unscheduledBoots7d} unscheduled ${u.unscheduledBoots7d === 1 ? "restart" : "restarts"}`,
+    u.network.provider && `${u.network.provider}${u.network.staticIp ? " · static IP" : u.network.staticIp === false ? " · dynamic IP" : ""}`,
+    !u.network.ip && u.status === "silent" && "no connection records",
+  ].filter(Boolean).join(" · ");
+  return (
+    <Link href={`/admin/units/${u.id}`} className="flex flex-wrap items-start gap-x-4 gap-y-2 rounded-xl border border-border bg-white px-[18px] py-4 hover:border-silver">
+      <StatusDot status={u.status} className="mt-1.5" />
+      <div className="flex min-w-0 flex-1 flex-col gap-1">
+        <div className="flex flex-wrap items-baseline gap-x-2.5">
+          <span className="text-[15px] font-semibold text-ink">{unitTitle(u)}</span>
+          <span className="hidden font-mono text-xs text-slate sm:inline">{unitSubtitle(u)}</span>
+        </div>
+        <span className="text-sm text-ink">{why}</span>
+        {evidence && <span className="text-[13px] text-slate">{evidence}</span>}
+        <NoteLine note={u.latestNote} className="mt-1 rounded-md bg-[#f6f7f8] px-2.5 py-1.5" />
+      </div>
+      <div className="flex w-full shrink-0 items-baseline gap-2 pl-[26px] sm:w-auto sm:flex-col sm:items-end sm:gap-1 sm:pl-0">
+        <span className={`text-[13px] font-semibold ${meta.text}`}>
+          {u.status === "silent" ? `Silent ${ago(u.lastReceivedAt, now).replace(" ago", "")}` : meta.label}
+        </span>
+        <span className="text-xs text-slate">{u.status === "silent" ? `since ${athens(u.lastReceivedAt)}` : ""}</span>
+      </div>
+    </Link>
+  );
+}
+
+function UnitRow({ u, now }: { u: FleetUnit; now: number }) {
+  const silent = u.status === "silent";
+  return (
+    <tr className="border-b border-[#eef0f2] hover:bg-[#f3f4f6]">
+      <td className="px-5 py-3">
+        <Link href={`/admin/units/${u.id}`} className="flex items-center gap-2.5">
+          <StatusDot status={u.status} />
+          <span className="flex min-w-0 flex-col">
+            <span className="max-w-[230px] truncate text-sm font-semibold text-ink">{unitTitle(u)}</span>
+            <span className="font-mono text-xs text-slate">{unitSubtitle(u)}</span>
+            <NoteLine note={u.latestNote} className="max-w-[230px] text-xs" />
+            {!u.installedAt && !u.retiredAt && <ChargeChip battery={u.batteryLast} at={u.lastReceivedAt} />}
+          </span>
+        </Link>
+      </td>
+      <td className="px-3 py-3"><Strip cells={u.cells} label={unitTitle(u)} /></td>
+      <td className="px-3 py-3">
+        <div className="flex flex-col">
+          <span className={`text-sm font-medium ${silent ? "text-loud" : "text-ink"}`}>{ago(u.lastReceivedAt, now)}</span>
+          <span className="text-xs text-slate">{u.status === "watch" ? u.watchReasons[0] : athens(u.lastReceivedAt)}</span>
+        </div>
+      </td>
+      <td className="px-3 py-3 text-sm tabular-nums">{u.completeness7d == null ? "—" : `${Math.round(u.completeness7d * 100)}%`}</td>
+      <td className="px-3 py-3">
+        <div className="flex flex-col">
+          <span className="text-sm tabular-nums">{u.rssiAvg24h != null ? `${u.rssiAvg24h} dBm` : "—"}</span>
+          <span className="text-xs text-slate">{u.rssiMin7d != null ? `worst ${Math.round(u.rssiMin7d)}` : ""}</span>
+        </div>
+      </td>
+      <td className="px-3 py-3">
+        <div className="flex flex-col">
+          <span className="text-sm">{u.network.provider ?? "—"}</span>
+          <span className={`text-xs ${u.network.routerRestarts7d >= 2 ? "text-loud" : "text-slate"}`}>
+            {u.network.ip
+              ? `${u.network.staticIp ? "static" : u.network.staticIp === false ? "dynamic" : "?"} · ${u.network.ips7d} ${u.network.ips7d === 1 ? "IP" : "IPs"} in 7 d`
+              : ""}
+          </span>
+        </div>
+      </td>
+      <td className="px-3 py-3 text-sm tabular-nums">{u.batteryLast != null ? `${Math.round(u.batteryLast)}%` : "—"}</td>
+      <td className="px-3 py-3">
+        <div className="flex items-center gap-1.5">
+          <span className={`h-4 w-1.5 rounded-sm ${u.laeq7d != null ? "bg-sound" : "bg-border"}`} />
+          <span className="text-sm tabular-nums">{u.laeq7d != null ? `${u.laeq7d.toFixed(1)} dB` : "—"}</span>
+        </div>
+      </td>
+    </tr>
+  );
+}
+
+/** A schematic of where installed units are — no tiles, so it needs no map
+ *  token and stays readable at a glance. The public map is the real map. */
+function MiniMap({ units }: { units: FleetUnit[] }) {
+  const pts = units.filter((u) => u.latitude != null && u.longitude != null);
+  if (pts.length === 0) return <div className="h-[430px] rounded-xl border border-border bg-[#eef0f2]" />;
+  const lats = pts.map((u) => u.latitude!), lngs = pts.map((u) => u.longitude!);
+  const pad = 0.008;
+  const [la0, la1, lo0, lo1] = [Math.min(...lats) - pad, Math.max(...lats) + pad, Math.min(...lngs) - pad, Math.max(...lngs) + pad];
+  return (
+    <div className="relative h-[430px] overflow-hidden rounded-xl border border-border bg-[#eef0f2]">
+      {pts.map((u) => {
+        const x = ((u.longitude! - lo0) / (lo1 - lo0)) * 100;
+        const y = ((la1 - u.latitude!) / (la1 - la0)) * 100;
+        return (
+          // Labels near the right edge flip to the left of their dot.
+          <Link key={u.id} href={`/admin/units/${u.id}`} className={`absolute flex -translate-y-[7px] items-center gap-1.5 ${x > 65 ? "-translate-x-[calc(100%-7px)] flex-row-reverse" : "-translate-x-[7px]"}`} style={{ left: `${x}%`, top: `${y}%` }}>
+            <span className={`size-3.5 rounded-full border-2 border-white shadow-[0_0_0_1px_#bfc0c0] ${STATUS_META[u.status].dot}`} />
+            <span className="rounded bg-white/85 px-1.5 text-xs font-medium text-ink">{unitTitle(u).replace(/^Skroutz /, "")}</span>
+          </Link>
+        );
+      })}
     </div>
   );
 }

@@ -91,6 +91,78 @@ const STATEMENTS: { label: string; sql: string; call?: boolean }[] = [
   },
 ];
 
+// THE health rollup: readings_hour_health — per (sensor, hour) the device
+// telemetry the fleet admin needs: how many readings, how many arrived on
+// time versus uploaded late, wifi signal, battery, upload delay, failed
+// uploads. Same machinery as readings_hour_bins (policies, stamp, coverage).
+//
+// Bucketed on recorded_at because a hypertable aggregate must bucket on the
+// partition column — but every row is ALSO classified by arrival. An hour
+// whose rows all arrived late is "measured offline, uploaded later" (amber),
+// never "live" (green). Reading presence off recorded_at alone is the trap
+// /api/status documents: a backlog flushed on reconnect turned three days of
+// outage green. 30 minutes, not 5: device clocks drift up to ~25 min a day
+// and reset at the 06:00 restart, so a 5-minute cut calls a slow clock late.
+//
+// No `WHERE laeq IS NOT NULL`: a unit with a dead microphone still reports
+// health, and that is exactly when we want to see it.
+//
+// Sums and counts rather than averages, so any range of hours combines
+// exactly (an average of hourly averages is not the average).
+const HEALTH_STATEMENTS: { label: string; sql: string; call?: boolean }[] = [
+  {
+    label: "continuous aggregate readings_hour_health",
+    sql: `
+      CREATE MATERIALIZED VIEW IF NOT EXISTS readings_hour_health
+      WITH (timescaledb.continuous, timescaledb.materialized_only = false) AS
+      SELECT
+        sensor_id,
+        time_bucket('1 hour', recorded_at)                                        AS bucket,
+        count(*)                                                                  AS n,
+        count(*) FILTER (WHERE received_at - recorded_at <= INTERVAL '30 minutes') AS n_on_time,
+        count(rssi)                                                               AS rssi_n,
+        sum(rssi)                                                                 AS rssi_sum,
+        min(rssi)                                                                 AS rssi_min,
+        min(battery)                                                              AS battery_min,
+        max(battery)                                                              AS battery_max,
+        max(extract(epoch FROM received_at - recorded_at))                        AS max_delay_s,
+        max(publish_fails)                                                        AS publish_fails_max,
+        max(received_at)                                                          AS last_received
+      FROM readings
+      GROUP BY 1, 2
+      WITH NO DATA`,
+  },
+  {
+    label: "health refresh policy (live edge)",
+    sql: `
+      SELECT add_continuous_aggregate_policy(
+        'readings_hour_health',
+        start_offset      => INTERVAL '3 hours',
+        end_offset        => INTERVAL '1 hour',
+        schedule_interval => INTERVAL '15 minutes',
+        if_not_exists     => true)`,
+  },
+  {
+    // Same reason as the bins rollup: backlogs land in hours that closed long
+    // ago, and only a pass that reaches back picks them up.
+    label: "health refresh policy (late-arriving data)",
+    sql: `
+      SELECT add_continuous_aggregate_policy(
+        'readings_hour_health',
+        start_offset      => INTERVAL '30 days',
+        end_offset        => INTERVAL '3 hours',
+        schedule_interval => INTERVAL '1 day',
+        if_not_exists     => true)`,
+  },
+  {
+    label: "health initial/catch-up refresh",
+    sql: `CALL refresh_continuous_aggregate('readings_hour_health', NULL, now() - INTERVAL '1 hour')`,
+    call: true,
+  },
+];
+
+export const HEALTH_CAGG_SQL = HEALTH_STATEMENTS[0].sql;
+
 /**
  * The fingerprint of the aggregate this file intends: a hash of the CREATE
  * statement itself.
@@ -134,18 +206,36 @@ const LEGACY_STAMP = `sw-bins:${CAGG_BINS.lo}/${CAGG_BINS.hi}/${CAGG_BINS.count}
  */
 const LEGACY_EQUIVALENT_STAMP = "sw-cagg:30d2e014d00d12ea";
 
-/**
- * The stamp the drift check reads. Written on every run, so an aggregate
- * created before stamping existed adopts one without a rebuild.
- *
- * A continuous aggregate's user-facing object is a plain VIEW (relkind 'v')
- * over the materialized hypertable — COMMENT ON MATERIALIZED VIEW errors with
- * "is not a materialized view".
- */
-const STAMP_STATEMENT: { label: string; sql: string; call?: boolean } = {
-  label: "definition stamp",
-  sql: `COMMENT ON VIEW readings_hour_bins IS '${CAGG_STAMP}'`,
-};
+/** One continuous aggregate this file owns, and how to check it. */
+interface Aggregate {
+  view: string;
+  statements: { label: string; sql: string; call?: boolean }[];
+  stamp: string;
+  /** Earliest raw bucket the aggregate must cover (an hour, as a timestamp). */
+  rawEarliestSql: string;
+  /** Rows that must exist before "covered" means anything. */
+  rawCountSql: string;
+  /** A stamp that means "same definition, older naming": re-stamp, do not rebuild. */
+  legacy?: { stamp: string; equivalentTo: string };
+}
+
+const AGGREGATES: Aggregate[] = [
+  {
+    view: "readings_hour_bins",
+    statements: STATEMENTS,
+    stamp: CAGG_STAMP,
+    rawEarliestSql: `SELECT time_bucket('1 hour', min(recorded_at)) FROM readings WHERE laeq IS NOT NULL`,
+    rawCountSql: `SELECT count(*) AS n FROM readings WHERE laeq IS NOT NULL`,
+    legacy: { stamp: LEGACY_STAMP, equivalentTo: LEGACY_EQUIVALENT_STAMP },
+  },
+  {
+    view: "readings_hour_health",
+    statements: HEALTH_STATEMENTS,
+    stamp: stampFor(HEALTH_CAGG_SQL),
+    rawEarliestSql: `SELECT time_bucket('1 hour', min(recorded_at)) FROM readings`,
+    rawCountSql: `SELECT count(*) AS n FROM readings`,
+  },
+];
 
 /**
  * Drop the aggregate when its definition no longer matches this file.
@@ -163,27 +253,27 @@ const STAMP_STATEMENT: { label: string; sql: string; call?: boolean } = {
  * Safe to drop: raw readings are retained (no retention policy), so the
  * refresh rebuilds all history exactly.
  */
-async function dropIfDefinitionDrifted(prisma: PrismaClient): Promise<boolean> {
+async function dropIfDefinitionDrifted(prisma: PrismaClient, agg: Aggregate): Promise<boolean> {
   const rows = await prisma.$queryRawUnsafe<{ stamp: string | null }[]>(
     `SELECT obj_description(c.oid, 'pg_class') AS stamp
      FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
-     WHERE c.relname = 'readings_hour_bins' AND n.nspname = 'public'`
+     WHERE c.relname = '${agg.view}' AND n.nspname = 'public'`
   );
   if (rows.length === 0) return false; // nothing to drift from
   const stamp = rows[0].stamp;
-  if (stamp === CAGG_STAMP) return false;
+  if (stamp === agg.stamp) return false;
 
   // The rename from the bin-triple scheme to the hash is not a definitional
   // change. Re-stamp, do not rebuild.
-  if (stamp === LEGACY_STAMP && CAGG_STAMP === LEGACY_EQUIVALENT_STAMP) {
-    console.log(`[timescale-objects] adopting the hash stamp (${stamp} -> ${CAGG_STAMP}); definition unchanged`);
+  if (agg.legacy && stamp === agg.legacy.stamp && agg.stamp === agg.legacy.equivalentTo) {
+    console.log(`[timescale-objects] adopting the hash stamp (${stamp} -> ${agg.stamp}); definition unchanged`);
     return false;
   }
 
   console.log(
-    `[timescale-objects] definition changed (${stamp ?? "unstamped"} -> ${CAGG_STAMP}) — rebuilding`
+    `[timescale-objects] ${agg.view}: definition changed (${stamp ?? "unstamped"} -> ${agg.stamp}) — rebuilding`
   );
-  await prisma.$executeRawUnsafe(`DROP MATERIALIZED VIEW IF EXISTS readings_hour_bins CASCADE`);
+  await prisma.$executeRawUnsafe(`DROP MATERIALIZED VIEW IF EXISTS ${agg.view} CASCADE`);
   return true;
 }
 
@@ -207,82 +297,97 @@ async function dropIfDefinitionDrifted(prisma: PrismaClient): Promise<boolean> {
  * readings is correct in BOTH states, because on a truly empty aggregate the
  * real-time union makes the two agree.
  */
-async function coverageIsComplete(prisma: PrismaClient): Promise<boolean> {
-  const rows = await prisma.$queryRawUnsafe<{ ok: boolean | null }[]>(
-    `SELECT (
-       SELECT min(bucket) FROM readings_hour_bins
-     ) <= (
-       SELECT time_bucket('1 hour', min(recorded_at)) FROM readings WHERE laeq IS NOT NULL
-     ) AS ok`
-  );
+async function coverageIsComplete(prisma: PrismaClient, agg: Aggregate): Promise<boolean> {
   // No readings at all -> nothing to cover, which is complete.
-  const raw = await prisma.$queryRawUnsafe<{ n: bigint }[]>(
-    `SELECT count(*) AS n FROM readings WHERE laeq IS NOT NULL`
-  );
+  const raw = await prisma.$queryRawUnsafe<{ n: bigint }[]>(agg.rawCountSql);
   if (Number(raw[0].n) === 0) return true;
+  const rows = await prisma.$queryRawUnsafe<{ ok: boolean | null }[]>(
+    `SELECT (SELECT min(bucket) FROM ${agg.view}) <= (${agg.rawEarliestSql}) AS ok`
+  );
   return rows[0]?.ok === true;
+}
+
+async function ensureAggregate(prisma: PrismaClient, agg: Aggregate): Promise<void> {
+  await dropIfDefinitionDrifted(prisma, agg);
+
+  // The stamp is written LAST, after coverage is confirmed. It used to be
+  // second — [CREATE, STAMP, ...rest] — with the catch-up refresh in `rest`,
+  // so any interruption between them left a matching stamp sitting over a
+  // partial aggregate. The next boot saw the match, concluded nothing had
+  // drifted, and never repaired it; the late-data policy reaches back 30
+  // days, so anything older was gone for good.
+  for (const s of agg.statements) {
+    try {
+      await prisma.$executeRawUnsafe(s.sql);
+      console.log(`[timescale-objects] ok: ${s.label}`);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (/already exists/i.test(msg)) {
+        console.log(`[timescale-objects] exists: ${s.label}`);
+      } else if (/concurrent refresh/i.test(msg)) {
+        // The app, the ingester and sim-backfill all run this on boot and
+        // can reach the refresh together (Postgres 55P03). Whether losing
+        // that race matters is not knowable from the error — it depends on
+        // what the winner leaves behind, which the coverage probe below
+        // asks the database directly.
+        console.log(`[timescale-objects] refresh contended: ${s.label}`);
+      } else {
+        throw err;
+      }
+    }
+  }
+
+  // Decided from the database, not from this process's exit status. The old
+  // `rebuilt` flag was a per-process local: the peer that lost the DROP race
+  // got `false`, logged "already running elsewhere", and went on to exec the
+  // server against an aggregate that might be partly filled — the exact case
+  // the retry was added to close.
+  const refresh = agg.statements.find((x) => x.call)!;
+  for (let attempt = 1; ; attempt++) {
+    if (await coverageIsComplete(prisma, agg)) break;
+    if (attempt > 10) {
+      throw new Error(
+        `${agg.view} does not cover the history in readings after ` +
+          "10 refresh attempts. It is PARTIAL, which is silently wrong rather " +
+          "than merely slow, and every endpoint reading it would under-report."
+      );
+    }
+    console.log(`[timescale-objects] ${agg.view}: coverage incomplete; refreshing (attempt ${attempt})`);
+    await new Promise((r) => setTimeout(r, Math.min(30_000, 2_000 * attempt)));
+    try {
+      await prisma.$executeRawUnsafe(refresh.sql);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (!/concurrent refresh/i.test(msg)) throw err;
+    }
+  }
+  console.log(`[timescale-objects] ${agg.view}: coverage complete`);
+
+  // A continuous aggregate's user-facing object is a plain VIEW (relkind 'v')
+  // over the materialized hypertable — COMMENT ON MATERIALIZED VIEW errors
+  // with "is not a materialized view".
+  await prisma.$executeRawUnsafe(`COMMENT ON VIEW ${agg.view} IS '${agg.stamp}'`);
+  console.log(`[timescale-objects] ok: ${agg.view} definition stamp`);
 }
 
 async function main() {
   const prisma = new PrismaClient();
   try {
-    await dropIfDefinitionDrifted(prisma);
-
-    // The stamp is written LAST, after coverage is confirmed. It used to be
-    // second — [CREATE, STAMP, ...rest] — with the catch-up refresh in `rest`,
-    // so any interruption between them left a matching stamp sitting over a
-    // partial aggregate. The next boot saw the match, concluded nothing had
-    // drifted, and never repaired it; the late-data policy reaches back 30
-    // days, so anything older was gone for good.
-    for (const s of STATEMENTS) {
+    for (const agg of AGGREGATES) {
+      if (agg.view === "readings_hour_bins") {
+        // The public site reads this one: failing loudly (and holding the
+        // deploy) is the established, deliberate behaviour.
+        await ensureAggregate(prisma, agg);
+        continue;
+      }
+      // Admin-only rollups must not take the public site down with them: log
+      // and carry on. The admin pages that read it fail on their own.
       try {
-        await prisma.$executeRawUnsafe(s.sql);
-        console.log(`[timescale-objects] ok: ${s.label}`);
+        await ensureAggregate(prisma, agg);
       } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        if (/already exists/i.test(msg)) {
-          console.log(`[timescale-objects] exists: ${s.label}`);
-        } else if (/concurrent refresh/i.test(msg)) {
-          // The app, the ingester and sim-backfill all run this on boot and
-          // can reach the refresh together (Postgres 55P03). Whether losing
-          // that race matters is not knowable from the error — it depends on
-          // what the winner leaves behind, which the coverage probe below
-          // asks the database directly.
-          console.log(`[timescale-objects] refresh contended: ${s.label}`);
-        } else {
-          throw err;
-        }
+        console.error(`[timescale-objects] ${agg.view} not ready — continuing without it:`, err);
       }
     }
-
-    // Decided from the database, not from this process's exit status. The old
-    // `rebuilt` flag was a per-process local: the peer that lost the DROP race
-    // got `false`, logged "already running elsewhere", and went on to exec the
-    // server against an aggregate that might be partly filled — the exact case
-    // the retry was added to close.
-    const refresh = STATEMENTS.find((x) => x.call)!;
-    for (let attempt = 1; ; attempt++) {
-      if (await coverageIsComplete(prisma)) break;
-      if (attempt > 10) {
-        throw new Error(
-          "readings_hour_bins does not cover the history in readings after " +
-            "10 refresh attempts. It is PARTIAL, which is silently wrong rather " +
-            "than merely slow, and every rollup endpoint would under-report."
-        );
-      }
-      console.log(`[timescale-objects] coverage incomplete; refreshing (attempt ${attempt})`);
-      await new Promise((r) => setTimeout(r, Math.min(30_000, 2_000 * attempt)));
-      try {
-        await prisma.$executeRawUnsafe(refresh.sql);
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        if (!/concurrent refresh/i.test(msg)) throw err;
-      }
-    }
-    console.log("[timescale-objects] coverage complete");
-
-    await prisma.$executeRawUnsafe(STAMP_STATEMENT.sql);
-    console.log(`[timescale-objects] ok: ${STAMP_STATEMENT.label}`);
   } finally {
     await prisma.$disconnect();
   }

@@ -33,7 +33,10 @@ export async function GET() {
   const nowMs = Date.now();
   const [meta, buckets, ingest] = await Promise.all([
     prisma.$queryRaw<MetaRow[]>`
-      SELECT s.id, s.name, last.received_at AS last_at
+      -- A unit with no name is shown by its address instead (displayName's
+      -- SQL equivalent): coalesce(nullif(btrim(name), ''), nullif(btrim(address), '')).
+      SELECT s.id, coalesce(nullif(btrim(s.name), ''), nullif(btrim(s.address), '')) AS name,
+             last.received_at AS last_at
       FROM sensors s
       LEFT JOIN LATERAL (
         -- received_at: a drifting device clock must not decide liveness.
@@ -41,7 +44,7 @@ export async function GET() {
         WHERE r.sensor_id = s.id ORDER BY received_at DESC LIMIT 1
       ) last ON true
       WHERE ${PUBLIC_SENSOR_RAW}
-      ORDER BY s.name NULLS LAST`,
+      ORDER BY coalesce(nullif(btrim(s.name), ''), nullif(btrim(s.address), '')) NULLS LAST`,
     // Liveness cells: was this unit HEARD FROM during this 6-hour window.
     //
     // This used to read the hourly rollup, which buckets on recorded_at — the

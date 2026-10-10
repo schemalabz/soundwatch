@@ -2,10 +2,28 @@ import { describe, expect, it } from "vitest";
 import {
   computeStage,
   decideLocationWrite,
+  displayName,
+  isSetupReading,
   parseImportRows,
   PUBLIC_SENSOR_WHERE,
   slugifyKey,
 } from "./locations";
+
+describe("displayName", () => {
+  it("the name wins when present", () => {
+    expect(displayName({ name: "Skroutz Δάφνη", address: "Λεωφ. Βουλιαγμένης 1" })).toBe("Skroutz Δάφνη");
+  });
+  it("falls back to the address when there is no name", () => {
+    expect(displayName({ name: null, address: "Κυδωνιών 28, Νέα Ιωνία" })).toBe("Κυδωνιών 28, Νέα Ιωνία");
+  });
+  it("treats empty or whitespace-only strings as absent", () => {
+    expect(displayName({ name: "   ", address: "Κυδωνιών 28, Νέα Ιωνία" })).toBe("Κυδωνιών 28, Νέα Ιωνία");
+    expect(displayName({ name: "", address: "  " })).toBeNull();
+  });
+  it("is null when both are missing", () => {
+    expect(displayName({ name: null, address: null })).toBeNull();
+  });
+});
 
 describe("PUBLIC_SENSOR_WHERE", () => {
   it("public existence = active + not experimental + has a location", () => {
@@ -50,6 +68,14 @@ describe("parseImportRows", () => {
     expect(r).toHaveProperty("error");
     expect((r as { error: string }).error).toContain("row 0");
   });
+  it("rejects exactly 0,0 — the empty form submitted, never a store", () => {
+    const r = parseImportRows([{ name: "X", latitude: 0, longitude: 0 }]);
+    expect((r as { error: string }).error).toContain("row 0");
+  });
+  it("rejects non-numeric coordinates", () => {
+    const r = parseImportRows([{ name: "X", latitude: "37.98", longitude: "23.72" }]);
+    expect((r as { error: string }).error).toContain("row 0");
+  });
   it("passes isActive through for retirement, omits it when absent", () => {
     const r = parseImportRows([
       { name: "Live", latitude: 1, longitude: 1 },
@@ -89,6 +115,22 @@ describe("computeStage", () => {
     expect(computeStage({ provisionedAt: stale, installedAt: null, lastSeenAt: recent, isExperimental: true }, now)).toBe("bench");
     expect(computeStage({ provisionedAt: null, installedAt: stale, lastSeenAt: stale, isExperimental: true }, now)).toBe("bench");
     expect(computeStage({ provisionedAt: null, installedAt: null, lastSeenAt: null, isExperimental: true }, now)).toBe("bench");
+  });
+});
+
+describe("isSetupReading", () => {
+  const provisionedAt = new Date("2026-08-03T12:00:00Z");
+  it("a reading 15 minutes before provisioning is a setup reading", () => {
+    expect(isSetupReading(new Date("2026-08-03T11:45:00Z"), provisionedAt)).toBe(true);
+  });
+  it("a reading 5 minutes after provisioning is a setup reading", () => {
+    expect(isSetupReading(new Date("2026-08-03T12:05:00Z"), provisionedAt)).toBe(true);
+  });
+  it("a reading 2 hours after provisioning is not a setup reading", () => {
+    expect(isSetupReading(new Date("2026-08-03T14:00:00Z"), provisionedAt)).toBe(false);
+  });
+  it("is false when the sensor was never provisioned", () => {
+    expect(isSetupReading(new Date("2026-08-03T11:45:00Z"), null)).toBe(false);
   });
 });
 

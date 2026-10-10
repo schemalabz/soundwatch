@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { READING_SELECT, serializeReading } from "@/lib/api/readings";
 import type { ApiSensorDetail } from "@/lib/api/schemas";
+import { displayName } from "@/lib/locations";
 import { canViewSensor, NO_SHARED_CACHE } from "@/lib/server/sensorAccess";
 
 // Every response below carries NO_SHARED_CACHE — the 200 and the 404 alike.
@@ -67,7 +68,7 @@ export async function GET(
   // the contract says string, and the route was handing it a Date.
   const payload: ApiSensorDetail = {
     id: sensor.id,
-    name: sensor.name,
+    name: displayName(sensor),
     latitude: sensor.latitude,
     longitude: sensor.longitude,
     address: sensor.address,

@@ -210,9 +210,50 @@ circular foreign keys on TimescaleDB's `continuous_agg` catalog; a plain
 `pg_restore` leaves the hypertable and the aggregate broken. Restore into a
 scratch database first — never straight over a live one.
 
+## Fleet health and alerts
+
+What the admin's Fleet, Unit and Alerts pages read, and where it comes from:
+
+| Data | Source | Written by |
+|---|---|---|
+| Hourly health per unit (readings on time vs late, signal, battery, upload delay) | `readings_hour_health` continuous aggregate | Timescale's own refresh jobs (`scripts/timescale-objects.ts`) |
+| Restarts (`device_events.kind = 'boot'`) | a reading's uptime going down | the ingester, per reading |
+| Connections with public IP (`connect` / `disconnect`) | the broker's log file | the ingester, following `BROKER_LOG_PATH` |
+| Who owns an IP (`ip_info`) | reverse DNS + RIPE RDAP, once per IP | the ingester (`IP_LOOKUP=off` disables) |
+| Incidents | the evaluator, once a minute | the ingester |
+
+Ingester environment (set in `docker-compose.yml`):
+
+- `BROKER_LOG_PATH=/broker-log/mosquitto.log` — the `mosquitto_log` volume,
+  mounted read-only. The file is mode 0600 for the broker's user; the ingester
+  image runs as root, so it can read it.
+- `DISCORD_WEBHOOK_URL` — unset = dry run: alert messages are logged and the
+  incident marked `delivery: dry-run`, so setting the webhook later does not
+  replay old alerts.
+- `ADMIN_BASE_URL` — base of the links in alert messages (defaults to
+  `NEXT_PUBLIC_BASE_URL`).
+- `ALERTS=off` disables the evaluator (a second ingester on the same database).
+
+**Installations** are announced too: within a minute of the installer tapping "installed", Echo posts the box, where it went (site, address, or GPS), its first signal and battery, and links to the admin page and a map. Bench units and retired tokens are never announced; units installed before migration 0022 count as already announced.
+
+**After the first deploy of this**, backfill restarts from stored readings
+once (idempotent), from inside the ingester container:
+
+    npx tsx scripts/backfill-device-events.ts
+
+Connections need nothing: the ingester reads the whole broker log when it
+starts. They go back as far as the log does — 2026-09-24; older history was
+lost with the container log before the log file existed.
+
+**Reviewing a production snapshot locally:** restore a dump (above), run
+`scripts/timescale-objects.ts` and the backfill against it, and set
+`ADMIN_NOW=<dump time>` so the admin reads as of the snapshot instead of
+calling every unit silent. `scripts/admin-fleet-probe.ts` prints the fleet in
+a terminal; `scripts/alerts-once.ts` runs one alert evaluation (`AT=` for a
+moment in the past); `scripts/fake-unit.ts <token>` publishes like a device.
+
 ## Not yet built
 
-- Alerting when a device goes silent (`last_seen_at` exists; nothing watches it)
 - **Off-droplet backups are manual.** `fetch` is a command someone has to
   remember; before 2026-09-16 the newest local copy was six weeks old. DO droplet
   Backups or an object-store push would remove the human.

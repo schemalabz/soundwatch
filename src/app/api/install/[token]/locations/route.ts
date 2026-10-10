@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { computeStage } from "@/lib/locations";
+import { occupants } from "@/lib/server/siteBinding";
 
 // Gated like the rest of the install namespace: a valid token is the price of
 // entry, unknown token gets nothing. Occupancy is deliberately anonymous —
@@ -20,16 +21,17 @@ export async function GET(
     orderBy: { name: "asc" },
     include: {
       sensors: {
-        select: { deviceId: true, provisionedAt: true, installedAt: true, lastSeenAt: true },
+        select: { deviceId: true, provisionedAt: true, installedAt: true, lastSeenAt: true, retiredAt: true, isActive: true },
       },
     },
   });
 
   return NextResponse.json({
     locations: sites.map(({ sensors, id, name, latitude, longitude, address }) => {
-      // A site is "occupied" only by OTHER sensors — if this unit is re-scanning
-      // its own site, it should not be warned away from itself.
-      const other = sensors.find((s) => s.deviceId !== token);
+      // A site is "occupied" only by OTHER sensors that are neither retired nor
+      // hidden — if this unit is re-scanning its own site, or the occupant was
+      // retired/hidden, it should not be warned away from itself.
+      const other = occupants(sensors, token)[0];
       return {
         id,
         name,
