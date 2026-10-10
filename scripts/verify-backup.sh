@@ -39,7 +39,11 @@ SCRATCH=sw-verify-$$
 
 log() { echo "$(date -Is) $*" | tee -a "$LOG"; }
 fail() { log "FAIL $*"; cleanup; exit 1; }
-cleanup() { docker rm -f "$SCRATCH" >/dev/null 2>&1 || true; }
+# -v: the timescaledb image declares a volume, so the scratch database lives in
+# an anonymous volume. Without -v every nightly restore (~3 GB) stayed behind,
+# and 24 nights of them filled the droplet disk on 2026-10-10. (No apostrophes
+# in this block: it sits inside the single-quoted REMOTE_BODY string.)
+cleanup() { docker rm -fv "$SCRATCH" >/dev/null 2>&1 || true; }
 trap cleanup EXIT
 
 # The live database, selected the same way the backup selects it.
