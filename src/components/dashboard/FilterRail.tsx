@@ -7,6 +7,7 @@
 import { memo, useMemo } from "react";
 import { dashboardStrings as tr, LOCALE } from "@/lib/strings/dashboard";
 import Link from "next/link";
+import Lockup from "@/components/brand/Lockup";
 import { CalendarPlus, MapPin, RotateCcw, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
@@ -176,10 +177,9 @@ function FilterRail(p: FilterRailProps) {  devRenderCount("FilterRail");
 
   return (
     <div className="flex h-full flex-col">
-      {/* wordmark */}
-      <div className="flex items-baseline gap-0.5 px-5 pb-5 pt-5">
-        <span className="text-[17px] font-bold tracking-tight text-foreground">soundwatch</span>
-        <span className="size-[5px] translate-y-[-1px] rounded-full bg-sound" />
+      {/* lockup: soundwatch ✕ skroutz */}
+      <div className="px-5 pb-5 pt-5">
+        <Lockup size="md" />
       </div>
 
       {/* summary */}
@@ -464,7 +464,10 @@ function FilterRail(p: FilterRailProps) {  devRenderCount("FilterRail");
 
       {/* footer */}
       <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 border-t px-5 py-3 text-[10.5px] text-muted-foreground/70">
-        {([tr.footer.about, tr.footer.privacy, tr.footer.terms] as string[]).map((label) => (
+        <Link href="/about" className="font-medium text-muted-foreground transition-colors hover:text-foreground">
+          {tr.footer.about}
+        </Link>
+        {([tr.footer.privacy, tr.footer.terms] as string[]).map((label) => (
           <span key={label} className="cursor-default" title={tr.footer.soon}>
             {label}
           </span>

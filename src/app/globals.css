@@ -13,20 +13,28 @@
    mean sound activity, selection, or liveness — never decoration.
    ========================================================================= */
 :root {
-  --sw-ink: #2d3142; /* gunmetal — text, primary surfaces */
-  --sw-slate: #4f5d75; /* supporting text, rings, quiet emphasis */
-  --sw-silver: #bfc0c0; /* hairlines, rails, disabled */
+  /* The Skroutz mini brandbook (1.1), one colour per role: the sensors live
+     in Skroutz stores and the interface carries the partnership lockup. */
+  --sw-ink: #0e0e1c; /* Hat Black — text, primary surfaces, the dark section of /about */
+  --sw-slate: #363636; /* Dark Grey — supporting text, rings, the ✕ of the lockup */
+  --sw-silver: #bdbdbd; /* hairlines, rails, disabled */
   --sw-paper: #ffffff; /* base surface (always tinted in use) */
-  --sw-sound: #ef8354; /* sound levels · selection · live */
-  /* data-viz level ramp endpoints (circles on the map) */
-  --sw-quiet: var(--sw-slate);
+  --sw-sound: #f68b24; /* McDuck Orange — sound levels · selection · live */
+  /* data-viz level ramp (circles on the map): quiet is a Dark Grey ring, busy
+     is the sound accent, loud is Heavy Orange. Orange means sound, nothing
+     else; the ramp is read by levels.ts. */
+  --sw-level-quiet: var(--sw-slate);
+  --sw-level-busy: var(--sw-sound);
+  --sw-level-loud: #f44a04;
+  /* alert red — liveness "gone", errors, warnings in text. Kept apart from
+     the level ramp on purpose: Heavy Orange fails contrast as small text. */
   --sw-loud: #b3362a;
   /* status green — "operating normally", used only for health indicators
      (never for noise levels, where green would read as "quiet") */
-  --sw-ok: #4d8f66;
-  /* status amber — "needs a look" (admin watch list, offline-but-measuring);
-     like --sw-ok, health only, never sound levels */
-  --sw-warn: #d1962a;
+  --sw-ok: #50b64a; /* Cart Green */
+  /* status yellow — "needs a look" (admin watch list, offline-but-measuring);
+     like --sw-ok, health only, never sound levels. Dots only, never text. */
+  --sw-warn: #ffda00; /* Coin Yellow */
 }
 
 /* ----- semantic tokens (shadcn contract), derived from the palette ----- */

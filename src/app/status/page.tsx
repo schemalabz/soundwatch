@@ -8,6 +8,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
+import Lockup from "@/components/brand/Lockup";
 import { fmtAgo, fmtDb, fmtExactTime } from "@/lib/dashboard/format";
 import { liveTone, LIVE_TONE_COLOR, type LiveTone } from "@/lib/dashboard/liveness";
 
@@ -144,9 +145,7 @@ export default function StatusPage() {
           >
             <ArrowLeft className="size-3.5" /> Χάρτης
           </Link>
-          <div className="text-[13px] font-bold tracking-tight">
-            soundwatch<span className="text-sound">.</span>
-          </div>
+          <Lockup size="sm" />
         </div>
 
         <h1 className="text-xl font-bold tracking-tight">Κατάσταση δικτύου</h1>

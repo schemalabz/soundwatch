@@ -19,9 +19,9 @@ export interface LevelStops {
 // they mean "quiet/busy/loud here", never an absolute level or a legal limit.
 export const DEFAULT_STOPS: LevelStops = {
   colors: [
-    [45, [79, 93, 117]], // quiet — slate
-    [68, [239, 131, 84]], // busy — sound accent
-    [90, [179, 54, 42]], // loud — alert red
+    [45, [54, 54, 54]], // quiet — Dark Grey ring
+    [68, [246, 139, 36]], // busy — McDuck Orange, the sound accent
+    [90, [244, 74, 4]], // loud — Heavy Orange
   ],
   minDb: 35,
   maxDb: 100,
@@ -73,9 +73,9 @@ export function paletteStops(): LevelStops {
   cssStops = {
     ...DEFAULT_STOPS,
     colors: [
-      [DEFAULT_STOPS.colors[0][0], read("--sw-quiet", DEFAULT_STOPS.colors[0][1])],
-      [DEFAULT_STOPS.colors[1][0], read("--sw-sound", DEFAULT_STOPS.colors[1][1])],
-      [DEFAULT_STOPS.colors[2][0], read("--sw-loud", DEFAULT_STOPS.colors[2][1])],
+      [DEFAULT_STOPS.colors[0][0], read("--sw-level-quiet", DEFAULT_STOPS.colors[0][1])],
+      [DEFAULT_STOPS.colors[1][0], read("--sw-level-busy", DEFAULT_STOPS.colors[1][1])],
+      [DEFAULT_STOPS.colors[2][0], read("--sw-level-loud", DEFAULT_STOPS.colors[2][1])],
     ],
   };
   return cssStops;

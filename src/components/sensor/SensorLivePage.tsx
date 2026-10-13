@@ -12,6 +12,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, BatteryMedium, CircleHelp, Wifi } from "lucide-react";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import Lockup from "@/components/brand/Lockup";
 import { cn } from "@/lib/utils";
 import type { ApiReading, ApiSensorDetail } from "@/lib/api/schemas";
 import { fmtAgo, fmtDb, fmtDurationS, fmtExactTime } from "@/lib/dashboard/format";
@@ -193,9 +194,7 @@ export default function SensorLivePage({ id, shareKey }: { id: string; shareKey:
             <Link href="/" className="inline-flex items-center gap-1.5 text-[12px] font-medium text-muted-foreground transition-colors hover:text-foreground">
               <ArrowLeft className="size-3.5" /> {tr.backToMap}
             </Link>
-            <div className="text-[13px] font-bold tracking-tight">
-              soundwatch<span className="text-sound">.</span>
-            </div>
+            <Lockup size="sm" href="/" />
           </div>
 
           {/* identity */}

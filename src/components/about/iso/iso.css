@@ -1,0 +1,413 @@
+/* The iso-glow figure vocabulary (iso-glow.vercel.app), scoped to the dark
+   "how it works" section of /about. Tokens only: the accent is the sound
+   accent of the app, so the drawings are on-brand without any literal hue in
+   a figure. Filters live once in the section, under the ids used here. */
+.iso {
+  --bg: var(--sw-ink);
+  --panel: #0b0b15;
+  --edge: #23232f;
+  --line: #5a5a68;
+  --detail: #34343f;
+  --body: #14141e;
+  --deck: #1a1a25;
+  --ink: #9a9aa6;
+  --ink-hi: #e8e8ee;
+  --glass: #10101a;
+  --glass-on: color-mix(in srgb, var(--sw-sound) 10%, #101118);
+  --recess: #0d0d16;
+  --accent: var(--sw-sound);
+  --accent-hi: color-mix(in srgb, var(--sw-sound) 62%, #ffffff);
+  --accent-dim: color-mix(in srgb, var(--sw-sound) 10%, transparent);
+  --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+.iso .stage-holder {
+  aspect-ratio: 4 / 3;
+  border-radius: 14px;
+  transition: background 0.6s;
+  background: radial-gradient(ellipse 50% 45% at 50% 55%, transparent, transparent);
+}
+.iso .stage-holder.glow {
+  background: radial-gradient(ellipse 52% 46% at 50% 55%, var(--accent-dim), transparent 72%);
+}
+.iso svg.stage {
+  width: 100%;
+  height: 100%;
+  display: block;
+  touch-action: manipulation;
+  user-select: none;
+  -webkit-user-select: none;
+  cursor: pointer;
+}
+.iso svg.stage:focus {
+  outline: none;
+}
+.iso svg.stage:focus-visible {
+  outline: 1px dashed var(--line);
+  outline-offset: 4px;
+  border-radius: 8px;
+}
+.iso .fx {
+  position: absolute;
+  width: 0;
+  height: 0;
+  overflow: hidden;
+}
+
+/* ---------- the skill's shared vocabulary ---------- */
+.iso .stage text {
+  font-family: var(--mono);
+}
+.iso .face {
+  fill: var(--body);
+  stroke: var(--line);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+  stroke-linejoin: round;
+}
+.iso .face.top {
+  fill: var(--deck);
+}
+.iso .face.recess {
+  fill: var(--recess);
+}
+.iso .face.ghost {
+  fill: none;
+  stroke: var(--detail);
+  stroke-dasharray: 3 3;
+}
+.iso .detail {
+  fill: none;
+  stroke: var(--detail);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+.iso .label {
+  fill: var(--ink);
+  font-family: var(--mono);
+}
+.iso .glass {
+  fill: var(--glass);
+  stroke: var(--line);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+  transition: fill 0.3s, stroke 0.3s;
+}
+.iso .glass.hot {
+  fill: var(--glass-on);
+  stroke: var(--accent);
+}
+.iso .halo {
+  fill: var(--accent);
+  opacity: 0;
+  transition: opacity 0.4s;
+}
+.iso .halo.hot {
+  opacity: 0.3;
+}
+.iso .scr {
+  fill: var(--accent-hi);
+  font-family: var(--mono);
+}
+.iso .scr.dim {
+  fill: var(--ink);
+}
+.iso .scr-accent {
+  fill: var(--accent);
+}
+.iso .led {
+  fill: var(--detail);
+  stroke: var(--line);
+  stroke-width: 0.6;
+  vector-effect: non-scaling-stroke;
+  transition: fill 0.15s;
+}
+.iso .led.hot {
+  fill: var(--accent-hi);
+  stroke: var(--accent);
+}
+.iso .wire {
+  fill: none;
+  stroke: var(--line);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  transition: stroke 0.4s;
+}
+.iso .wire.hot {
+  stroke: var(--accent);
+}
+.iso .wire-under {
+  fill: none;
+  stroke: var(--panel);
+  stroke-width: 3.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.iso .press {
+  cursor: pointer;
+  transition: transform 60ms ease-out;
+}
+.iso .press.down {
+  transform: translateY(3px);
+}
+.iso .press .face {
+  transition: fill 0.6s ease-out, stroke 0.6s ease-out;
+}
+.iso .press.lit .face,
+.iso .press.latched .face {
+  fill: var(--accent);
+  stroke: var(--accent-hi);
+  transition: none;
+}
+.iso .press.lit .face.top,
+.iso .press.latched .face.top {
+  fill: var(--accent-hi);
+}
+.iso .press.lit {
+  filter: url(#iso-glow);
+}
+.iso .press.latched {
+  filter: url(#iso-soft);
+}
+.iso .press:hover .face.top {
+  stroke: var(--ink);
+}
+
+/* ---------- this page's additions ---------- */
+/* street furniture and fine structure */
+.iso .mast,
+.iso .rail {
+  fill: none;
+  stroke: var(--line);
+  stroke-width: 1.1;
+  vector-effect: non-scaling-stroke;
+  stroke-linecap: round;
+}
+.iso .lane {
+  stroke: var(--line);
+  stroke-width: 1.2;
+  vector-effect: non-scaling-stroke;
+}
+.iso .curb {
+  stroke: var(--line);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+.iso .zebra {
+  fill: var(--deck);
+  stroke: var(--detail);
+  stroke-width: 0.6;
+  vector-effect: non-scaling-stroke;
+}
+.iso .tyre {
+  fill: var(--recess);
+  stroke: var(--line);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+.iso .pipe {
+  fill: none;
+  stroke: var(--line);
+  stroke-width: 2.2;
+  vector-effect: non-scaling-stroke;
+  stroke-linecap: round;
+}
+.iso .puff {
+  fill: none;
+  stroke: var(--ink);
+  stroke-width: 0.8;
+  vector-effect: non-scaling-stroke;
+}
+/* sound itself: rings, curves, pulses — always the accent */
+.iso .ring {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 1.4;
+  vector-effect: non-scaling-stroke;
+  filter: url(#iso-soft);
+}
+.iso .curve {
+  fill: none;
+  stroke: var(--line);
+  stroke-width: 1.4;
+  vector-effect: non-scaling-stroke;
+  stroke-linejoin: round;
+}
+.iso .curve.hot {
+  stroke: var(--accent);
+  filter: url(#iso-soft);
+}
+.iso .bit {
+  fill: var(--accent-hi);
+  filter: url(#iso-soft);
+}
+.iso .air {
+  fill: var(--ink-hi);
+}
+/* callouts drawn flat over the scene */
+.iso .plate {
+  fill: color-mix(in srgb, var(--panel) 88%, transparent);
+  stroke: var(--edge);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+.iso .cap {
+  fill: var(--ink);
+  font-size: 7.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.iso .cap.hi {
+  fill: var(--ink-hi);
+}
+.iso .tag {
+  fill: var(--accent-hi);
+  font-size: 6.5px;
+  letter-spacing: 0.06em;
+}
+.iso .leader {
+  fill: none;
+  stroke: var(--line);
+  stroke-width: 0.8;
+  stroke-dasharray: 2 2.5;
+  vector-effect: non-scaling-stroke;
+}
+.iso .leader-dot {
+  fill: var(--ink);
+}
+/* lit windows: the city at night, in neutral light so they never read as sound */
+.iso .win {
+  fill: var(--recess);
+  stroke: var(--detail);
+  stroke-width: 0.5;
+  vector-effect: non-scaling-stroke;
+  transition: fill 0.6s;
+}
+.iso .win.on {
+  fill: color-mix(in srgb, var(--ink-hi) 72%, var(--recess));
+}
+.iso .bar {
+  fill: var(--accent);
+  stroke: var(--accent-hi);
+  stroke-width: 0.8;
+  vector-effect: non-scaling-stroke;
+}
+.iso .bar.top {
+  fill: var(--accent-hi);
+}
+.iso .bar.dim {
+  fill: var(--body);
+  stroke: var(--line);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .iso .press,
+  .iso .glass,
+  .iso .halo,
+  .iso .press .face,
+  .iso .wire,
+  .iso .win {
+    transition: none;
+  }
+}
+
+/* a dash of light travelling along a wire (restart with .go) */
+.iso .pulse {
+  fill: none;
+  stroke: var(--accent-hi);
+  stroke-width: 2.2;
+  stroke-linecap: round;
+  vector-effect: non-scaling-stroke;
+  stroke-dasharray: 70 1200;
+  stroke-dashoffset: 70;
+  opacity: 0;
+  filter: url(#iso-glow);
+}
+.iso .pulse.go {
+  animation: iso-flow 0.7s linear;
+}
+@keyframes iso-flow {
+  0% {
+    stroke-dashoffset: 70;
+    opacity: 1;
+  }
+  90% {
+    opacity: 1;
+  }
+  100% {
+    stroke-dashoffset: -1000;
+    opacity: 0;
+  }
+}
+/* the analysis window on the film, and the processor's progress ring */
+.iso .gatewin {
+  fill: none;
+  stroke: var(--line);
+  stroke-width: 1;
+  stroke-dasharray: 3 2;
+  vector-effect: non-scaling-stroke;
+}
+.iso .gatewin.hot {
+  stroke: var(--accent-hi);
+  stroke-dasharray: none;
+  stroke-width: 1.6;
+  filter: url(#iso-soft);
+}
+.iso .prog {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 2.4;
+  vector-effect: non-scaling-stroke;
+  stroke-linecap: round;
+  filter: url(#iso-soft);
+}
+.iso .ray {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 0.8;
+  vector-effect: non-scaling-stroke;
+  opacity: 0.35;
+}
+@media (prefers-reduced-motion: reduce) {
+  .iso .pulse.go {
+    animation: none;
+  }
+}
+/* the FFT prism: glass that carries the signal */
+.iso .prism {
+  fill: var(--glass-on);
+  stroke: var(--accent);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+  stroke-linejoin: round;
+  opacity: 0.92;
+}
+.iso .prism.front {
+  fill: color-mix(in srgb, var(--accent) 16%, var(--glass));
+  filter: url(#iso-soft);
+}
+/* the Wi-Fi hop: a dashed arc that lights while the line is in the air */
+.iso .hop {
+  fill: none;
+  stroke: var(--line);
+  stroke-width: 1;
+  stroke-dasharray: 3 3;
+  vector-effect: non-scaling-stroke;
+}
+.iso .hop.hot {
+  stroke: var(--accent);
+  filter: url(#iso-soft);
+}
+/* invisible click targets */
+.iso .hit {
+  fill: transparent;
+  stroke: none;
+  cursor: pointer;
+}
+/* a key's printed label stays readable when the key is lit */
+.iso .press.latched .label.key,
+.iso .press.lit .label.key {
+  fill: var(--bg);
+  font-weight: 700;
+}

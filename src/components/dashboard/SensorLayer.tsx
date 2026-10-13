@@ -163,7 +163,7 @@ function applyValue(
   h.circle.style.transitionTimingFunction = `${fn},${fn},linear`;
   h.label.style.transitionDuration = `${tweenMs}ms,300ms`;
   if (laeq == null) {
-    h.circle.style.borderColor = "rgba(191,192,192,0.55)";
+    h.circle.style.borderColor = "color-mix(in srgb, var(--sw-silver) 55%, transparent)";
     h.circle.style.transform = "scale(0.35)";
     h.circle.style.borderWidth = `${(1.5 / 0.35).toFixed(3)}px`;
     h.circle.style.opacity = "0.6";
