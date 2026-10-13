@@ -1,15 +1,15 @@
 "use client";
 
-// The sensor inspector: opens from a circle click. Identity, the current
-// level big and colored, liveness + telemetry on one line, and the SAME
-// TimelineChart the charts view uses — scoped to this sensor's last 24
-// hours through /api/series?sensor= (one chart component, one data path,
-// envelope and hover included).
+// The sensor inspector: opens from a circle click. Identity, the level the
+// circle shows big and colored, the one sentence that matters — how that
+// level compares with this place's own usual for the hour — then the day
+// drawn over the usual band, and liveness.
 //
-// The hero number is the trailing 5-minute energy mean from /api/frames —
-// the EXACT value the sensor's map circle shows in live mode. A single
-// latest reading can sit several dB away from the 5-minute energy mean
-// (one loud burst dominates it), and showing both unlabeled read as a bug.
+// The hero number is the frame the map shows at the cursor (live: the
+// trailing window at now; scrubbed: the same window ending at the cursor),
+// handed down by the shell, so the pane and the circle can never disagree.
+// The band comes from /api/usual for this sensor; the rule it follows is
+// src/lib/dashboard/usual.ts, the same one that draws the pill.
 
 import { memo, useEffect, useMemo, useState } from "react";
 import { BatteryMedium, MapPin, Wifi, X } from "lucide-react";
@@ -18,10 +18,11 @@ import { cn } from "@/lib/utils";
 import { levelColor, paletteStops } from "@/lib/dashboard/levels";
 import { fmtAgo, fmtDb, fmtExactTime } from "@/lib/dashboard/format";
 import { liveStatus, LIVE_TONE_COLOR } from "@/lib/dashboard/liveness";
-import { quantizeFrameMs, type FrameData } from "@/lib/dashboard/frames";
-import { dashboardStrings as tr } from "@/lib/strings/dashboard";
-import TimelineChart from "./charts/TimelineChart";
-import type { SeriesResponse } from "@/lib/api/dashboard";
+import { ATHENS_TZ, athensWallTime } from "@/lib/dashboard/time";
+import { classify, hasSupport, usualDelta, usualEdges, usualWindow } from "@/lib/dashboard/usual";
+import { dashboardStrings as tr, LOCALE } from "@/lib/strings/dashboard";
+import type { SeriesResponse, UsualBand, UsualProfileResponse } from "@/lib/api/dashboard";
+import UsualChart from "./charts/UsualChart";
 import { devRenderCount } from "@/lib/dashboard/devtools";
 
 interface SensorDetail {
@@ -43,23 +44,32 @@ interface SensorDetail {
   } | null;
 }
 
-const DAY_MS = 24 * 3600_000;
-// The pane's chart is a fixed last-24h window, so its resolution is fixed
-// too: 5 minutes gives 288 points, fine enough to show a passing lorry.
-const PANE_BUCKET = "5m";
-// The hero already refreshes on its own 5s clock; a chart frozen beside it
-// was the inconsistency.
-const LIVE_REFRESH_MS = 30_000;
+// The day's line refreshes on its own: the current hour's mean moves while
+// you watch it.
+const LIVE_REFRESH_MS = 60_000;
+
+const whenFmt = new Intl.DateTimeFormat(LOCALE, { timeZone: ATHENS_TZ, weekday: "long", hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
 
 function SensorPane({
   sensorId,
   windowS,
+  cursorMs,
+  live,
+  level,
+  usualBand,
   onClose,
   onGoToMap,
 }: {
   sensorId: string;
   /** The live frame window (speed-dependent) — the hero must equal the circle. */
   windowS: number;
+  /** The moment on display, minute-quantized; the circle's frame ends here. */
+  cursorMs: number;
+  live: boolean;
+  /** The circle's value at the cursor; null while loading or without readings. */
+  level: number | null;
+  /** This sensor's usual band for the cursor's hour; undefined while loading. */
+  usualBand?: UsualBand | null;
   onClose: () => void;
   /** Present outside the map view: jump to the map and fly to this sensor. */
   onGoToMap?: (lng: number, lat: number) => void;
@@ -67,16 +77,10 @@ function SensorPane({
   devRenderCount("SensorPane");
   // Payloads are tagged with the sensor they belong to; switching sensors
   // makes them stale by derivation (no state resets inside effects).
-  const [loaded, setLoaded] = useState<{
-    id: string;
-    detail: SensorDetail;
-    series: SeriesResponse;
-    liveLaeq: number | null;
-  } | null>(null);
+  const [detail, setDetail] = useState<{ id: string; value: SensorDetail } | null>(null);
+  const [profile, setProfile] = useState<{ key: string; value: UsualProfileResponse } | null>(null);
+  const [dayLine, setDayLine] = useState<{ key: string; value: (number | null)[] } | null>(null);
   const [nowMs, setNowMs] = useState(() => Date.now());
-  const detail = loaded?.id === sensorId ? loaded.detail : null;
-  const series = loaded?.id === sensorId ? loaded.series : null;
-  const liveLaeq = loaded?.id === sensorId ? loaded.liveLaeq : null;
 
   useEffect(() => {
     const t = setInterval(() => setNowMs(Date.now()), 5000);
@@ -85,58 +89,104 @@ function SensorPane({
 
   useEffect(() => {
     let cancelled = false;
-    const load = () => {
-      const frameAt = quantizeFrameMs(Date.now());
-      return Promise.all([
-        fetch(`/api/sensors/${sensorId}`, { cache: "no-store" }).then((r) => r.json()),
-        fetch(`/api/series?from=${Date.now() - DAY_MS}&bucket=${PANE_BUCKET}&sensor=${sensorId}`, {
-          cache: "no-store",
-        }).then((r) => r.json()),
-        // The same live frame the map circles render.
-        fetch(`/api/frames?at=${frameAt}&window=${windowS}&metric=laeq&by=received`, { cache: "no-store" }).then((r) => r.json()),
-      ])
-        .then(([d, s, f]: [SensorDetail, SeriesResponse, { frames: Record<string, FrameData> }]) => {
-          if (cancelled) return;
-          const frame = f.frames?.[String(frameAt)] ?? {};
-          setLoaded({ id: sensorId, detail: d, series: s, liveLaeq: frame[sensorId]?.laeq ?? null });
+    const load = () =>
+      fetch(`/api/sensors/${sensorId}`, { cache: "no-store" })
+        .then((r) => r.json())
+        .then((d: SensorDetail) => {
+          if (!cancelled) setDetail({ id: sensorId, value: d });
         })
         .catch(() => {});
-    };
     load();
+    const timer = setInterval(load, 30_000);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [sensorId]);
+
+  // The band and the day's line are both keyed on the cursor's Athens day
+  // and day type, so scrubbing within a day costs nothing and crossing
+  // midnight refetches once.
+  const win = useMemo(() => usualWindow(cursorMs), [cursorMs]);
+  const dayKey = `${sensorId}:${win.dayStartMs}:${win.dayType}`;
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`/api/usual?sensor=${sensorId}&at=${win.dayStartMs + 3600_000}`, { cache: "no-store" })
+      .then((r) => r.json())
+      .then((body: UsualProfileResponse) => {
+        if (!cancelled) setProfile({ key: dayKey, value: body });
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [sensorId, dayKey, win.dayStartMs]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const load = () =>
+      fetch(`/api/series?from=${win.dayStartMs}&bucket=1h&sensor=${sensorId}`, { cache: "no-store" })
+        .then((r) => r.json())
+        .then((body: SeriesResponse) => {
+          if (cancelled) return;
+          // Timeline keys are Athens wall time encoded as UTC: the UTC getters
+          // read the Athens hour and date directly.
+          const w = athensWallTime(win.dayStartMs + 3600_000);
+          const line: (number | null)[] = Array.from({ length: 24 }, () => null);
+          for (const p of body.timeline) {
+            const d = new Date(p.t);
+            if (d.getUTCFullYear() !== w.year || d.getUTCMonth() !== w.month || d.getUTCDate() !== w.day) continue;
+            line[d.getUTCHours()] = p.laeq;
+          }
+          setDayLine({ key: dayKey, value: line });
+        })
+        .catch(() => {});
+    load();
+    if (!live) return () => {
+      cancelled = true;
+    };
     const timer = setInterval(load, LIVE_REFRESH_MS);
     return () => {
       cancelled = true;
       clearInterval(timer);
     };
-  }, [sensorId, windowS]);
+  }, [sensorId, dayKey, win.dayStartMs, live]);
 
-  const latest = detail?.latestReading ?? null;
+  const d = detail?.id === sensorId ? detail.value : null;
+  const latest = d?.latestReading ?? null;
   const { ageS, tone } = liveStatus(latest?.receivedAt ?? null, nowMs);
   const liveTone = LIVE_TONE_COLOR[tone];
-  const heroLaeq = liveLaeq ?? latest?.laeq ?? null;
-
-  // 24h stats straight from the chart's own buckets: exact energy mean, the
-  // quietest hour's LAeq, and the loudest recorded instant (a true Lmax).
-  const stats = useMemo(() => {
-    const pts = series?.timeline ?? [];
-    if (pts.length === 0) return null;
-    const energy = pts.reduce((a, p) => a + Math.pow(10, p.laeq / 10) * p.n, 0);
-    const n = pts.reduce((a, p) => a + p.n, 0);
-    return {
-      avg: 10 * Math.log10(energy / n),
-      min: Math.min(...pts.map((p) => p.laeq)),
-      max: Math.max(...pts.map((p) => p.lmax)),
-    };
-  }, [series]);
-
   const stops = typeof window !== "undefined" ? paletteStops() : undefined;
+
+  const hours = profile?.key === dayKey ? profile.value.hours : null;
+  const line = dayLine?.key === dayKey ? dayLine.value : null;
+  // The band for the cursor's hour: the shell's (fleet) answer first, else
+  // the profile's — identical numbers, the profile just arrives later.
+  // undefined = still unknown, null = known to be missing.
+  let band: UsualBand | null | undefined = usualBand;
+  if (band === undefined && hours) band = hours[win.hour] ?? null;
+  const wall = athensWallTime(cursorMs);
+  const nowFraction = wall.hour + ((cursorMs / 60_000) % 60) / 60;
+
+  const verdictLine = (() => {
+    if (level == null) return null;
+    if (band === undefined) return { text: tr.now.loading, color: "var(--muted-foreground)" };
+    if (!hasSupport(band)) return { text: tr.usual.noHistory, color: "var(--muted-foreground)" };
+    const verdict = classify(level, band);
+    const delta = usualDelta(level, band);
+    if (verdict === "above") return { text: tr.usual.above(delta), color: "var(--sw-level-loud)" };
+    if (verdict === "below") return { text: tr.usual.below(-delta), color: "var(--sw-slate)" };
+    return { text: tr.usual.inside, color: "var(--sw-slate)" };
+  })();
+  const edges = hasSupport(band) ? usualEdges(band) : null;
 
   return (
     <div className="pointer-events-auto absolute right-3 top-3 z-10 flex max-h-[calc(100%-8.5rem)] w-[18.5rem] flex-col rounded-xl border bg-card/95 shadow-[0_2px_16px_-4px_rgb(45_49_66/0.18)] backdrop-blur-sm max-md:inset-x-2 max-md:right-2 max-md:top-auto max-md:bottom-24 max-md:max-h-[48%] max-md:w-auto">
       <div className="flex items-start justify-between gap-2 border-b px-4 py-3">
         <div className="min-w-0">
-          <div className="truncate text-[15px] font-semibold leading-tight">{detail?.name ?? "…"}</div>
-          <div className="truncate text-[11px] text-muted-foreground">{detail?.address ?? (detail ? `#${detail.id.slice(0, 8)}` : "")}</div>
+          <div className="truncate text-[15px] font-semibold leading-tight">{d?.name ?? d?.address ?? "…"}</div>
+          <div className="truncate text-[11px] text-muted-foreground">{d?.address ?? (d ? `#${d.id.slice(0, 8)}` : "")}</div>
         </div>
         <Button variant="ghost" size="icon" className="-mr-1.5 -mt-1 size-7 shrink-0" onClick={onClose} aria-label={tr.pane.close}>
           <X className="size-3.5" />
@@ -144,22 +194,37 @@ function SensorPane({
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
-        {/* the level now — the SAME 5-minute figure as the map circle */}
-        {heroLaeq != null && (
+        {/* the level — the SAME figure as the circle — then the sentence */}
+        {level != null ? (
           <div className="flex items-baseline gap-2">
             <span
               className="text-[34px] font-bold leading-none tabular-nums tracking-tight"
-              style={{ color: levelColor(heroLaeq, stops) }}
+              style={{ color: levelColor(level, stops) }}
             >
-              {fmtDb(heroLaeq)}
+              {fmtDb(level)}
             </span>
             <span className="text-[11px] font-medium leading-tight text-muted-foreground">
-              dB LAeq
+              dB {tr.aggregations.laeq.label} (LAeq)
               <br />
               {tr.pane.liveWindow(windowS)}
             </span>
           </div>
+        ) : (
+          <div className="text-[13px] text-muted-foreground">{tr.pane.noData}</div>
         )}
+        {verdictLine && (
+          <div className="mt-1.5">
+            <div className="text-[14px] font-bold leading-tight" style={{ color: verdictLine.color }}>
+              {verdictLine.text}
+            </div>
+            {edges && (
+              <div className="mt-0.5 text-[11px] text-muted-foreground">
+                {tr.usual.forMoment(whenFmt.format(cursorMs), String(Math.round(edges.lo)), String(Math.round(edges.hi)))}
+              </div>
+            )}
+          </div>
+        )}
+
         <div className="mt-2 flex items-center gap-2 text-[11px] text-muted-foreground">
           <span
             className={cn("size-2 rounded-full", tone === "live" && "animate-pulse")}
@@ -185,55 +250,49 @@ function SensorPane({
           )}
         </div>
 
-        {/* last 24h: the unified timeline chart, sensor-scoped */}
+        {/* the day against the usual */}
         <div className="mt-4">
           <div className="mb-1 flex items-baseline justify-between">
             <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-              {tr.pane.last24h}
+              {live ? tr.usual.chartTitle : tr.usual.chartTitlePast}
             </span>
-            {stats && (
-              <span className="text-[10px] tabular-nums text-muted-foreground">
-                {Math.round(stats.min)}–{Math.round(stats.max)} dB
-              </span>
-            )}
+            <span className="text-[10px] tabular-nums text-muted-foreground">dB</span>
           </div>
-          {series && series.timeline.length > 0 ? (
-            <TimelineChart points={series.timeline} metric="laeq" bucketSeconds={series.bucketSeconds} height={110} compact />
+          {hours && line ? (
+            Object.keys(hours).length > 0 ? (
+              <>
+                <UsualChart profile={hours} day={line} nowFraction={nowFraction} nowLevel={level} />
+                <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-[10px] text-muted-foreground">
+                  <span className="inline-flex items-center gap-1">
+                    <span className="inline-block h-2 w-3 rounded-[1px] bg-sound/30" />
+                    {tr.usual.legendBand}
+                  </span>
+                  <span className="inline-flex items-center gap-1">
+                    <span className="inline-block w-3 border-t border-dashed border-sound" />
+                    {tr.usual.legendMedian}
+                  </span>
+                  <span className="inline-flex items-center gap-1">
+                    <span className="inline-block w-3 border-t-2 border-ink" />
+                    {live ? tr.usual.legendToday : tr.usual.legendThatDay}
+                  </span>
+                </div>
+              </>
+            ) : (
+              <div className="grid h-24 place-items-center rounded-md bg-secondary px-4 text-center text-[11px] text-muted-foreground">
+                {tr.usual.noProfile}
+              </div>
+            )
           ) : (
-            <div className="grid h-24 place-items-center rounded-md bg-secondary text-[11px] text-muted-foreground">
-              {series ? tr.pane.noData : "…"}
-            </div>
+            <div className="h-24 animate-pulse rounded-md bg-silver/30" />
           )}
         </div>
-
-        {/* 24h stats: one quiet line, no boxes */}
-        {stats && (
-          <div className="flex items-baseline gap-4 text-[11px] text-muted-foreground">
-            {(
-              [
-                [tr.pane.statAvg, stats.avg],
-                [tr.pane.statMin, stats.min],
-                [tr.pane.statMax, stats.max],
-              ] as const
-            ).map(([label, v]) => (
-              <span key={label} className="flex items-baseline gap-1">
-                {label.toLowerCase()}
-                <span className="text-[13px] font-semibold tabular-nums" style={{ color: levelColor(v, stops) }}>
-                  {fmtDb(v)}
-                </span>
-              </span>
-            ))}
-          </div>
-        )}
 
         {/* the map jump: a real button, not an icon to hunt for */}
         {onGoToMap && (
           <button
             type="button"
-            disabled={detail?.latitude == null || detail?.longitude == null}
-            onClick={() =>
-              detail?.latitude != null && detail?.longitude != null && onGoToMap(detail.longitude, detail.latitude)
-            }
+            disabled={d?.latitude == null || d?.longitude == null}
+            onClick={() => d?.latitude != null && d?.longitude != null && onGoToMap(d.longitude, d.latitude)}
             className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-md border border-sound/40 py-1.5 text-[12px] font-medium text-sound transition-colors hover:bg-sound/10 disabled:opacity-35"
           >
             <MapPin className="size-3.5" />

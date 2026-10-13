@@ -1,13 +1,15 @@
 "use client";
 
-// Orchestrates the dashboard: filter state, the data range (from
-// /api/freshness), the playback clock, and the responsive frame — filter
-// rail + horizontal timebar on desktop, sheet + vertical timebar on mobile.
+// Orchestrates the dashboard: the two lenses (map, summary), the filter state
+// the summary answers to, the data range (from /api/freshness), the playback
+// clock the map answers to, the «usual» the map's circles are held against,
+// and the responsive frame — rail + horizontal timebar on desktop, sheet +
+// vertical timebar on mobile.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { dashboardStrings as tr, LOCALE } from "@/lib/strings/dashboard";
-import { SlidersHorizontal } from "lucide-react";
+import { Clock3, SlidersHorizontal } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -33,25 +35,30 @@ import {
   quantizeFrameMs,
   type FrameData,
 } from "@/lib/dashboard/frames";
+import { usualWindow } from "@/lib/dashboard/usual";
 import type { FreshnessResponse } from "@/types/freshness";
+import type { DeparturesResponse, UsualBand, UsualDayResponse } from "@/lib/api/dashboard";
 import { reverseGeocode } from "@/lib/dashboard/geocode";
 import FilterRail from "./FilterRail";
+import NowRail from "./NowRail";
 import SensorLayer, { type SensorMeta } from "./SensorLayer";
 import LocationLayer from "./LocationLayer";
 import SensorPane from "./SensorPane";
 import CurrentDate from "./CurrentDate";
 import SimulatedBanner from "./SimulatedBanner";
 import SkipFlash, { SKIP_HOLD_MS, type SkipEvent } from "./SkipFlash";
-import Timebar, { PLAYBACK_SPEEDS, type BarMode } from "./Timebar";
+import Timebar, { PLAYBACK_SPEEDS } from "./Timebar";
 import { type AggKey } from "@/lib/dashboard/metrics";
 import ViewSwitcher, { type DashboardView } from "./ViewSwitcher";
-import Leaderboard from "./views/Leaderboard";
-import ChartsView from "./views/ChartsView";
+import SummaryView from "./views/SummaryView";
 import { devRenderCount } from "@/lib/dashboard/devtools";
 
 const MapCanvas = dynamic(() => import("./MapCanvas"), { ssr: false });
 
 const FALLBACK_SPAN_DAYS = 90;
+// The band for a day changes as yesterday's hours close; a live map asks
+// again this often.
+const USUAL_REFRESH_MS = 10 * 60_000;
 
 export default function DashboardShell() {
   devRenderCount("DashboardShell");
@@ -72,7 +79,6 @@ export default function DashboardShell() {
   const [sensorList, setSensorList] = useState<SensorMeta[]>([]);
   const [skip, setSkip] = useState<SkipEvent | null>(null);
   const [selectedSensorId, setSelectedSensorId] = useState<string | null>(null);
-  const [mode, setMode] = useState<BarMode>("instants");
   const [view, setView] = useState<DashboardView>("map");
   const [placingPin, setPlacingPin] = useState(false);
   // A metric mention elsewhere is being hovered — the rail picker lights up.
@@ -82,6 +88,13 @@ export default function DashboardShell() {
     string,
     Record<AggKey, number> & { n: number }
   > | null>(null);
+  // What the circles show right now, lifted from the map layer so the rail
+  // and the pane read the same numbers the circles do.
+  const [frame, setFrame] = useState<FrameData | null>(null);
+  // The usual for the cursor's day, every sensor, every hour — one fetch per
+  // (day, kind of day), looked up per hour as the cursor moves.
+  const [usualDay, setUsualDay] = useState<UsualDayResponse | null>(null);
+  const [departures, setDepartures] = useState<DeparturesResponse | null>(null);
   const skipSeq = useRef(0);
   const skipHoldUntilRef = useRef(0);
   // Stable identity: MapCanvas keys its (create/destroy!) effect on the
@@ -247,11 +260,11 @@ export default function DashboardShell() {
     return () => clearInterval(timer);
   }, [playing, speedIndex]);
 
-  // Aggregate-over-the-filtered-set data feeds both the aggregate map mode
-  // and the leaderboard: one fetch per (filters, domain) — the response
-  // carries every metric, so flipping between them costs nothing.
+  // Aggregate-over-the-filtered-set data feeds the summary's ranking: one
+  // fetch per (filters, domain) — the response carries every metric, so
+  // flipping between them costs nothing.
   const aggQuery = filtersToAggregateQuery(filters, rangeStartMinute);
-  const needsAgg = mode === "aggregate" || view === "board";
+  const needsAgg = view === "summary";
   useEffect(() => {
     if (!needsAgg) return;
     let cancelled = false;
@@ -270,18 +283,73 @@ export default function DashboardShell() {
     };
   }, [needsAgg, aggQuery]);
 
-  const overrideFrame: FrameData | null = useMemo(() => {
-    if (mode !== "aggregate" || !aggData) return null;
-    const out: FrameData = {};
-    for (const [id, v] of Object.entries(aggData))
-      out[id] = { laeq: v[aggKey], n: v.n };
-    return out;
-  }, [mode, aggData, aggKey]);
+  // The moment on display, to the minute: the frame the circles show ends
+  // here. Everything «usual» keys off it.
+  const isLive = cursor === "live";
+  const cursorMinute = isLive ? nowMinute : quantizeFrameMs(cursor);
+  const cursorWin = useMemo(() => usualWindow(cursorMinute), [cursorMinute]);
+  const { dayStartMs: cursorDayStartMs, dayType: cursorDayType } = cursorWin;
 
-  const onModeChange = useCallback((m: BarMode) => {
-    setMode(m);
-    if (m === "aggregate") setPlaying(false);
-  }, []);
+  // The usual for the cursor's day: refetched when the day (or its kind)
+  // changes, and every ten minutes while live so a newly closed hour counts.
+  useEffect(() => {
+    let cancelled = false;
+    const load = () =>
+      fetch(`/api/usual?at=${cursorDayStartMs + 3600_000}&day=1`, { cache: "no-store" })
+        .then((r) => r.json())
+        .then((body: UsualDayResponse) => {
+          if (!cancelled) setUsualDay(body);
+        })
+        .catch(() => {});
+    load();
+    const timer = isLive ? setInterval(load, USUAL_REFRESH_MS) : null;
+    return () => {
+      cancelled = true;
+      if (timer) clearInterval(timer);
+    };
+  }, [cursorDayStartMs, cursorDayType, isLive]);
+
+  // The cursor's day, cut at now when live and at the end of that day when
+  // scrubbing (the rail then hides what came after the cursor). Minute
+  // precision: while that day is today this refetches once a minute.
+  const departuresAtMs = isLive ? nowMinute : Math.min(nowMinute, cursorDayStartMs + 86_400_000);
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`/api/departures?at=${departuresAtMs}`, { cache: "no-store" })
+      .then((r) => r.json())
+      .then((body: DeparturesResponse) => {
+        if (!cancelled) setDepartures(body);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [departuresAtMs]);
+
+  // The band for the cursor's hour, per sensor: what the circles are judged
+  // against. null until the day's usual has landed.
+  const usualForHour = useMemo<Record<string, UsualBand> | null>(() => {
+    if (!usualDay || usualDay.dayStartMs !== cursorWin.dayStartMs) return null;
+    const out: Record<string, UsualBand> = {};
+    for (const [id, hours] of Object.entries(usualDay.sensors)) {
+      const band = hours[cursorWin.hour];
+      if (band) out[id] = band;
+    }
+    return out;
+  }, [usualDay, cursorWin]);
+
+  // While scrubbing, the rail shows the day's departures up to the cursor.
+  const departuresShown = useMemo<DeparturesResponse | null>(() => {
+    if (!departures) return null;
+    if (departures.dayStartMs !== cursorWin.dayStartMs) return null;
+    if (isLive) return departures;
+    return {
+      ...departures,
+      episodes: departures.episodes
+        .filter((e) => e.peakAtMs <= cursorMinute)
+        .map((e) => ({ ...e, ongoing: false })),
+    };
+  }, [departures, cursorWin, isLive, cursorMinute]);
 
   const onViewChange = useCallback((v: DashboardView) => {
     setView(v);
@@ -347,6 +415,14 @@ export default function DashboardShell() {
     [mapInstance],
   );
 
+  // A departure in the rail: scrub to the end of its peak window (so the
+  // frame on the map IS that window) and open the place.
+  const onJumpTo = useCallback((epochMs: number) => {
+    setPlaying(false);
+    setView("map");
+    setCursor(quantizeFrameMs(epochMs + 600_000));
+  }, []);
+
   const onPlayToggle = useCallback(() => {
     setPlaying((p) => {
       if (!p) {
@@ -380,6 +456,9 @@ export default function DashboardShell() {
       : segments[0].endMs
     : nowMs;
 
+  const stepMs = PLAYBACK_SPEEDS[speedIndex].simSecondsPerRealSecond * 1000;
+  const windowS = frameWindowS(stepMs);
+
   const timebarProps = {
     rangeStartMs: domainStartMs,
     nowMs: domainEndMs,
@@ -403,15 +482,6 @@ export default function DashboardShell() {
     filters.days.size +
     filters.hours.size +
     filters.months.size;
-  // The rail's snapshot super-title: the exact frame span on display, as
-  // primitives so the rail's memo only fires when the frame really moves.
-  const showSnapshot = view === "map" && mode === "instants";
-  const snapshotWindowS = frameWindowS(
-    PLAYBACK_SPEEDS[speedIndex].simSecondsPerRealSecond * 1000,
-  );
-  const snapshotEndMs = showSnapshot
-    ? quantizeFrameMs(cursor === "live" ? nowMinute : cursor)
-    : null;
 
   const railProps = {
     filters,
@@ -430,11 +500,25 @@ export default function DashboardShell() {
     onTogglePlacing,
     onAddPin,
     metricGlow,
-    snapshotLive: showSnapshot && cursor === "live",
-    snapshotStartMs:
-      snapshotEndMs == null ? null : snapshotEndMs - snapshotWindowS * 1000,
-    snapshotEndMs,
   };
+
+  const rail =
+    view === "map" ? (
+      <NowRail
+        cursorMs={cursorMinute}
+        live={isLive}
+        windowS={windowS}
+        sensors={sensorList}
+        frame={frame}
+        usual={usualForHour}
+        departures={departuresShown}
+        freshness={freshness}
+        onJumpTo={onJumpTo}
+        onSensorClick={setSelectedSensorId}
+      />
+    ) : (
+      <FilterRail {...railProps} />
+    );
 
   if (!mounted) return <div className="h-full bg-background" />;
 
@@ -444,11 +528,9 @@ export default function DashboardShell() {
       <div className="flex h-full min-h-0 flex-col">
         <SimulatedBanner />
         <div className="flex min-h-0 flex-1">
-          {/* desktop filter rail */}
+          {/* desktop rail: the moment on the map, the filters beside the summary */}
           {isMobile === false && (
-            <aside className="w-[19rem] shrink-0 border-r bg-sidebar">
-              <FilterRail {...railProps} />
-            </aside>
+            <aside className="w-[19rem] shrink-0 border-r bg-sidebar">{rail}</aside>
           )}
 
           {/* map + overlays */}
@@ -458,16 +540,15 @@ export default function DashboardShell() {
               map={mapInstance}
               sensors={sensorList}
               cursor={cursor}
-              stepMs={
-                PLAYBACK_SPEEDS[speedIndex].simSecondsPerRealSecond * 1000
-              }
+              stepMs={stepMs}
               segments={segments}
               playing={playing}
               metric={aggKey}
               onSensorClick={setSelectedSensorId}
-              overrideFrame={overrideFrame}
               locations={filters.locations}
               clickThrough={placingPin}
+              usual={usualForHour}
+              onFrame={setFrame}
             />
             <LocationLayer
               map={mapInstance}
@@ -476,42 +557,36 @@ export default function DashboardShell() {
               onPlace={onPlacePin}
               onRemove={onRemovePin}
             />
-            {view === "board" && (
-              <Leaderboard
+            {view === "summary" && (
+              <SummaryView
                 aggData={aggData}
-                metric={aggKey}
-                sensors={sensorList}
-                onSensorClick={setSelectedSensorId}
-                onMetricRefHover={setMetricGlow}
-              />
-            )}
-            {view === "charts" && (
-              <ChartsView
                 aggQuery={aggQuery}
                 metric={aggKey}
+                sensors={sensorList}
                 filters={filters}
                 domainStartMs={rangeStartMinute}
                 nowMs={nowMinute}
+                onSensorClick={setSelectedSensorId}
                 onMetricRefHover={setMetricGlow}
               />
             )}
             {selectedSensorId && (
               <SensorPane
                 sensorId={selectedSensorId}
-                windowS={frameWindowS(
-                  PLAYBACK_SPEEDS[speedIndex].simSecondsPerRealSecond * 1000,
-                )}
+                windowS={windowS}
+                cursorMs={cursorMinute}
+                live={isLive}
+                level={frame?.[selectedSensorId]?.laeq ?? null}
+                usualBand={usualForHour ? (usualForHour[selectedSensorId] ?? null) : undefined}
                 onClose={onClosePane}
                 onGoToMap={view !== "map" ? onGoToMap : undefined}
               />
             )}
             {view === "map" && <SkipFlash skip={skip} />}
-            {view === "map" && mode === "instants" && (
+            {view === "map" && (
               <CurrentDate
-                cursorMs={cursor === "live" ? nowMinute : cursor}
-                windowS={frameWindowS(
-                  PLAYBACK_SPEEDS[speedIndex].simSecondsPerRealSecond * 1000,
-                )}
+                cursorMs={cursorMinute}
+                windowS={windowS}
                 skip={skip}
               />
             )}
@@ -520,14 +595,12 @@ export default function DashboardShell() {
             <div className="pointer-events-none absolute left-1/2 top-3 z-10 -translate-x-1/2 md:top-4">
               <ViewSwitcher
                 view={view}
-                mode={mode}
                 compact={isMobile === true}
                 onViewChange={onViewChange}
-                onModeChange={onModeChange}
               />
             </div>
 
-            {/* mobile: filter sheet trigger */}
+            {/* mobile: the rail as a sheet */}
             {isMobile === true && (
               <Sheet>
                 <SheetTrigger asChild>
@@ -535,9 +608,9 @@ export default function DashboardShell() {
                     variant="outline"
                     className="absolute left-3 top-3 z-10 h-9 gap-2 bg-card/95 shadow-sm backdrop-blur-sm"
                   >
-                    <SlidersHorizontal className="size-3.5" />
-                    {tr.filters}
-                    {activeFilterCount > 0 && (
+                    {view === "map" ? <Clock3 className="size-3.5" /> : <SlidersHorizontal className="size-3.5" />}
+                    {view === "map" ? tr.now.sheet : tr.filters}
+                    {view !== "map" && activeFilterCount > 0 && (
                       <Badge className="size-4 justify-center rounded-full bg-sound p-0 text-[10px] text-white">
                         {activeFilterCount}
                       </Badge>
@@ -545,15 +618,14 @@ export default function DashboardShell() {
                   </Button>
                 </SheetTrigger>
                 <SheetContent side="left" className="w-[19rem] p-0">
-                  <SheetTitle className="sr-only">{tr.filters}</SheetTitle>
-                  <FilterRail {...railProps} />
+                  <SheetTitle className="sr-only">{view === "map" ? tr.now.sheet : tr.filters}</SheetTitle>
+                  {rail}
                 </SheetContent>
               </Sheet>
             )}
 
-            {/* the timebar — instants scope on the map lens only */}
+            {/* the timebar — the map's only time control */}
             {view === "map" &&
-              mode === "instants" &&
               (isMobile === true ? (
                 <div className="pointer-events-none absolute bottom-24 right-2 top-16 z-10 flex">
                   <Timebar {...timebarProps} orientation="vertical" />

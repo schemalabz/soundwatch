@@ -20,12 +20,15 @@ function Leaderboard({
   sensors,
   onSensorClick,
   onMetricRefHover,
+  embedded,
 }: {
   aggData: Record<string, Record<AggKey, number> & { n: number }> | null;
   metric: AggKey;
   sensors: SensorMeta[];
   onSensorClick: (id: string) => void;
   onMetricRefHover?: (on: boolean) => void;
+  /** Inside the summary's own scroll: no overlay, no top inset. */
+  embedded?: boolean;
 }) {
   devRenderCount("Leaderboard");
   const meta = useMemo(() => new Map(sensors.map((s) => [s.id, s])), [sensors]);
@@ -46,8 +49,8 @@ function Leaderboard({
   const barFraction = (v: number) => (hi === lo ? 1 : 0.06 + 0.94 * ((v - lo) / (hi - lo)));
 
   return (
-    <div className="absolute inset-0 z-10 overflow-y-auto bg-background">
-      <div className="mx-auto max-w-2xl px-6 pb-16 pt-[4.5rem] md:px-8">
+    <div className={embedded ? "" : "absolute inset-0 z-10 overflow-y-auto bg-background"}>
+      <div className={embedded ? "mx-auto max-w-2xl px-6 pb-4 md:px-8" : "mx-auto max-w-2xl px-6 pb-16 pt-[4.5rem] md:px-8"}>
         <h2 className="text-[15px] font-semibold tracking-tight">{tr.board.title}</h2>
         <p className="mt-0.5 text-[11px] text-muted-foreground">
           {tr.board.subtitlePrefix}

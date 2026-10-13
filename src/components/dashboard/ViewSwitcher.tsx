@@ -2,42 +2,32 @@
 
 import { memo } from "react";
 
-// Χάρτης / Κατάταξη / Γραφήματα — the top-level lens on the filtered data.
-//
-// The map lens carries a second axis (Στιγμιότυπα / Συγκεντρωτικά) that no
-// other view has, so the Χάρτης tab UNFOLDS: while active, a nested mini
-// scope picker slides out inside the tab, under the same sound underline —
-// the shared underline is what says "one lens, two scopes". Leaving the map
-// folds it back in.
+// Χάρτης / Σύνοψη — the two lenses on the data. The map is a moment (the
+// timebar is its only time control); the summary is the filtered time-set,
+// ranked and charted, with the filter rail beside it.
 
-import { ChartSpline, Map as MapIcon, Trophy } from "lucide-react";
+import { ChartSpline, Map as MapIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { dashboardStrings as tr } from "@/lib/strings/dashboard";
-import type { BarMode } from "./Timebar";
 import { devRenderCount } from "@/lib/dashboard/devtools";
 
-export type DashboardView = "map" | "board" | "charts";
+export type DashboardView = "map" | "summary";
 
-const SECONDARY: { key: Exclude<DashboardView, "map">; icon: typeof MapIcon }[] = [
-  { key: "board", icon: Trophy },
-  { key: "charts", icon: ChartSpline },
+const VIEWS: { key: DashboardView; icon: typeof MapIcon }[] = [
+  { key: "map", icon: MapIcon },
+  { key: "summary", icon: ChartSpline },
 ];
 
 function ViewSwitcher({
   view,
-  mode,
   compact,
   onViewChange,
-  onModeChange,
 }: {
   view: DashboardView;
-  mode: BarMode;
   compact?: boolean;
   onViewChange: (v: DashboardView) => void;
-  onModeChange: (m: BarMode) => void;
 }) {
   devRenderCount("ViewSwitcher");
-  const mapActive = view === "map";
   return (
     <div
       className={cn(
@@ -46,51 +36,7 @@ function ViewSwitcher({
       )}
       role="tablist"
     >
-      {/* the map tab: only the label carries the underline; the fold-out
-          scope picker rides alongside, unmarked */}
-      <div className="flex items-center">
-        <button
-          type="button"
-          role="tab"
-          aria-selected={mapActive}
-          aria-label={tr.views.map}
-          onClick={() => onViewChange("map")}
-          className={cn(
-            "flex items-center gap-1.5 border-b-2 pb-0.5 pt-1 font-medium tracking-tight transition-colors",
-            compact ? "text-[10px]" : "text-[11.5px]",
-            mapActive ? "border-sound text-foreground" : "border-transparent text-muted-foreground hover:text-foreground"
-          )}
-        >
-          <MapIcon className="size-3.5" />
-          {!compact && tr.views.map}
-        </button>
-        <div
-          className={cn(
-            "flex items-center overflow-hidden transition-all duration-300",
-            mapActive ? "max-w-48 opacity-100" : "max-w-0 opacity-0"
-          )}
-        >
-          <span className="mx-2 h-3 w-px shrink-0 bg-border" />
-          {(["instants", "aggregate"] as BarMode[]).map((m) => (
-            <button
-              key={m}
-              type="button"
-              tabIndex={mapActive ? 0 : -1}
-              aria-pressed={mode === m}
-              onClick={() => onModeChange(m)}
-              className={cn(
-                "whitespace-nowrap font-medium transition-colors",
-                compact ? "px-1 text-[9.5px]" : "px-1.5 text-[10px]",
-                mode === m ? "text-sound" : "text-muted-foreground hover:text-foreground"
-              )}
-            >
-              {tr.modes[m]}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {SECONDARY.map(({ key, icon: Icon }) => (
+      {VIEWS.map(({ key, icon: Icon }) => (
         <button
           key={key}
           type="button"
@@ -114,5 +60,5 @@ function ViewSwitcher({
   );
 }
 
-// Static between view/mode changes.
+// Static between view changes.
 export default memo(ViewSwitcher);

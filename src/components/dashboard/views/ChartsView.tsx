@@ -124,6 +124,7 @@ function ChartsView({
   domainStartMs,
   nowMs,
   onMetricRefHover,
+  embedded,
 }: {
   /** from= + filter params, as built by filtersToAggregateQuery. */
   aggQuery: string;
@@ -132,6 +133,8 @@ function ChartsView({
   domainStartMs: number;
   nowMs: number;
   onMetricRefHover?: (on: boolean) => void;
+  /** Inside the summary's own scroll: no overlay, no top inset. */
+  embedded?: boolean;
 }) {
   devRenderCount("ChartsView");
   // The response is tagged with the query that produced it — staleness (and
@@ -249,8 +252,8 @@ function ChartsView({
   const metricLabel = tr.aggregations[metric].label.toLowerCase();
 
   return (
-    <div className="absolute inset-0 z-10 overflow-y-auto bg-background">
-      <div className="mx-auto max-w-4xl px-6 pb-16 pt-[4.5rem] md:px-10">
+    <div className={embedded ? "" : "absolute inset-0 z-10 overflow-y-auto bg-background"}>
+      <div className={embedded ? "mx-auto max-w-4xl px-6 pb-16 pt-4 md:px-10" : "mx-auto max-w-4xl px-6 pb-16 pt-[4.5rem] md:px-10"}>
         <div className="flex flex-col gap-10">
           <Section
             title={tr.charts.timeline}

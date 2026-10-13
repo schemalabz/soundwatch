@@ -14,6 +14,9 @@
 //   frames beyond a cap — memory stays flat over long sessions.
 // - Live mode reuses /api/sensors (latestReading IS the live frame), polled
 //   gently, with a slow "creep" transition instead of the 1s playback tween.
+// - The circle is the level. The pill beside it is the one other thing the
+//   map says: this place is outside its own usual for this hour (the rule is
+//   src/lib/dashboard/usual.ts). Most places, most of the time, have none.
 
 import { memo, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import type mapboxgl from "mapbox-gl";
@@ -27,8 +30,10 @@ import {
 } from "@/lib/dashboard/frames";
 import { audibleRadiusM, levelColor, metersPerPixel, paletteStops } from "@/lib/dashboard/levels";
 import { withinLocations, type LocationPin, type TimeSegment } from "@/lib/dashboard/filters";
+import { classify, fmtDelta, hasSupport, usualDelta } from "@/lib/dashboard/usual";
 import { devExpose, devRenderCount } from "@/lib/dashboard/devtools";
 import type { ApiSensorListItem } from "@/lib/api/schemas";
+import type { UsualBand } from "@/lib/api/dashboard";
 
 // The identity fields come from the published contract, so a rename in
 // ApiSensorListItem breaks here rather than arriving as undefined. Coordinates
@@ -50,12 +55,14 @@ export interface SensorLayerProps {
   /** The aggregation metric applied to every frame window (and live). */
   metric: string;
   onSensorClick?: (sensorId: string) => void;
-  /** When set (aggregate mode), shown instead of frame/live data. */
-  overrideFrame?: FrameData | null;
   /** Spatial filter: markers exist only inside these pins (empty = all). */
   locations?: readonly LocationPin[];
   /** Pin-placement mode: sensor markers must not swallow map clicks. */
   clickThrough?: boolean;
+  /** Each sensor's usual band for the cursor's hour; null while unknown. */
+  usual?: Record<string, UsualBand> | null;
+  /** The frame the circles currently show, lifted for the rail's counts. */
+  onFrame?: (frame: FrameData | null) => void;
 }
 
 const MARKER_PX = 30;
@@ -75,6 +82,7 @@ interface MarkerHandle {
   marker: mapboxgl.Marker;
   circle: HTMLSpanElement;
   label: HTMLSpanElement;
+  pill: HTMLSpanElement;
 }
 
 // The label needs BOTH a close-enough zoom (city scale, not the whole
@@ -84,7 +92,7 @@ const LABEL_MIN_ZOOM = 12.2;
 // its scale means nothing without the zoom it was computed at.
 const LABEL_MIN_PX = 22;
 
-function makeMarkerElement(): { root: HTMLDivElement; circle: HTMLSpanElement; label: HTMLSpanElement } {
+function makeMarkerElement(): { root: HTMLDivElement; circle: HTMLSpanElement; label: HTMLSpanElement; pill: HTMLSpanElement } {
   const root = document.createElement("div");
   // NO inline `position`: mapbox's .mapboxgl-marker class positions the root
   // absolutely and drives it via transform — an inline position:relative
@@ -126,12 +134,36 @@ function makeMarkerElement(): { root: HTMLDivElement; circle: HTMLSpanElement; l
     `transition:color ${PLAYBACK_TWEEN_MS}ms linear,opacity 300ms linear`,
     "user-select:none",
   ].join(";");
+  // The pill: "+10" on the ring's upper-right edge when the place is outside
+  // its usual. Hidden by default — on most circles it never shows.
+  const pill = document.createElement("span");
+  pill.style.cssText = [
+    "position:absolute",
+    "left:50%",
+    "top:50%",
+    "height:18px",
+    "padding:0 6px",
+    "border-radius:9px",
+    "background:var(--sw-ink)",
+    "color:var(--sw-paper)",
+    "font-size:11px",
+    "font-weight:700",
+    "line-height:18px",
+    "font-variant-numeric:tabular-nums",
+    "letter-spacing:0.02em",
+    "white-space:nowrap",
+    "pointer-events:none",
+    "user-select:none",
+    "opacity:0",
+    "transform:translate(-50%,-50%)",
+    "transition:opacity 300ms linear",
+  ].join(";");
   root.appendChild(circle);
   root.appendChild(label);
-  return { root, circle, label };
+  root.appendChild(pill);
+  return { root, circle, label, pill };
 }
 
-/** Apply one sensor's frame value to its circle. null = no data (gray). */
 /**
  * Pixel scale for a level: the circle is drawn at its illustrative audible
  * RADIUS, so it keeps a real-world size and grows as you zoom in, rather than
@@ -150,12 +182,22 @@ function scaleForLevel(laeq: number, mPerPx: number): number {
   return Math.min(MAX_PX, Math.max(MIN_PX, diameterPx)) / MARKER_PX;
 }
 
+/** Park the pill on the ring's upper-right edge for the ring's current scale. */
+function placePill(pill: HTMLSpanElement, scale: number): void {
+  // Half the rendered diameter, then along the 45° diagonal; never inside
+  // the 30 px root's own corner, so a tiny ring still shows it beside itself.
+  const r = Math.max(MARKER_PX / 2, (scale * MARKER_PX) / 2) * 0.72;
+  pill.style.transform = `translate(calc(-50% + ${r.toFixed(1)}px), calc(-50% - ${r.toFixed(1)}px))`;
+}
+
+/** Apply one sensor's frame value to its circle. null = no data (gray). */
 function applyValue(
-  h: Pick<MarkerHandle, "circle" | "label">,
+  h: Pick<MarkerHandle, "circle" | "label" | "pill">,
   laeq: number | null,
   tweenMs: number,
   labelsOn: boolean,
   mPerPx: number,
+  band: UsualBand | null | undefined,
   timing: "linear" | "ease" = "linear"
 ): void {
   const fn = timing === "linear" ? "linear" : "cubic-bezier(0.25,0,0.2,1)";
@@ -168,6 +210,7 @@ function applyValue(
     h.circle.style.borderWidth = `${(1.5 / 0.35).toFixed(3)}px`;
     h.circle.style.opacity = "0.6";
     h.label.style.opacity = "0";
+    h.pill.style.opacity = "0";
   } else {
     const stops = paletteStops();
     const scale = scaleForLevel(laeq, mPerPx);
@@ -186,11 +229,29 @@ function applyValue(
     } else {
       h.label.style.opacity = "0";
     }
+    // The pill fires on the band edge; its number is the distance from the
+    // typical hour. A quieter-than-usual place gets the hollow variant.
+    if (hasSupport(band) && classify(laeq, band) !== "inside") {
+      const delta = usualDelta(laeq, band);
+      h.pill.textContent = fmtDelta(delta);
+      if (delta > 0) {
+        h.pill.style.background = "var(--sw-ink)";
+        h.pill.style.color = "var(--sw-paper)";
+        h.pill.style.boxShadow = "none";
+      } else {
+        h.pill.style.background = "var(--sw-paper)";
+        h.pill.style.color = "var(--sw-slate)";
+        h.pill.style.boxShadow = "inset 0 0 0 1px var(--sw-slate)";
+      }
+      placePill(h.pill, scale);
+      h.pill.style.opacity = "1";
+    } else {
+      h.pill.style.opacity = "0";
+    }
   }
 }
 
-function SensorLayer({ map, sensors, cursor, stepMs, segments, playing, metric, onSensorClick, overrideFrame, locations, clickThrough }: SensorLayerProps) {
-  const hasOverride = overrideFrame != null;
+function SensorLayer({ map, sensors, cursor, stepMs, segments, playing, metric, onSensorClick, locations, clickThrough, usual, onFrame }: SensorLayerProps) {
   devRenderCount("SensorLayer");
   const [version, bumpVersion] = useReducer((v: number) => v + 1, 0);
   const [zoomBucket, setZoomBucket] = useState(0);
@@ -205,6 +266,10 @@ function SensorLayer({ map, sensors, cursor, stepMs, segments, playing, metric, 
   useEffect(() => {
     onSensorClickRef.current = onSensorClick;
   }, [onSensorClick]);
+  const onFrameRef = useRef(onFrame);
+  useEffect(() => {
+    onFrameRef.current = onFrame;
+  }, [onFrame]);
 
   // Dev observability: the live FrameStore as window.__swFrameStore.
   useEffect(() => {
@@ -236,6 +301,7 @@ function SensorLayer({ map, sensors, cursor, stepMs, segments, playing, metric, 
         handle.circle.style.transitionDuration = "0ms";
         handle.circle.style.transform = `scale(${scale.toFixed(3)})`;
         handle.circle.style.borderWidth = `${(1.5 / scale).toFixed(3)}px`;
+        placePill(handle.pill, scale);
       }
     };
     update();
@@ -261,7 +327,7 @@ function SensorLayer({ map, sensors, cursor, stepMs, segments, playing, metric, 
     import("mapbox-gl").then(({ default: gl }) => {
       if (disposed) return;
       for (const s of shownSensors) {
-        const { root, circle, label } = makeMarkerElement();
+        const { root, circle, label, pill } = makeMarkerElement();
         root.addEventListener("click", (e) => {
           e.stopPropagation();
           onSensorClickRef.current?.(s.id);
@@ -269,7 +335,7 @@ function SensorLayer({ map, sensors, cursor, stepMs, segments, playing, metric, 
         const marker = new gl.Marker({ element: root, anchor: "center" })
           .setLngLat([s.longitude, s.latitude])
           .addTo(map);
-        const handle = { marker, circle, label };
+        const handle = { marker, circle, label, pill };
         markers.set(s.id, handle);
         handles.push(handle);
       }
@@ -288,7 +354,7 @@ function SensorLayer({ map, sensors, cursor, stepMs, segments, playing, metric, 
   // Live IS a frame: the trailing 5 minutes at "now", computed with the
   // same metric as playback — one data path for everything.
   useEffect(() => {
-    if (cursor !== "live" || hasOverride) return;
+    if (cursor !== "live") return;
     let cancelled = false;
     // Live IS a frame, and the frame window follows the playback speed —
     // switching speeds while live changes what "now" aggregates over, and
@@ -312,12 +378,12 @@ function SensorLayer({ map, sensors, cursor, stepMs, segments, playing, metric, 
       cancelled = true;
       clearInterval(timer);
     };
-  }, [cursor, metric, stepMs, hasOverride]);
+  }, [cursor, metric, stepMs]);
 
   // --- prefetcher: current frame + the playback path ahead, one batch ---
   const cursorQ = cursor === "live" ? "live" : quantizeFrameMs(cursor);
   useEffect(() => {
-    if (cursorQ === "live" || hasOverride) return;
+    if (cursorQ === "live") return;
     const windowS = frameWindowS(stepMs);
     const ahead = playing ? PREFETCH_AHEAD : 2;
     const times = upcomingFrameTimes(segments, cursorQ, stepMs, ahead)
@@ -346,7 +412,7 @@ function SensorLayer({ map, sensors, cursor, stepMs, segments, playing, metric, 
         for (const t of missing) storeRef.current.clearPending(frameKey(t, windowS, metric));
       });
     return () => controller.abort();
-  }, [cursorQ, stepMs, segments, playing, metric, hasOverride]);
+  }, [cursorQ, stepMs, segments, playing, metric]);
 
   // --- apply the current frame to the marker elements ---
   useEffect(() => {
@@ -355,16 +421,6 @@ function SensorLayer({ map, sensors, cursor, stepMs, segments, playing, metric, 
     // Circles are drawn at a real-world radius, so their pixel size depends on
     // where and how far in the map currently is.
     const mPerPx = map ? metersPerPixel(map.getCenter().lat, map.getZoom()) : metersPerPixel(38, 11.3);
-    // Aggregate mode: the override IS the frame; settle onto it directly.
-    if (overrideFrame != null) {
-      lastAppliedRef.current = null;
-      for (const [id, handle] of markersRef.current) {
-        const v = overrideFrame[id];
-        lastLevelsRef.current.set(id, v ? v.laeq : null);
-        applyValue(handle, v ? v.laeq : null, 500, zoomBucket >= LABEL_MIN_ZOOM, mPerPx, "ease");
-      }
-      return;
-    }
     const isLive = cursorQ === "live";
     const frame = isLive ? liveFrameRef.current : storeRef.current.get(frameKey(cursorQ, frameWindowS(stepMs), metric));
     if (!isLive && frame === undefined) return; // not loaded yet: keep last shown state
@@ -390,9 +446,10 @@ function SensorLayer({ map, sensors, cursor, stepMs, segments, playing, metric, 
     for (const [id, handle] of markersRef.current) {
       const v = frame?.[id];
       lastLevelsRef.current.set(id, v ? v.laeq : null);
-      applyValue(handle, v ? v.laeq : null, tween, labelsOn, mPerPx, timing);
+      applyValue(handle, v ? v.laeq : null, tween, labelsOn, mPerPx, usual?.[id], timing);
     }
-  }, [cursorQ, stepMs, version, zoomBucket, playing, metric, overrideFrame, map]);
+    onFrameRef.current?.(frame ?? null);
+  }, [cursorQ, stepMs, version, zoomBucket, playing, metric, map, usual]);
 
   return null;
 }
