@@ -5,6 +5,7 @@ vi.mock("@/lib/db", () => ({ prisma: {} }));
 import { departureEpisodes, WINDOW_S, type FleetUsual, type TenMinuteWindow } from "./usual";
 import {
   classify,
+  countVersusUsual,
   dayTypeOf,
   fmtDelta,
   hasSupport,
@@ -76,6 +77,25 @@ describe("the rule", () => {
     expect(hasSupport({ ...band, buckets: USUAL_MIN_BUCKETS - 1 })).toBe(false);
     expect(hasSupport(null)).toBe(false);
     expect(hasSupport(undefined)).toBe(false);
+  });
+});
+
+describe("counting a frame against the usual", () => {
+  const band = { l90: 60, l50: 66, l10: 72, laeq: 67, n: 1000, buckets: 20 };
+  it("splits measured places by verdict, and keeps the ones without history apart", () => {
+    const frame = { a: { laeq: 80 }, b: { laeq: 66 }, c: { laeq: 50 }, d: { laeq: 70 }, z: { laeq: 99 } };
+    const usual = { a: band, b: band, c: band, d: { ...band, buckets: 2 } };
+    expect(countVersusUsual(["a", "b", "c", "d", "e"], frame, usual)).toEqual({
+      measured: 4,
+      above: 1,
+      inside: 1,
+      below: 1,
+      noHistory: 1,
+    });
+  });
+  it("counts nothing before the frame or the band arrive", () => {
+    expect(countVersusUsual(["a"], null, null)).toEqual({ measured: 0, above: 0, below: 0, inside: 0, noHistory: 0 });
+    expect(countVersusUsual(["a"], { a: { laeq: 70 } }, null).noHistory).toBe(1);
   });
 });
 

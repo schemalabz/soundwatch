@@ -46,7 +46,7 @@ function Section({
 }) {
   return (
     <section>
-      <div className="flex items-baseline justify-between gap-3">
+      <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1.5">
         <h2 className="text-[13px] font-semibold tracking-tight text-foreground">
           {title}
           {caption && <span className="ml-2 text-[10.5px] font-normal text-muted-foreground">{caption}</span>}
@@ -82,7 +82,8 @@ function BucketPicker({
             title={viable ? b.label : tr.charts.resolutionUnavailable}
             onClick={() => onChange(b.id)}
             className={cn(
-              "rounded px-1.5 py-0.5 text-[10px] font-medium tabular-nums transition-colors",
+              // Phones: a 36 px target per step; the row wraps under the title.
+              "rounded px-1.5 py-0.5 text-[10px] font-medium tabular-nums transition-colors max-md:min-h-9 max-md:min-w-9",
               b.id === active
                 ? "bg-sound/15 text-foreground inset-ring inset-ring-sound/40"
                 : "text-muted-foreground hover:bg-secondary hover:text-foreground",

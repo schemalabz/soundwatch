@@ -94,3 +94,38 @@ export function hasSupport(band: Pick<UsualBand, "buckets"> | null | undefined):
 export function fmtDelta(delta: number): string {
   return delta > 0 ? `+${delta}` : delta < 0 ? `−${-delta}` : "0";
 }
+
+export interface UsualCounts {
+  /** Sensors with a value in the frame. */
+  measured: number;
+  above: number;
+  below: number;
+  inside: number;
+  /** Measured, but no band for this hour yet. */
+  noHistory: number;
+}
+
+/**
+ * How a frame's places compare with their usual — the rail's line and the
+ * mobile badge read the same numbers. Only sensors in `ids` count, so a
+ * location filter or an unsited unit never inflates them.
+ */
+export function countVersusUsual(
+  ids: readonly string[],
+  frame: Record<string, { laeq: number }> | null,
+  usual: Record<string, UsualBand> | null
+): UsualCounts {
+  const out: UsualCounts = { measured: 0, above: 0, below: 0, inside: 0, noHistory: 0 };
+  for (const id of ids) {
+    const v = frame?.[id];
+    if (!v) continue;
+    out.measured++;
+    const band = usual?.[id];
+    if (!hasSupport(band)) {
+      out.noHistory++;
+      continue;
+    }
+    out[classify(v.laeq, band)]++;
+  }
+  return out;
+}

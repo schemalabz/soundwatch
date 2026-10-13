@@ -32,7 +32,7 @@ function ViewSwitcher({
     <div
       className={cn(
         "pointer-events-auto flex items-center rounded-xl border bg-card/95 shadow-[0_2px_16px_-4px_rgb(45_49_66/0.18)] backdrop-blur-sm",
-        compact ? "gap-2.5 px-2.5 py-1" : "gap-4 px-3.5 py-1.5"
+        compact ? "h-11 gap-1 px-1.5" : "gap-4 px-3.5 py-1.5"
       )}
       role="tablist"
     >
@@ -46,7 +46,8 @@ function ViewSwitcher({
           onClick={() => onViewChange(key)}
           className={cn(
             "flex items-center gap-1.5 border-b-2 pb-0.5 pt-1 font-medium tracking-tight transition-colors",
-            compact ? "text-[10px]" : "text-[11.5px]",
+            // Phones: icon-only tabs, each a full 40 × 36 target.
+            compact ? "h-9 min-w-10 justify-center text-[10px]" : "text-[11.5px]",
             view === key
               ? "border-sound text-foreground"
               : "border-transparent text-muted-foreground hover:text-foreground"

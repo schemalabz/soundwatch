@@ -275,7 +275,7 @@ function LiveZone({ p, compact }: { p: TimebarProps; compact?: boolean }) {
  * underline dashes stretched beneath the whole line (icons included), the
  * active dash lit. Clicking the line cycles; dashes select directly.
  */
-function SpeedLadder({ p }: { p: TimebarProps }) {
+function SpeedLadder({ p, compact }: { p: TimebarProps; compact?: boolean }) {
   const label = p.locale === "el" ? PLAYBACK_SPEEDS[p.speedIndex].label : PLAYBACK_SPEEDS[p.speedIndex].labelEn;
   return (
     <div className="flex flex-col items-stretch gap-[3px]" role="group" aria-label={p.labels.speed}>
@@ -285,9 +285,10 @@ function SpeedLadder({ p }: { p: TimebarProps }) {
         aria-label={p.labels.speed}
         className="flex items-center justify-center gap-1.5 text-[10px] font-medium tabular-nums leading-none tracking-tight text-muted-foreground transition-colors hover:text-foreground"
       >
-        <Turtle className="size-3 shrink-0 opacity-55" />
+        {/* The vertical bar is 48 px wide: the label alone fits, the icons do not. */}
+        {!compact && <Turtle className="size-3 shrink-0 opacity-55" />}
         <span className="w-[2.2rem] text-center">{label}</span>
-        <Rabbit className="size-3 shrink-0 opacity-55" />
+        {!compact && <Rabbit className="size-3 shrink-0 opacity-55" />}
       </button>
       <div className="flex items-center gap-[3px]">
         {PLAYBACK_SPEEDS.map((s, i) => (
@@ -321,7 +322,7 @@ function PlayControls({ p, vertical }: { p: TimebarProps; vertical?: boolean }) 
       >
         {p.playing ? <Pause className="size-3.5" /> : <Play className="size-3.5 translate-x-px" />}
       </Button>
-      <SpeedLadder p={p} />
+      <SpeedLadder p={p} compact={vertical} />
     </div>
   );
 }

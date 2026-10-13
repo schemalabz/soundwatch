@@ -36,7 +36,7 @@ import {
   type FrameData,
 } from "@/lib/dashboard/frames";
 import { nextAthensMidnight } from "@/lib/dashboard/time";
-import { usualWindow } from "@/lib/dashboard/usual";
+import { countVersusUsual, usualWindow } from "@/lib/dashboard/usual";
 import type { FreshnessResponse } from "@/types/freshness";
 import type { DeparturesResponse, UsualBand, UsualDayResponse } from "@/lib/api/dashboard";
 import { reverseGeocode } from "@/lib/dashboard/geocode";
@@ -96,6 +96,9 @@ export default function DashboardShell() {
   // (day, kind of day), looked up per hour as the cursor moves.
   const [usualDay, setUsualDay] = useState<UsualDayResponse | null>(null);
   const [departures, setDepartures] = useState<DeparturesResponse | null>(null);
+  // Phones: the rail is a sheet. Controlled, so a departure tapped inside it
+  // can close it and show the map it just moved.
+  const [sheetOpen, setSheetOpen] = useState(false);
   const skipSeq = useRef(0);
   const skipHoldUntilRef = useRef(0);
   // Stable identity: MapCanvas keys its (create/destroy!) effect on the
@@ -342,6 +345,13 @@ export default function DashboardShell() {
   }, [usualDay, cursorWin]);
 
   // While scrubbing, the rail shows the day's departures up to the cursor.
+  // The phone's sheet button carries how many places are above their usual,
+  // so the map's one finding is visible without opening anything.
+  const aboveCount = useMemo(
+    () => countVersusUsual(sensorList.map((s) => s.id), frame, usualForHour).above,
+    [sensorList, frame, usualForHour],
+  );
+
   const departuresShown = useMemo<DeparturesResponse | null>(() => {
     if (!departures) return null;
     if (departures.dayStartMs !== cursorWin.dayStartMs) return null;
@@ -354,8 +364,11 @@ export default function DashboardShell() {
     };
   }, [departures, cursorWin, isLive, cursorMinute]);
 
+  // A pane opened on one lens does not follow you to the other: on a phone
+  // it would cover the view just switched to. A row there reopens it.
   const onViewChange = useCallback((v: DashboardView) => {
     setView(v);
+    setSelectedSensorId(null);
     if (v !== "map") setPlaying(false);
   }, []);
 
@@ -424,6 +437,7 @@ export default function DashboardShell() {
     setPlaying(false);
     setView("map");
     setCursor(quantizeFrameMs(epochMs + 600_000));
+    setSheetOpen(false);
   }, []);
 
   const onPlayToggle = useCallback(() => {
@@ -605,14 +619,23 @@ export default function DashboardShell() {
 
             {/* mobile: the rail as a sheet */}
             {isMobile === true && (
-              <Sheet>
+              <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
                 <SheetTrigger asChild>
                   <Button
                     variant="outline"
-                    className="absolute left-3 top-3 z-10 h-9 gap-2 bg-card/95 shadow-sm backdrop-blur-sm"
+                    className="absolute left-3 top-3 z-10 h-11 gap-2 bg-card/95 px-3.5 shadow-sm backdrop-blur-sm"
                   >
                     {view === "map" ? <Clock3 className="size-3.5" /> : <SlidersHorizontal className="size-3.5" />}
                     {view === "map" ? tr.now.sheet : tr.filters}
+                    {view === "map" && aboveCount > 0 && (
+                      // The map's pill, small: ink means "above its usual".
+                      <span
+                        aria-label={tr.now.sheetBadge(aboveCount)}
+                        className="inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-foreground px-1.5 text-[11px] font-bold tabular-nums leading-none text-background"
+                      >
+                        {aboveCount}
+                      </span>
+                    )}
                     {view !== "map" && activeFilterCount > 0 && (
                       <Badge className="size-4 justify-center rounded-full bg-sound p-0 text-[10px] text-white">
                         {activeFilterCount}

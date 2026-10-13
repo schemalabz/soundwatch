@@ -66,6 +66,7 @@ export interface SensorLayerProps {
 }
 
 const MARKER_PX = 30;
+const TOUCH_HIT_PX = 44;
 const PREFETCH_AHEAD = 6;
 const LIVE_POLL_MS = 5000;
 // Playback tweens run LINEAR over the full frame second: motion is uniform
@@ -99,7 +100,10 @@ function makeMarkerElement(): { root: HTMLDivElement; circle: HTMLSpanElement; l
   // overrides that class and drops markers into normal flow (they stack
   // downward off-map). The root still anchors the label: absolutely
   // positioned elements are containing blocks for absolute children.
-  root.style.cssText = `width:${MARKER_PX}px;height:${MARKER_PX}px;display:grid;place-items:center;pointer-events:auto;cursor:pointer;`;
+  // On a touch screen the root grows to a 44 px target; the ring inside is
+  // sized and scaled on its own, so only the hit area changes.
+  const hitPx = window.matchMedia("(pointer: coarse)").matches ? TOUCH_HIT_PX : MARKER_PX;
+  root.style.cssText = `width:${hitPx}px;height:${hitPx}px;display:grid;place-items:center;pointer-events:auto;cursor:pointer;`;
   const circle = document.createElement("span");
   circle.style.cssText = [
     `width:${MARKER_PX}px`,

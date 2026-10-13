@@ -36,7 +36,10 @@ function SummaryView({
   devRenderCount("SummaryView");
   return (
     <div className="absolute inset-0 z-10 overflow-y-auto bg-background">
-      <div className="pt-[4.5rem]">
+      {/* Room for the floating lens switcher, and a backdrop so the list
+          scrolls out of sight beneath it instead of through it. */}
+      <div aria-hidden="true" className="sticky top-0 z-[1] h-[4.5rem] bg-gradient-to-b from-background from-60% to-transparent" />
+      <div>
         <Leaderboard
           embedded
           aggData={aggData}

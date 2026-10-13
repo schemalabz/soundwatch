@@ -166,6 +166,8 @@ function SensorPane({
   // undefined = still unknown, null = known to be missing.
   let band: UsualBand | null | undefined = usualBand;
   if (band === undefined && hours) band = hours[win.hour] ?? null;
+  // Scrubbed within today is still «σήμερα»; only another day is «εκείνη».
+  const isToday = usualWindow(nowMs).dayStartMs === win.dayStartMs;
   const wall = athensWallTime(cursorMs);
   const nowFraction = wall.hour + ((cursorMs / 60_000) % 60) / 60;
 
@@ -182,13 +184,13 @@ function SensorPane({
   const edges = hasSupport(band) ? usualEdges(band) : null;
 
   return (
-    <div className="pointer-events-auto absolute right-3 top-3 z-10 flex max-h-[calc(100%-8.5rem)] w-[18.5rem] flex-col rounded-xl border bg-card/95 shadow-[0_2px_16px_-4px_rgb(45_49_66/0.18)] backdrop-blur-sm max-md:inset-x-2 max-md:right-2 max-md:top-auto max-md:bottom-24 max-md:max-h-[48%] max-md:w-auto">
+    <div className="pointer-events-auto absolute right-3 top-3 z-10 flex max-h-[calc(100%-8.5rem)] w-[18.5rem] flex-col rounded-xl border bg-card/95 shadow-[0_2px_16px_-4px_rgb(45_49_66/0.18)] backdrop-blur-sm max-md:inset-x-2 max-md:right-16 max-md:top-auto max-md:bottom-16 max-md:max-h-[55%] max-md:w-auto">
       <div className="flex items-start justify-between gap-2 border-b px-4 py-3">
         <div className="min-w-0">
           <div className="truncate text-[15px] font-semibold leading-tight">{d?.name ?? d?.address ?? "…"}</div>
           <div className="truncate text-[11px] text-muted-foreground">{d?.address ?? (d ? `#${d.id.slice(0, 8)}` : "")}</div>
         </div>
-        <Button variant="ghost" size="icon" className="-mr-1.5 -mt-1 size-7 shrink-0" onClick={onClose} aria-label={tr.pane.close}>
+        <Button variant="ghost" size="icon" className="-mr-1.5 -mt-1 size-7 shrink-0 max-md:-mr-2.5 max-md:-mt-2.5 max-md:size-11" onClick={onClose} aria-label={tr.pane.close}>
           <X className="size-3.5" />
         </Button>
       </div>
@@ -254,7 +256,7 @@ function SensorPane({
         <div className="mt-4">
           <div className="mb-1 flex items-baseline justify-between">
             <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-              {live ? tr.usual.chartTitle : tr.usual.chartTitlePast}
+              {isToday ? tr.usual.chartTitle : tr.usual.chartTitlePast}
             </span>
             <span className="text-[10px] tabular-nums text-muted-foreground">dB</span>
           </div>
@@ -273,7 +275,7 @@ function SensorPane({
                   </span>
                   <span className="inline-flex items-center gap-1">
                     <span className="inline-block w-3 border-t-2 border-ink" />
-                    {live ? tr.usual.legendToday : tr.usual.legendThatDay}
+                    {isToday ? tr.usual.legendToday : tr.usual.legendThatDay}
                   </span>
                 </div>
               </>

@@ -76,7 +76,7 @@ function Leaderboard({
                   <button
                     type="button"
                     onClick={() => onSensorClick(row.id)}
-                    className="group grid w-full grid-cols-[2rem_minmax(7rem,11rem)_1fr_auto] items-center gap-3 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-silver/20"
+                    className="group grid min-h-11 w-full grid-cols-[1.75rem_minmax(0,1fr)_4.5rem_auto] items-center gap-3 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-silver/20 sm:grid-cols-[2rem_minmax(7rem,11rem)_1fr_auto]"
                   >
                     <span
                       className={

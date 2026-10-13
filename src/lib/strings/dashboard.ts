@@ -79,6 +79,7 @@ export const dashboardStrings = {
   // The rule is src/lib/server/usual.ts; the words for it live here.
   now: {
     sheet: "Τώρα",
+    sheetBadge: (n: number) => (n === 1 ? "1 θέση πάνω από το συνηθισμένο της" : `${n} θέσεις πάνω από το συνηθισμένο τους`),
     titleLive: "Ο θόρυβος στην Αθήνα τώρα",
     title: "Ο θόρυβος στην Αθήνα",
     live: (n: number) => `${n} θέσεις ζωντανές`,

@@ -14,7 +14,7 @@ import Lockup from "@/components/brand/Lockup";
 import { cn } from "@/lib/utils";
 import { dashboardStrings as tr, LOCALE } from "@/lib/strings/dashboard";
 import { ATHENS_TZ } from "@/lib/dashboard/time";
-import { classify, fmtDelta, hasSupport, usualDelta } from "@/lib/dashboard/usual";
+import { countVersusUsual, fmtDelta, usualDelta } from "@/lib/dashboard/usual";
 import type { FrameData } from "@/lib/dashboard/frames";
 import type { DeparturesResponse, UsualBand } from "@/lib/api/dashboard";
 import type { FreshnessResponse } from "@/types/freshness";
@@ -69,31 +69,22 @@ function NowRail(p: NowRailProps) {
   devRenderCount("NowRail");
 
   const counts = useMemo(() => {
-    const out = { measured: 0, above: 0, below: 0, usual: 0, noHistory: 0, silent: 0, offline: 0 };
-    const ages = new Map<string, number | null>();
-    for (const s of p.freshness?.sensors ?? []) ages.set(s.id, s.secondsAgo);
-    for (const s of p.sensors) {
-      const v = p.frame?.[s.id];
-      if (v) {
-        out.measured++;
-        const band = p.usual?.[s.id];
-        if (!hasSupport(band)) out.noHistory++;
-        else {
-          const verdict = classify(v.laeq, band);
-          if (verdict === "above") out.above++;
-          else if (verdict === "below") out.below++;
-          else out.usual++;
-        }
-        continue;
+    const versus = countVersusUsual(p.sensors.map((s) => s.id), p.frame, p.usual);
+    let silent = 0;
+    let offline = 0;
+    // On a scrubbed frame an absent value just means no readings then; the
+    // liveness split only makes sense for now.
+    if (p.live) {
+      const ages = new Map<string, number | null>();
+      for (const s of p.freshness?.sensors ?? []) ages.set(s.id, s.secondsAgo);
+      for (const s of p.sensors) {
+        if (p.frame?.[s.id]) continue;
+        const age = ages.get(s.id);
+        if (age == null || age >= OFFLINE_S) offline++;
+        else silent++;
       }
-      const age = ages.get(s.id);
-      // On a scrubbed frame an absent value just means no readings then; the
-      // liveness split only makes sense for now.
-      if (!p.live) continue;
-      if (age == null || age >= OFFLINE_S) out.offline++;
-      else out.silent++;
     }
-    return out;
+    return { ...versus, silent, offline };
   }, [p.sensors, p.frame, p.usual, p.freshness, p.live]);
 
   const names = useMemo(() => new Map(p.sensors.map((s) => [s.id, s.name ?? s.address ?? s.id.slice(0, 8)])), [p.sensors]);
@@ -159,7 +150,7 @@ function NowRail(p: NowRailProps) {
             <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
               {p.live ? tr.now.departures : tr.now.departuresUntil(clockFmt.format(p.cursorMs))}
             </div>
-            {episodes.length > 0 && <span className="text-[10px] text-muted-foreground">{tr.now.departuresHint}</span>}
+            {episodes.length > 0 && <span className="text-[10px] text-muted-foreground max-md:hidden">{tr.now.departuresHint}</span>}
           </div>
           {p.departures == null ? (
             <div className="flex flex-col gap-2">
@@ -181,7 +172,7 @@ function NowRail(p: NowRailProps) {
                         p.onJumpTo(e.peakAtMs);
                         p.onSensorClick(e.sensorId);
                       }}
-                      className="grid w-full grid-cols-[2.6rem_1fr_auto] items-baseline gap-2 px-1 py-2 text-left transition-colors hover:bg-silver/20"
+                      className="grid min-h-11 w-full grid-cols-[2.6rem_1fr_auto] items-baseline gap-2 px-1 py-2 text-left transition-colors hover:bg-silver/20"
                     >
                       <span className="text-[11.5px] tabular-nums text-muted-foreground">{clockFmt.format(e.peakAtMs)}</span>
                       <span className="min-w-0 text-[12.5px] leading-snug">
@@ -226,7 +217,7 @@ function NowRail(p: NowRailProps) {
             <ul className="flex flex-col gap-1.5 text-[11.5px] text-foreground/80">
               <li className="flex items-center gap-2">
                 <span className="size-3 shrink-0 rounded-full border border-slate bg-sound" />
-                {tr.now.usual(counts.usual)}
+                {tr.now.usual(counts.inside)}
               </li>
               {counts.noHistory > 0 && (
                 <li className="flex items-center gap-2">
