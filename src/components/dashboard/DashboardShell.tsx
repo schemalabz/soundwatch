@@ -35,6 +35,7 @@ import {
   quantizeFrameMs,
   type FrameData,
 } from "@/lib/dashboard/frames";
+import { nextAthensMidnight } from "@/lib/dashboard/time";
 import { usualWindow } from "@/lib/dashboard/usual";
 import type { FreshnessResponse } from "@/types/freshness";
 import type { DeparturesResponse, UsualBand, UsualDayResponse } from "@/lib/api/dashboard";
@@ -309,10 +310,12 @@ export default function DashboardShell() {
     };
   }, [cursorDayStartMs, cursorDayType, isLive]);
 
-  // The cursor's day, cut at now when live and at the end of that day when
-  // scrubbing (the rail then hides what came after the cursor). Minute
-  // precision: while that day is today this refetches once a minute.
-  const departuresAtMs = isLive ? nowMinute : Math.min(nowMinute, cursorDayStartMs + 86_400_000);
+  // The cursor's day, cut at now when live and at the last instant of that
+  // day when scrubbing (the rail then hides what came after the cursor). The
+  // Athens day is 23 or 25 hours twice a year, so the next midnight is
+  // probed, never added. Minute precision: while that day is today this
+  // refetches once a minute.
+  const departuresAtMs = isLive ? nowMinute : Math.min(nowMinute, nextAthensMidnight(cursorDayStartMs) - 1);
   useEffect(() => {
     let cancelled = false;
     fetch(`/api/departures?at=${departuresAtMs}`, { cache: "no-store" })
