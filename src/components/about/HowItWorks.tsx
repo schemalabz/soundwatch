@@ -4,6 +4,7 @@
 // the measurement chain. Each figure lives in ./iso/figs and animates on its
 // own clock while it is on screen; this file only lays out text and figure.
 
+import { Fragment } from "react";
 import Link from "next/link";
 import { aboutStrings as tr, type AboutStage } from "@/lib/strings/about";
 import IsoFigure from "./iso/IsoFigure";
@@ -42,15 +43,17 @@ function Stage({ stage, index }: { stage: AboutStage; index: number }) {
             {stage.accent}
           </span>
         </div>
-        {stage.id === "server" && (
-          <div className="flex flex-col gap-2 rounded-xl border border-[#2d2d3a] bg-[#0b0b15] px-[18px] py-4 text-sm leading-[1.5]">
+        {/* the formulas: two aligned columns, so a long right-hand side wraps
+            inside its own column instead of dropping under the name */}
+        {stage.id === "map" && (
+          <dl className="m-0 grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-2 rounded-xl border border-[#2d2d3a] bg-[#0b0b15] px-[18px] py-4 text-sm leading-[1.5] tabular-nums">
             {tr.how.formulas.rows.map(([k, v]) => (
-              <div key={k} className="flex flex-wrap gap-3 tabular-nums">
-                <span className="min-w-[120px] text-sound">{k}</span>
-                <span className="text-[#e4e4ec]">{v}</span>
-              </div>
+              <Fragment key={k}>
+                <dt className="whitespace-nowrap text-sound">{k}</dt>
+                <dd className="m-0 text-[#e4e4ec]">{v}</dd>
+              </Fragment>
             ))}
-          </div>
+          </dl>
         )}
         {stage.id === "map" && (
           <Link

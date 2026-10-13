@@ -85,9 +85,16 @@ export default function IsoFigure({ fig, aria, hint, freezeAt }: { fig: IsoFig; 
       <div ref={holderRef} className="stage-holder">
         <svg ref={svgRef} className="stage" role="button" tabIndex={0} aria-label={aria} />
       </div>
-      <figcaption className="mt-2 flex items-center justify-between gap-3 text-[11px] uppercase tracking-[0.14em] text-[#9a9aa6]">
-        <span>{hint}</span>
-        <span ref={readRef} aria-live="polite" className="text-right normal-case tracking-[0.04em] text-[#e8e8ee] tabular-nums" />
+      {/* Two single-line cells: the readout changes every frame, so nothing
+          here may wrap, or the figure's height would jump with the text. On
+          a phone the two stack; wider, they share a row. */}
+      <figcaption className="mt-2 grid grid-cols-1 gap-y-0.5 text-[11px] uppercase leading-5 tracking-[0.14em] text-[#9a9aa6] sm:flex sm:items-center sm:justify-between sm:gap-3">
+        <span className="truncate whitespace-nowrap">{hint}</span>
+        <span
+          ref={readRef}
+          aria-live="polite"
+          className="min-w-0 truncate whitespace-nowrap normal-case tracking-[0.04em] text-[#e8e8ee] tabular-nums sm:flex-1 sm:text-right"
+        />
       </figcaption>
     </>
   );

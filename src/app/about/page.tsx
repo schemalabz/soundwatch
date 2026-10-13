@@ -110,18 +110,12 @@ export default function AboutPage() {
               <p className="m-0 text-[15px] leading-[1.5] text-muted-foreground">{tr.who.skroutz.body}</p>
               <p className="m-0 self-start rounded-md bg-sound/25 px-2 py-1.5 text-[13px] text-foreground">{tr.who.skroutz.placeholder}</p>
             </div>
-            <div className={`${card} gap-3.5 border-dashed`}>
-              <div className="text-[22px] font-bold tracking-tight">{tr.who.team.title}</div>
-              <ul className="m-0 flex list-none flex-col gap-2.5 p-0">
-                {tr.who.team.members.map((m, i) => (
-                  <li key={i} className="flex items-center gap-3">
-                    <span className="size-10 shrink-0 rounded-full bg-secondary" />
-                    <span className="text-sm text-muted-foreground">
-                      <Copy text={m} />
-                    </span>
-                  </li>
-                ))}
-              </ul>
+            <div className={`${card} gap-3.5`}>
+              <div className="text-[22px] font-bold tracking-tight">{tr.who.review.name}</div>
+              <p className="m-0 text-[15px] leading-[1.5] text-muted-foreground">{tr.who.review.body}</p>
+              <a href={tr.who.review.href} className="text-sm font-semibold text-foreground">
+                {tr.who.review.link} ↗
+              </a>
             </div>
           </div>
         </div>
@@ -136,6 +130,12 @@ export default function AboutPage() {
             <div className={kicker}>{tr.honesty.kicker}</div>
             <h2 className="m-0 text-4xl font-bold leading-[1.1] tracking-tight">{tr.honesty.title}</h2>
             <p className="m-0 text-base leading-[1.5] text-muted-foreground">{tr.honesty.caveat}</p>
+            <p className="m-0 text-base leading-[1.5] text-muted-foreground">
+              {tr.honesty.verified.text}{" "}
+              <a href={tr.honesty.verified.href} className="font-semibold text-foreground">
+                {tr.honesty.verified.link} ↗
+              </a>
+            </p>
           </div>
           <div className="grid gap-5 md:grid-cols-2">
             <div className={`${card} gap-3`}>
@@ -190,15 +190,14 @@ export default function AboutPage() {
                 <span aria-hidden="true">↗</span>
               </a>
             ))}
-            <div className="flex items-center justify-between gap-3 rounded-xl border border-dashed px-[18px] py-4">
+            <a href={`mailto:${tr.open.contact.email}`} className="flex items-center justify-between gap-3 rounded-xl border px-[18px] py-4 text-foreground no-underline transition-colors hover:border-slate">
               <span>
                 <b>{tr.open.contact.title}</b>
                 <br />
-                <span className="text-[13px]">
-                  <Copy text={tr.open.contact.placeholder} />
-                </span>
+                <span className="text-[13px] text-muted-foreground">{tr.open.contact.email}</span>
               </span>
-            </div>
+              <span aria-hidden="true">↗</span>
+            </a>
           </div>
         </div>
       </section>
