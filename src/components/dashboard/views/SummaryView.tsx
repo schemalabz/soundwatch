@@ -14,6 +14,8 @@ import { devRenderCount } from "@/lib/dashboard/devtools";
 
 function SummaryView({
   aggData,
+  aggStale,
+  filterQualifiers,
   aggQuery,
   metric,
   sensors,
@@ -24,6 +26,10 @@ function SummaryView({
   onMetricRefHover,
 }: {
   aggData: Record<string, Record<AggKey, number> & { n: number }> | null;
+  /** The filters moved and the ranking for them has not landed yet. */
+  aggStale: boolean;
+  /** The filter sentence's qualifiers: what the ranking covers. */
+  filterQualifiers: string;
   aggQuery: string;
   metric: AggKey;
   sensors: SensorMeta[];
@@ -42,6 +48,8 @@ function SummaryView({
       <div>
         <Leaderboard
           embedded
+          stale={aggStale}
+          scope={filterQualifiers}
           aggData={aggData}
           metric={metric}
           sensors={sensors}

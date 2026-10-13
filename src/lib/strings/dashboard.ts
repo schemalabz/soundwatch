@@ -88,9 +88,16 @@ export const dashboardStrings = {
     below: (n: number) => (n === 1 ? "1 κάτω από το συνηθισμένο της" : `${n} κάτω από το συνηθισμένο τους`),
     allUsual: "όλες όπως συνήθως",
     metricLine: (windowLabel: string) => `σχετική στάθμη Μέση (LAeq) · ${windowLabel}`,
-    departures: "Σήμερα ξεχώρισαν",
-    departuresUntil: (clock: string) => `Ξεχώρισαν μέχρι τις ${clock}`,
-    departuresHint: "πάτησε για εκείνη τη στιγμή",
+    /**
+     * The list's heading names its day: «Ξεχώρισαν σήμερα, Τρίτη 13
+     * Οκτωβρίου» live; «Ξεχώρισαν την Παρασκευή 31 Ιουλίου, ως τις 16:11»
+     * scrubbed. `day` is the weekday and date as Intl writes them; the
+     * article follows the weekday's gender (το Σάββατο, την Κυριακή).
+     */
+    departuresOn: (day: string, opts: { today: boolean; until: string | null }) => {
+      const when = opts.today ? `σήμερα, ${day}` : `${day.startsWith("Σάββατο") ? "το" : "την"} ${day}`;
+      return `Ξεχώρισαν ${when}${opts.until ? `, ως τις ${opts.until}` : ""}`;
+    },
     noDepartures: "Καμία θέση δεν βγήκε από το συνηθισμένο της.",
     more: (n: number) => (n === 1 ? "και 1 ακόμη" : `και ${n} ακόμη`),
     ongoing: "σε εξέλιξη",
@@ -121,7 +128,8 @@ export const dashboardStrings = {
   board: {
     title: "Κατάταξη αισθητήρων",
     subtitlePrefix: "Από τον πιο θορυβώδη στον πιο ήσυχο · ",
-    subtitleSuffix: " · στα επιλεγμένα φίλτρα",
+    /** Joined after the metric: what the ranking is OF, in the rail's words. */
+    subtitleScope: (qualifiers: string) => ` · ${qualifiers}`,
     measurements: (n: string) => `${n} μετρήσεις`,
     empty: "Χωρίς δεδομένα για τα επιλεγμένα φίλτρα.",
   },

@@ -40,6 +40,7 @@ import { countVersusUsual, usualWindow } from "@/lib/dashboard/usual";
 import type { FreshnessResponse } from "@/types/freshness";
 import type { DeparturesResponse, UsualBand, UsualDayResponse } from "@/lib/api/dashboard";
 import { reverseGeocode } from "@/lib/dashboard/geocode";
+import { summarySentence } from "@/lib/dashboard/summary";
 import FilterRail from "./FilterRail";
 import NowRail from "./NowRail";
 import SensorLayer, { type SensorMeta } from "./SensorLayer";
@@ -61,7 +62,17 @@ const FALLBACK_SPAN_DAYS = 90;
 // again this often.
 const USUAL_REFRESH_MS = 10 * 60_000;
 
-export default function DashboardShell() {
+// Each lens has its own address, so a link to Σύνοψη opens Σύνοψη. Switching
+// lenses pushes the path natively (no page load: the map and its state stay);
+// back and forward switch them again.
+const VIEW_PATH: Record<DashboardView, string> = { map: "/", summary: "/summary" };
+// Kept in step with each page's metadata: a native pushState leaves the title alone.
+const VIEW_TITLE: Record<DashboardView, string> = { map: "soundwatch", summary: "Σύνοψη · soundwatch" };
+function viewForPath(pathname: string): DashboardView {
+  return pathname.replace(/\/+$/, "") === VIEW_PATH.summary ? "summary" : "map";
+}
+
+export default function DashboardShell({ initialView = "map" }: { initialView?: DashboardView }) {
   devRenderCount("DashboardShell");
 
   const locale = LOCALE;
@@ -80,15 +91,17 @@ export default function DashboardShell() {
   const [sensorList, setSensorList] = useState<SensorMeta[]>([]);
   const [skip, setSkip] = useState<SkipEvent | null>(null);
   const [selectedSensorId, setSelectedSensorId] = useState<string | null>(null);
-  const [view, setView] = useState<DashboardView>("map");
+  const [view, setView] = useState<DashboardView>(initialView);
   const [placingPin, setPlacingPin] = useState(false);
   // A metric mention elsewhere is being hovered — the rail picker lights up.
   const [metricGlow, setMetricGlow] = useState(false);
   const [aggKey, setAggKey] = useState<AggKey>("laeq");
-  const [aggData, setAggData] = useState<Record<
-    string,
-    Record<AggKey, number> & { n: number }
-  > | null>(null);
+  // Tagged with the query that produced it: while a new filter's answer is
+  // on its way, the ranking shows as stale instead of silently old.
+  const [agg, setAgg] = useState<{
+    query: string;
+    data: Record<string, Record<AggKey, number> & { n: number }>;
+  } | null>(null);
   // What the circles show right now, lifted from the map layer so the rail
   // and the pane read the same numbers the circles do.
   const [frame, setFrame] = useState<FrameData | null>(null);
@@ -278,7 +291,7 @@ export default function DashboardShell() {
         (body: {
           sensors: Record<string, Record<AggKey, number> & { n: number }>;
         }) => {
-          if (!cancelled) setAggData(body.sensors);
+          if (!cancelled) setAgg({ query: aggQuery, data: body.sensors });
         },
       )
       .catch(() => {});
@@ -286,6 +299,13 @@ export default function DashboardShell() {
       cancelled = true;
     };
   }, [needsAgg, aggQuery]);
+  const aggData = agg?.data ?? null;
+  const aggStale = agg != null && agg.query !== aggQuery;
+  // What the ranking is OF, said in the rail's own words.
+  const filterQualifiers = useMemo(
+    () => summarySentence(filters, rangeStartMs, nowMinute).qualifiers,
+    [filters, rangeStartMs, nowMinute],
+  );
 
   // The moment on display, to the minute: the frame the circles show ends
   // here. Everything «usual» keys off it.
@@ -293,6 +313,7 @@ export default function DashboardShell() {
   const cursorMinute = isLive ? nowMinute : quantizeFrameMs(cursor);
   const cursorWin = useMemo(() => usualWindow(cursorMinute), [cursorMinute]);
   const { dayStartMs: cursorDayStartMs, dayType: cursorDayType } = cursorWin;
+  const todayStartMs = useMemo(() => usualWindow(nowMinute).dayStartMs, [nowMinute]);
 
   // The usual for the cursor's day: refetched when the day (or its kind)
   // changes, and every ten minutes while live so a newly closed hour counts.
@@ -364,21 +385,47 @@ export default function DashboardShell() {
     };
   }, [departures, cursorWin, isLive, cursorMinute]);
 
+  const showView = useCallback((v: DashboardView) => {
+    setView(v);
+    if (viewForPath(window.location.pathname) !== v) {
+      window.history.pushState(null, "", `${VIEW_PATH[v]}${window.location.search}`);
+    }
+  }, []);
+
+  // After the render, so it lands after Next re-applies the loaded page's
+  // own metadata on back/forward.
+  useEffect(() => {
+    document.title = VIEW_TITLE[view];
+  }, [view]);
+
+  // Back and forward move between the lenses.
+  useEffect(() => {
+    const onPop = () => {
+      setView(viewForPath(window.location.pathname));
+      setSelectedSensorId(null);
+    };
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, []);
+
   // A pane opened on one lens does not follow you to the other: on a phone
   // it would cover the view just switched to. A row there reopens it.
-  const onViewChange = useCallback((v: DashboardView) => {
-    setView(v);
-    setSelectedSensorId(null);
-    if (v !== "map") setPlaying(false);
-  }, []);
+  const onViewChange = useCallback(
+    (v: DashboardView) => {
+      showView(v);
+      setSelectedSensorId(null);
+      if (v !== "map") setPlaying(false);
+    },
+    [showView],
+  );
 
   // Pin placement: arming jumps to the map (that's where you click); the
   // pin lands immediately with a null label and the reverse-geocoded street
   // name streams in when Mapbox answers.
   const onTogglePlacing = useCallback(() => {
-    setView("map");
+    showView("map");
     setPlacingPin((prev) => !prev);
-  }, []);
+  }, [showView]);
 
   const onPlacePin = useCallback((lng: number, lat: number) => {
     setPlacingPin(false);
@@ -425,20 +472,23 @@ export default function DashboardShell() {
 
   const onGoToMap = useCallback(
     (lng: number, lat: number) => {
-      setView("map");
+      showView("map");
       mapInstance?.flyTo({ center: [lng, lat], zoom: 13.5, duration: 1400 });
     },
-    [mapInstance],
+    [mapInstance, showView],
   );
 
   // A departure in the rail: scrub to the end of its peak window (so the
   // frame on the map IS that window) and open the place.
-  const onJumpTo = useCallback((epochMs: number) => {
-    setPlaying(false);
-    setView("map");
-    setCursor(quantizeFrameMs(epochMs + 600_000));
-    setSheetOpen(false);
-  }, []);
+  const onJumpTo = useCallback(
+    (epochMs: number) => {
+      setPlaying(false);
+      showView("map");
+      setCursor(quantizeFrameMs(epochMs + 600_000));
+      setSheetOpen(false);
+    },
+    [showView],
+  );
 
   const onPlayToggle = useCallback(() => {
     setPlaying((p) => {
@@ -524,6 +574,7 @@ export default function DashboardShell() {
       <NowRail
         cursorMs={cursorMinute}
         live={isLive}
+        isToday={cursorDayStartMs === todayStartMs}
         windowS={windowS}
         sensors={sensorList}
         frame={frame}
@@ -577,6 +628,8 @@ export default function DashboardShell() {
             {view === "summary" && (
               <SummaryView
                 aggData={aggData}
+                aggStale={aggStale}
+                filterQualifiers={filterQualifiers}
                 aggQuery={aggQuery}
                 metric={aggKey}
                 sensors={sensorList}

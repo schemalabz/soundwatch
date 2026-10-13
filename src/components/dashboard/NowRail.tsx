@@ -29,6 +29,8 @@ export interface NowRailProps {
   /** The moment on display: the frame's end. Minute-quantized by the shell. */
   cursorMs: number;
   live: boolean;
+  /** The cursor's Athens day is today. */
+  isToday: boolean;
   /** The trailing window the circles aggregate over. */
   windowS: number;
   sensors: SensorMeta[];
@@ -50,6 +52,7 @@ const dateFmt = new Intl.DateTimeFormat(LOCALE, {
   year: "numeric",
 });
 const clockFmt = new Intl.DateTimeFormat(LOCALE, { timeZone: ATHENS_TZ, hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
+const dayFmt = new Intl.DateTimeFormat(LOCALE, { timeZone: ATHENS_TZ, weekday: "long", day: "numeric", month: "long" });
 
 function Pill({ delta, className }: { delta: number; className?: string }) {
   return (
@@ -148,9 +151,11 @@ function NowRail(p: NowRailProps) {
         <section>
           <div className="mb-2 flex items-baseline justify-between">
             <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-              {p.live ? tr.now.departures : tr.now.departuresUntil(clockFmt.format(p.cursorMs))}
+              {tr.now.departuresOn(dayFmt.format(p.cursorMs), {
+                today: p.isToday,
+                until: p.live ? null : clockFmt.format(p.cursorMs),
+              })}
             </div>
-            {episodes.length > 0 && <span className="text-[10px] text-muted-foreground max-md:hidden">{tr.now.departuresHint}</span>}
           </div>
           {p.departures == null ? (
             <div className="flex flex-col gap-2">

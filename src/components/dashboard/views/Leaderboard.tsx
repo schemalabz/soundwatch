@@ -1,11 +1,15 @@
 "use client";
 
 // The leaderboard: every public sensor ranked by the rail-selected metric
-// over the filtered time-set. The bar is the story — scaled between the
-// quietest and loudest of the list, colored by the same level ramp as the
-// map circles, so the two views read as one system.
+// over the filtered time-set. The bar is the story, colored by the same level
+// ramp as the map circles, so the two views read as one system.
+//
+// The bar's scale is FIXED per metric, not stretched between the list's own
+// quietest and loudest: stretched, a filter that lowers every place by 5 dB
+// (nights) redrew exactly the same bars, and the filters looked broken.
 
 import { memo, useMemo } from "react";
+import { cn } from "@/lib/utils";
 import { dashboardStrings as tr } from "@/lib/strings/dashboard";
 import { levelColor, paletteStops } from "@/lib/dashboard/levels";
 import { fmtDb, fmtInt } from "@/lib/dashboard/format";
@@ -14,6 +18,16 @@ import type { SensorMeta } from "../SensorLayer";
 import MetricMention from "../MetricMention";
 import { devRenderCount } from "@/lib/dashboard/devtools";
 
+/** Device-dB the bar spans, per metric: Lmax is one frame's peak and sits
+ *  far above the others. Arbitrary visual anchors, like the map's ramp. */
+const BAR_SCALE: Record<AggKey, [number, number]> = {
+  laeq: [40, 85],
+  l50: [40, 85],
+  l10: [40, 85],
+  l90: [40, 85],
+  lmax: [70, 120],
+};
+
 function Leaderboard({
   aggData,
   metric,
@@ -21,6 +35,8 @@ function Leaderboard({
   onSensorClick,
   onMetricRefHover,
   embedded,
+  stale,
+  scope,
 }: {
   aggData: Record<string, Record<AggKey, number> & { n: number }> | null;
   metric: AggKey;
@@ -29,6 +45,10 @@ function Leaderboard({
   onMetricRefHover?: (on: boolean) => void;
   /** Inside the summary's own scroll: no overlay, no top inset. */
   embedded?: boolean;
+  /** The filters changed and their ranking is on its way. */
+  stale?: boolean;
+  /** What the ranking covers, in the rail's words: «τις νύχτες, μόνο ΣΚ». */
+  scope?: string;
 }) {
   devRenderCount("Leaderboard");
   const meta = useMemo(() => new Map(sensors.map((s) => [s.id, s])), [sensors]);
@@ -41,12 +61,8 @@ function Leaderboard({
       .sort((a, b) => b.value - a.value);
   }, [aggData, metric]);
 
-  const [lo, hi] = useMemo(() => {
-    if (!rows || rows.length === 0) return [0, 1];
-    return [rows[rows.length - 1].value, rows[0].value];
-  }, [rows]);
-
-  const barFraction = (v: number) => (hi === lo ? 1 : 0.06 + 0.94 * ((v - lo) / (hi - lo)));
+  const [lo, hi] = BAR_SCALE[metric];
+  const barFraction = (v: number) => 0.04 + 0.96 * Math.min(1, Math.max(0, (v - lo) / (hi - lo)));
 
   return (
     <div className={embedded ? "" : "absolute inset-0 z-10 overflow-y-auto bg-background"}>
@@ -55,7 +71,7 @@ function Leaderboard({
         <p className="mt-0.5 text-[11px] text-muted-foreground">
           {tr.board.subtitlePrefix}
           <MetricMention metric={metric} onHover={onMetricRefHover} />
-          {tr.board.subtitleSuffix}
+          {scope && tr.board.subtitleScope(scope)}
         </p>
 
         {rows == null ? (
@@ -67,7 +83,7 @@ function Leaderboard({
         ) : rows.length === 0 ? (
           <p className="mt-8 text-center text-[12px] text-muted-foreground">{tr.board.empty}</p>
         ) : (
-          <ol className="mt-5">
+          <ol className={cn("mt-5 transition-opacity duration-200", stale && "opacity-45")} aria-busy={stale || undefined}>
             {rows.map((row, i) => {
               const m = meta.get(row.id);
               const color = levelColor(row.value, stops);
