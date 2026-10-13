@@ -60,9 +60,7 @@ export default function AboutPage() {
         <div className="mx-auto flex w-full max-w-[920px] flex-col gap-[22px] px-6">
           <div className={kicker}>{tr.hero.kicker}</div>
           <h1 className="m-0 text-[clamp(38px,6vw,68px)] font-bold leading-[1.02] tracking-[-0.025em] text-balance">
-            {tr.hero.title[0]}
-            <br />
-            {tr.hero.title[1]}
+            {tr.hero.title}
           </h1>
           <p className="m-0 max-w-[700px] text-[19px] leading-[1.5] text-muted-foreground text-pretty">{tr.hero.lead}</p>
           <div className="mt-1.5 flex flex-wrap gap-3">
@@ -97,7 +95,7 @@ export default function AboutPage() {
             <div className={kicker}>{tr.who.kicker}</div>
             <h2 className="m-0 text-4xl font-bold leading-[1.1] tracking-tight">{tr.who.title}</h2>
           </div>
-          <div className="grid gap-5 md:grid-cols-3">
+          <div className="grid gap-5 md:grid-cols-2">
             <div className={`${card} gap-3.5`}>
               <div className="text-[22px] font-bold tracking-tight">{tr.who.schema.name}</div>
               <p className="m-0 text-[15px] leading-[1.5] text-muted-foreground">{tr.who.schema.body}</p>
@@ -108,15 +106,17 @@ export default function AboutPage() {
             <div className={`${card} gap-3.5`}>
               <Lockup logoOnly />
               <p className="m-0 text-[15px] leading-[1.5] text-muted-foreground">{tr.who.skroutz.body}</p>
-              <p className="m-0 self-start rounded-md bg-sound/25 px-2 py-1.5 text-[13px] text-foreground">{tr.who.skroutz.placeholder}</p>
             </div>
-            <div className={`${card} gap-3.5`}>
-              <div className="text-[22px] font-bold tracking-tight">{tr.who.review.name}</div>
-              <p className="m-0 text-[15px] leading-[1.5] text-muted-foreground">{tr.who.review.body}</p>
-              <a href={tr.who.review.href} className="text-sm font-semibold text-foreground">
+          </div>
+          {/* the review is a credential for the method, not a third partner: a quiet line under the two */}
+          <div className="flex max-w-[860px] flex-col gap-1.5 border-l-2 border-border pl-4">
+            <div className="text-sm font-semibold text-foreground">{tr.who.review.name}</div>
+            <p className="m-0 text-sm leading-[1.5] text-muted-foreground">
+              {tr.who.review.body}{" "}
+              <a href={tr.who.review.href} className="font-semibold text-foreground">
                 {tr.who.review.link} ↗
               </a>
-            </div>
+            </p>
           </div>
         </div>
       </section>
