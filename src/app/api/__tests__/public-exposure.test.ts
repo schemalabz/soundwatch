@@ -123,6 +123,8 @@ const ARGS: Record<string, string> = {
   "aggregate/route.ts": `?from=${NOW - 86_400_000}`,
   "series/route.ts": `?from=${NOW - 86_400_000}`,
   "frames/route.ts": `?at=${NOW}`,
+  "usual/route.ts": `?at=${NOW}`,
+  "departures/route.ts": `?at=${NOW}`,
 };
 
 beforeEach(() => {
