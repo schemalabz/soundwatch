@@ -206,7 +206,7 @@ export default function UnitSettings({ data, onChanged, notice }: { data: UnitDe
       )}
 
       {label && (
-        <DeviceLabel sensor={{ deviceId: unit.deviceId, name: unit.name, apName: unit.apName, hardwareId: identity.hardwareId }} onClose={() => setLabel(false)} />
+        <DeviceLabel deviceId={unit.deviceId} onClose={() => setLabel(false)} />
       )}
     </section>
   );
