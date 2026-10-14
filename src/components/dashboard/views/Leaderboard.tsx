@@ -8,7 +8,8 @@
 // quietest and loudest: stretched, a filter that lowers every place by 5 dB
 // (nights) redrew exactly the same bars, and the filters looked broken.
 
-import { memo, useMemo } from "react";
+import { memo, useMemo, useState } from "react";
+import { ChevronDown, ChevronUp } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { dashboardStrings as tr } from "@/lib/strings/dashboard";
 import { levelColor, paletteStops } from "@/lib/dashboard/levels";
@@ -17,6 +18,9 @@ import type { AggKey } from "@/lib/dashboard/metrics";
 import type { SensorMeta } from "../SensorLayer";
 import MetricMention from "../MetricMention";
 import { devRenderCount } from "@/lib/dashboard/devtools";
+
+/** The ranking opens on its head; the rest is one tap away. */
+const TOP_N = 5;
 
 /** Device-dB the bar spans, per metric: Lmax is one frame's peak and sits
  *  far above the others. Arbitrary visual anchors, like the map's ramp. */
@@ -51,6 +55,7 @@ function Leaderboard({
   scope?: string;
 }) {
   devRenderCount("Leaderboard");
+  const [expanded, setExpanded] = useState(false);
   const meta = useMemo(() => new Map(sensors.map((s) => [s.id, s])), [sensors]);
   const stops = useMemo(() => paletteStops(), []);
 
@@ -61,6 +66,11 @@ function Leaderboard({
       .sort((a, b) => b.value - a.value);
   }, [aggData, metric]);
 
+  const visibleRows = useMemo(() => {
+    if (!rows) return [];
+    return expanded ? rows : rows.slice(0, TOP_N);
+  }, [rows, expanded]);
+  const hiddenCount = rows ? Math.max(0, rows.length - TOP_N) : 0;
   const [lo, hi] = BAR_SCALE[metric];
   const barFraction = (v: number) => 0.04 + 0.96 * Math.min(1, Math.max(0, (v - lo) / (hi - lo)));
 
@@ -76,7 +86,7 @@ function Leaderboard({
 
         {rows == null ? (
           <div className="mt-6 flex flex-col gap-2">
-            {Array.from({ length: 12 }, (_, i) => (
+            {Array.from({ length: TOP_N }, (_, i) => (
               <div key={i} className="h-9 animate-pulse rounded-md bg-silver/30" />
             ))}
           </div>
@@ -84,7 +94,7 @@ function Leaderboard({
           <p className="mt-8 text-center text-[12px] text-muted-foreground">{tr.board.empty}</p>
         ) : (
           <ol className={cn("mt-5 transition-opacity duration-200", stale && "opacity-45")} aria-busy={stale || undefined}>
-            {rows.map((row, i) => {
+            {visibleRows.map((row, i) => {
               const m = meta.get(row.id);
               const color = levelColor(row.value, stops);
               return (
@@ -128,6 +138,17 @@ function Leaderboard({
               );
             })}
           </ol>
+        )}
+        {hiddenCount > 0 && (
+          <button
+            type="button"
+            aria-expanded={expanded}
+            onClick={() => setExpanded((v) => !v)}
+            className="mt-2 flex min-h-11 w-full items-center justify-center gap-1.5 rounded-md border border-dashed text-[12px] font-medium text-foreground/80 transition-colors hover:bg-silver/20 hover:text-foreground"
+          >
+            {expanded ? <ChevronUp className="size-3.5" /> : <ChevronDown className="size-3.5" />}
+            {expanded ? tr.board.showLess : tr.board.showAll(hiddenCount)}
+          </button>
         )}
       </div>
     </div>

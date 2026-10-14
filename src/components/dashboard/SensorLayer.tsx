@@ -63,6 +63,12 @@ export interface SensorLayerProps {
   usual?: Record<string, UsualBand> | null;
   /** The frame the circles currently show, lifted for the rail's counts. */
   onFrame?: (frame: FrameData | null) => void;
+  /**
+   * Σύνοψη: each place's aggregate over the filtered time-set, shown instead
+   * of a moment. No pills (there is no hour to be usual for), no polling, and
+   * the lifted frame stays the moment's, so the pane keeps saying «now».
+   */
+  overrideFrame?: FrameData | null;
 }
 
 const MARKER_PX = 30;
@@ -255,8 +261,9 @@ function applyValue(
   }
 }
 
-function SensorLayer({ map, sensors, cursor, stepMs, segments, playing, metric, onSensorClick, locations, clickThrough, usual, onFrame }: SensorLayerProps) {
+function SensorLayer({ map, sensors, cursor, stepMs, segments, playing, metric, onSensorClick, locations, clickThrough, usual, onFrame, overrideFrame }: SensorLayerProps) {
   devRenderCount("SensorLayer");
+  const hasOverride = overrideFrame != null;
   const [version, bumpVersion] = useReducer((v: number) => v + 1, 0);
   const [zoomBucket, setZoomBucket] = useState(0);
   const storeRef = useRef(new FrameStore());
@@ -358,7 +365,7 @@ function SensorLayer({ map, sensors, cursor, stepMs, segments, playing, metric, 
   // Live IS a frame: the trailing 5 minutes at "now", computed with the
   // same metric as playback — one data path for everything.
   useEffect(() => {
-    if (cursor !== "live") return;
+    if (cursor !== "live" || hasOverride) return;
     let cancelled = false;
     // Live IS a frame, and the frame window follows the playback speed —
     // switching speeds while live changes what "now" aggregates over, and
@@ -382,12 +389,12 @@ function SensorLayer({ map, sensors, cursor, stepMs, segments, playing, metric, 
       cancelled = true;
       clearInterval(timer);
     };
-  }, [cursor, metric, stepMs]);
+  }, [cursor, metric, stepMs, hasOverride]);
 
   // --- prefetcher: current frame + the playback path ahead, one batch ---
   const cursorQ = cursor === "live" ? "live" : quantizeFrameMs(cursor);
   useEffect(() => {
-    if (cursorQ === "live") return;
+    if (cursorQ === "live" || hasOverride) return;
     const windowS = frameWindowS(stepMs);
     const ahead = playing ? PREFETCH_AHEAD : 2;
     const times = upcomingFrameTimes(segments, cursorQ, stepMs, ahead)
@@ -416,7 +423,7 @@ function SensorLayer({ map, sensors, cursor, stepMs, segments, playing, metric, 
         for (const t of missing) storeRef.current.clearPending(frameKey(t, windowS, metric));
       });
     return () => controller.abort();
-  }, [cursorQ, stepMs, segments, playing, metric]);
+  }, [cursorQ, stepMs, segments, playing, metric, hasOverride]);
 
   // --- apply the current frame to the marker elements ---
   useEffect(() => {
@@ -425,6 +432,17 @@ function SensorLayer({ map, sensors, cursor, stepMs, segments, playing, metric, 
     // Circles are drawn at a real-world radius, so their pixel size depends on
     // where and how far in the map currently is.
     const mPerPx = map ? metersPerPixel(map.getCenter().lat, map.getZoom()) : metersPerPixel(38, 11.3);
+    // Σύνοψη: the aggregate IS the frame; settle onto it and leave the
+    // moment's frame (and the next apply's tween) untouched.
+    if (overrideFrame != null) {
+      lastAppliedRef.current = null;
+      for (const [id, handle] of markersRef.current) {
+        const v = overrideFrame[id];
+        lastLevelsRef.current.set(id, v ? v.laeq : null);
+        applyValue(handle, v ? v.laeq : null, 500, zoomBucket >= LABEL_MIN_ZOOM, mPerPx, null, "ease");
+      }
+      return;
+    }
     const isLive = cursorQ === "live";
     const frame = isLive ? liveFrameRef.current : storeRef.current.get(frameKey(cursorQ, frameWindowS(stepMs), metric));
     if (!isLive && frame === undefined) return; // not loaded yet: keep last shown state
@@ -453,7 +471,7 @@ function SensorLayer({ map, sensors, cursor, stepMs, segments, playing, metric, 
       applyValue(handle, v ? v.laeq : null, tween, labelsOn, mPerPx, usual?.[id], timing);
     }
     onFrameRef.current?.(frame ?? null);
-  }, [cursorQ, stepMs, version, zoomBucket, playing, metric, map, usual]);
+  }, [cursorQ, stepMs, version, zoomBucket, playing, metric, map, usual, overrideFrame]);
 
   return null;
 }

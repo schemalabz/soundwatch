@@ -301,6 +301,14 @@ export default function DashboardShell({ initialView = "map" }: { initialView?: 
   }, [needsAgg, aggQuery]);
   const aggData = agg?.data ?? null;
   const aggStale = agg != null && agg.query !== aggQuery;
+  // On Σύνοψη the circles show each place's aggregate over the filtered
+  // time-set — the map at the top of the summary is the ranking, drawn.
+  const summaryFrame = useMemo<FrameData | null>(() => {
+    if (view !== "summary" || !aggData) return null;
+    const out: FrameData = {};
+    for (const [id, v] of Object.entries(aggData)) out[id] = { laeq: v[aggKey], n: v.n };
+    return out;
+  }, [view, aggData, aggKey]);
   // What the ranking is OF, said in the rail's own words.
   const filterQualifiers = useMemo(
     () => summarySentence(filters, rangeStartMs, nowMinute).qualifiers,
@@ -617,6 +625,7 @@ export default function DashboardShell({ initialView = "map" }: { initialView?: 
               clickThrough={placingPin}
               usual={usualForHour}
               onFrame={setFrame}
+              overrideFrame={summaryFrame}
             />
             <LocationLayer
               map={mapInstance}

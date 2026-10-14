@@ -11,6 +11,8 @@ export const dashboardStrings = {
   // The verbal summary sentence itself lives in src/lib/dashboard/summary.ts
   // (it is grammar, not a string table).
   summary: {
+    /** The chip on Σύνοψη's map: what the circles show. */
+    mapTitle: "Κάθε θέση",
     receipt: (count: string) => `≈ ${count} μετρήσεις`,
     zeroMeasurements: "0 μετρήσεις",
   },
@@ -132,6 +134,8 @@ export const dashboardStrings = {
     subtitleScope: (qualifiers: string) => ` · ${qualifiers}`,
     measurements: (n: string) => `${n} μετρήσεις`,
     empty: "Χωρίς δεδομένα για τα επιλεγμένα φίλτρα.",
+    showAll: (hidden: number) => (hidden === 1 ? "Και 1 ακόμη θέση" : `Και οι ${hidden} ακόμη θέσεις`),
+    showLess: "Μόνο οι πρώτες 5",
   },
   charts: {
     timeline: "Χρονική εξέλιξη",
