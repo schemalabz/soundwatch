@@ -14,7 +14,7 @@
 // it only confuses everyone else.
 
 import { BAND_LABELS, HIST_BIN_DB, HIST_BINS, HIST_MIN_DB } from "../../../mqtt-ingester/flavor2";
-import { HIST_TOP_DB, TOP_BIN_FLOOR_DB } from "@/lib/api/levels";
+import { HIST_TOP_DB, TOP_BIN_FLOOR_DB, V5_HIST_TOP_DB } from "@/lib/api/levels";
 import type { AggKey } from "@/lib/dashboard/metrics";
 
 /**
@@ -157,7 +157,7 @@ export const GLOSSARY: Record<GlossaryKey, GlossaryEntry> = {
   lowerBound: {
     term: "«≥» μπροστά από τιμή",
     short: `«Τουλάχιστον»: ο ήχος έφτασε το τελευταίο σκαλοπάτι της κλίμακας (${TOP_BIN_FLOOR_DB}) — ίσως ήταν και παραπάνω.`,
-    long: `Ο αισθητήρας δεν κρατά τις ίδιες τις στάθμες: κρατά ένα ιστόγραμμα από ${HIST_BINS} κουτάκια των ${HIST_BIN_DB} dB, από τα ${HIST_MIN_DB} ως τα ${HIST_TOP_DB} dB, και κάθε στιγμή προσθέτει μία μονάδα στο κουτάκι που της αναλογεί. Το τελευταίο κουτάκι όμως δεν είναι «${TOP_BIN_FLOOR_DB} ως ${HIST_TOP_DB}» — είναι «${TOP_BIN_FLOOR_DB} και πάνω, χωρίς όριο»: μια στιγμή λίγο πάνω από τα ${TOP_BIN_FLOOR_DB} dB και μια στιγμή στα 115 dB γράφονται ολόιδια και δεν ξεχωρίζουν μετά με κανέναν τρόπο. Όταν λοιπόν μια τιμή πέφτει σε αυτό το τελευταίο κουτάκι, το μόνο τίμιο που μπορεί να ειπωθεί είναι «τουλάχιστον τόσο» — γι' αυτό η σελίδα δείχνει «≥». Είναι γνωστός περιορισμός του σημερινού λογισμικού του αισθητήρα, που σκοπεύουμε να διορθώσουμε εκεί· δεν είναι σφάλμα της συγκεκριμένης μέτρησης.`,
+    long: `Οι αισθητήρες με παλαιότερο λογισμικό κρατούν τις στάθμες σε ${HIST_BINS} κουτάκια των ${HIST_BIN_DB} dB, από τα ${HIST_MIN_DB} ως τα ${HIST_TOP_DB} dB, και ό,τι ξεπερνά τα ${TOP_BIN_FLOOR_DB} μπαίνει στο ίδιο, τελευταίο κουτάκι. Μια στιγμή στα ${TOP_BIN_FLOOR_DB + 1} dB και μια στα 115 γράφονται ολόιδια, οπότε το μόνο τίμιο είναι «τουλάχιστον ${TOP_BIN_FLOOR_DB}», γι' αυτό η σελίδα δείχνει «≥». Οι νεότεροι αισθητήρες μετρούν ως τα ${V5_HIST_TOP_DB} dB.`,
   },
   spectrum: {
     term: "Φάσμα",

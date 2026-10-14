@@ -28,6 +28,8 @@ export const HIST_TOP_DB = HIST_MIN_DB + HIST_BINS * HIST_BIN_DB;
  *  judged against v4's 88/32 would put "≥" on exact values. */
 export const V5_TOP_BIN_FLOOR_DB = HIST_V5_MIN_DB + (HIST_V5_BINS - 1) * HIST_BIN_DB;
 export const V5_BOTTOM_BIN_CEILING_DB = HIST_V5_MIN_DB + HIST_BIN_DB;
+/** Where the 1.2 grid ends: 130 device-dB. */
+export const V5_HIST_TOP_DB = HIST_V5_MIN_DB + HIST_V5_BINS * HIST_BIN_DB;
 
 export type LevelBound = "lower" | "upper" | null;
 

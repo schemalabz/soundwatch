@@ -1,9 +1,9 @@
 // Fig 6 · Άθροισμα, όχι ντεσιμπέλ. Each analysed frame leaves the processor
-// as a small block and drops into one of 30 glass tubes, 2 dB wide each, by
-// its level; the adder in front counts frames and energy, and its dial runs
-// round once per interval. When the interval closes the line leaves for the
-// network and everything empties. The last tube has no top: everything at
-// 88 and above lands in it alike. Click for a car horn.
+// as a small block and drops into one of 55 glass tubes, 2 dB wide each from
+// 20 to 130 dB (firmware 1.2), by its level; the adder in front counts frames
+// and energy, and its dial runs round once per interval. When the interval
+// closes the line leaves for the network and everything empties. Click for a
+// car horn.
 
 import { aboutStrings } from "@/lib/strings/about";
 import { fmt, num, rng, clamp, type Pt3 } from "../kernel";
@@ -12,17 +12,18 @@ import { $, $$, type IsoFig } from "../runtime";
 const T = aboutStrings.how.figures.accumulate;
 
 const PZ = 8;
-const NB = 30, BX0 = 104, BS = 8, BW = 6, BY = 96, BD = 12, TUBE = 72, UNIT = 2.4;
+const NB = 55, BX0 = 104, BS = 4.4, BW = 3.3, BY = 96, BD = 12, TUBE = 72, UNIT = 2.4;
 const INTERVAL = 9; // figure seconds per interval (stands for ~27 s)
 const RATE = 20; // blocks per second dropped
 const PER_BLOCK = 4; // frames each block stands for: ~670 per interval, as on the fleet (~689)
 const SRC: Pt3 = [36, 30, PZ + 16];
+const LO_DB = 20; // lower edge of tube 0
 const SUMB = { x: 18, y: 118, w: 66, d: 52, h: 32 };
 
 export const accumulate: IsoFig = {
   mount(stage, api) {
     const K = api.iso.frame([[0, 0, 0], [370, 0, 0], [0, 200, 0], [370, 200, 0], [BX0 + NB * BS + 70, BY, PZ + TUBE + 34], [SRC[0], SRC[1], PZ + 70], [370, 60, 60]], 0.05);
-    const { P, TOP, FRONT, SIDE, box, boxc, rect, path, pt } = K;
+    const { P, TOP, FRONT, SIDE, box, boxc, rect, path } = K;
     const slits = api.iso.slits, esc = api.iso.esc;
     let s = "";
 
@@ -39,16 +40,13 @@ export const accumulate: IsoFig = {
     s += `<g id="ac-bars"></g>`;
     let tubes = "";
     for (let i = 0; i < NB; i++) {
-      const x = BX0 + i * BS, open = i === NB - 1;
+      const x = BX0 + i * BS;
       tubes += rect(SIDE(x + BW, BY + BD, PZ + 2 + TUBE), BD, TUBE, 0, "face ghost") + rect(FRONT(x, BY + BD, PZ + 2 + TUBE), BW, TUBE, 0, "face ghost");
-      if (!open) tubes += rect(TOP(x, BY, PZ + 2 + TUBE), BW, BD, 0, "face ghost");
+      tubes += rect(TOP(x, BY, PZ + 2 + TUBE), BW, BD, 0, "face ghost");
     }
     s += `<g opacity=".6">${tubes}</g>`;
-    const xo = BX0 + (NB - 1) * BS;
-    s += `<path class="leader" d="M${pt(xo, BY + BD, PZ + 2 + TUBE)}L${pt(xo, BY + BD, PZ + TUBE + 30)}M${pt(xo + BW, BY + BD, PZ + 2 + TUBE)}L${pt(xo + BW, BY + BD, PZ + TUBE + 30)}"/>`;
-    const op = P(xo + BW, BY + BD, PZ + TUBE + 32);
-    s += `<path class="leader" d="M${op[0].toFixed(1)} ${op[1].toFixed(1)}l14 -8h4"/><text class="tag" x="${(op[0] + 20).toFixed(1)}" y="${(op[1] - 5.5).toFixed(1)}">${esc(T.open)}</text>`;
-    s += `<g transform="${TOP(0, 0, PZ + 2)}">${T.bins.map((l, k) => `<text class="label" x="${BX0 + [0, 10, 20, 29][k] * BS}" y="${BY + BD + 8}" font-size="4.4">${l}</text>`).join("")}</g>`;
+    // axis labels sit at the tube whose lower edge is the labelled level
+    s += `<g transform="${TOP(0, 0, PZ + 2)}">${T.bins.map((l) => `<text class="label" x="${BX0 + Math.min(NB - 1, (Number(l) - LO_DB) / 2) * BS}" y="${BY + BD + 8}" font-size="4.4">${l}</text>`).join("")}</g>`;
 
     // ---------- the adder: a screen with Σ, a dial on top ----------
     s += box(SUMB.x, SUMB.y, PZ, SUMB.w, SUMB.d, SUMB.h, 3);
@@ -109,11 +107,12 @@ export const accumulate: IsoFig = {
       const due = Math.floor(Math.max(0, el) * RATE);
       while (st.emitted < due && el < INTERVAL - 0.6) {
         st.emitted++;
-        let bin = Math.round(11 + gauss() * 3.2 + (r() < 0.06 ? 6 + r() * 6 : 0));
+        // a street at ~52 dB (tube 16), now and then a louder passer-by
+        let bin = Math.round(16 + gauss() * 3.2 + (r() < 0.06 ? 6 + r() * 6 : 0));
         if (st.horn > 0) {
-          bin = r() < 0.55 ? NB - 1 : NB - 2 - Math.floor(r() * 4);
+          bin = 33 + Math.floor(r() * 7); // ~86-100 dB
           st.horn--;
-          if (bin === NB - 1) st.hornK += PER_BLOCK;
+          st.hornK += PER_BLOCK;
         }
         bin = Math.max(0, Math.min(NB - 1, bin));
         const d = drops[st.di++ % drops.length];
@@ -131,7 +130,7 @@ export const accumulate: IsoFig = {
           d.el.setAttribute("opacity", "0");
           st.counts[d.bin]++;
           st.frames += PER_BLOCK;
-          st.energy += (PER_BLOCK * Math.pow(10, (30 + d.bin * 2) / 10)) / 1e3;
+          st.energy += (PER_BLOCK * Math.pow(10, (LO_DB + d.bin * 2) / 10)) / 1e3;
           st.dirty = true;
           continue;
         }

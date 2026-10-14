@@ -15,6 +15,7 @@ import { fmtClock, fmtDuty, fmtLevel, fmtLmax, fmtOptionalDb, isLowCoverage, isS
 import { sensorStrings as tr } from "@/lib/strings/sensor";
 import { METRICS } from "@/lib/strings/glossary";
 import HelpLabel from "./HelpLabel";
+import { HIST_SPARSE_VERSION } from "../../../mqtt-ingester/flavor2";
 
 export const WINDOW_HOURS = [1, 3, 12, 24] as const;
 export type WindowHours = (typeof WINDOW_HOURS)[number];
@@ -138,6 +139,9 @@ function IntervalLog({
 }) {
   const stops = paletteStops();
   const live = focusKey == null;
+  // «≥ 88» can only happen on pre-1.2 rows (dense 30-bin histogram); a 1.2
+  // unit's page would be explaining a ceiling it does not have.
+  const anyDense = readings.some((r) => (r.payloadVersion ?? 0) < HIST_SPARSE_VERSION);
 
   return (
     <div className="flex flex-col overflow-hidden rounded-xl border bg-card">
@@ -207,7 +211,7 @@ function IntervalLog({
         {/* Both caveats about the file sit where the file is downloaded: what
             «≥» means, and what the download actually contains. */}
         <div className="flex flex-col items-start gap-1">
-          <HelpLabel entry="lowerBound">{tr.log.boundNote}</HelpLabel>
+          {anyDense && <HelpLabel entry="lowerBound">{tr.log.boundNote}</HelpLabel>}
           <HelpLabel entry="export">{tr.log.csvNote}</HelpLabel>
         </div>
         <span className="tabular-nums">{tr.log.cadenceNote(cadenceS, pollS)}</span>
