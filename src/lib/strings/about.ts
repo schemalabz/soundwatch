@@ -67,7 +67,10 @@ export const aboutStrings = {
       href: "https://schemalabs.gr",
     },
     skroutz: {
-      body: "Χρηματοδοτεί το project και φιλοξενεί τους αισθητήρες στα καταστήματά του: ένα κουτί, μια πρίζα και Wi-Fi σε κάθε σημείο.",
+      // Skroutz's own wording, as sent by them; first person on purpose.
+      body: "Το Skroutz είναι η μεγαλύτερη πλατφόρμα ηλεκτρονικών αγορών στην Ελλάδα. Τα Skroutz Stores και τα Skroutz Points μας βρίσκονται σε γειτονιές σε όλη την πόλη, κι αυτό τα κάνει φυσικό σημείο για ένα δίκτυο αισθητήρων. Χρηματοδοτούμε το Soundwatch γιατί είμαστε κομμάτι της πόλης και θέλουμε να βοηθήσουμε να την καταλάβουμε καλύτερα. Σε κάθε σημείο προσφέρουμε ό,τι χρειάζεται ένας αισθητήρας: ένα κουτί, μια πρίζα και Wi-Fi.",
+      link: "skroutz.gr",
+      href: "https://www.skroutz.gr",
     },
     astylab: {
       name: "Astylab",

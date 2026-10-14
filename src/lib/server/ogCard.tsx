@@ -11,7 +11,7 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { ImageResponse } from "next/og";
-import { SKROUTZ_LOGOTYPE_GREY } from "@/lib/brand";
+import { SKROUTZ_LOGOTYPE } from "@/lib/brand";
 
 export const OG_SIZE = { width: 1200, height: 630 } as const;
 
@@ -41,7 +41,7 @@ async function assets() {
   const [medium, bold, logo] = await Promise.all([
     readFile(join(process.cwd(), "assets/fonts/Commissioner-Medium.ttf")),
     readFile(join(process.cwd(), "assets/fonts/Commissioner-Bold.ttf")),
-    readFile(join(process.cwd(), "public", SKROUTZ_LOGOTYPE_GREY.src)),
+    readFile(join(process.cwd(), "public", SKROUTZ_LOGOTYPE.src)),
   ]);
   return { medium, bold, logo: `data:image/png;base64,${logo.toString("base64")}` };
 }
@@ -50,7 +50,7 @@ export async function ogCard({ label, title, lead }: { label?: string; title: st
   const { medium, bold, logo } = await assets();
   // The brandbook's 70 px minimum, comfortably cleared.
   const logoHeight = 30;
-  const logoWidth = Math.round((logoHeight * SKROUTZ_LOGOTYPE_GREY.w) / SKROUTZ_LOGOTYPE_GREY.h);
+  const logoWidth = Math.round((logoHeight * SKROUTZ_LOGOTYPE.w) / SKROUTZ_LOGOTYPE.h);
 
   return new ImageResponse(
     (

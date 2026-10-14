@@ -103,6 +103,9 @@ export default function AboutPage() {
             <div className={`${card} gap-3.5`}>
               <Lockup logoOnly />
               <p className="m-0 text-[15px] leading-[1.5] text-muted-foreground">{tr.who.skroutz.body}</p>
+              <a href={tr.who.skroutz.href} className="text-sm font-semibold text-foreground">
+                {tr.who.skroutz.link} ↗
+              </a>
             </div>
             <div className={`${card} gap-3.5`}>
               <div className="text-[22px] font-bold tracking-tight">{tr.who.schema.name}</div>
