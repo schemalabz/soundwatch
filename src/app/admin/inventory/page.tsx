@@ -286,7 +286,7 @@ export default function InventoryPage() {
 
       {label && (
         <DeviceLabel
-          sensor={{ deviceId: label.current.deviceId, name: label.current.siteName, apName: label.current.apName, hardwareId: label.hardwareId }}
+          deviceId={label.current.deviceId}
           onClose={() => setLabel(null)}
         />
       )}
