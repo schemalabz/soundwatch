@@ -69,6 +69,12 @@ export const aboutStrings = {
     skroutz: {
       body: "Χρηματοδοτεί το project και φιλοξενεί τους αισθητήρες στα καταστήματά του: ένα κουτί, μια πρίζα και Wi-Fi σε κάθε σημείο.",
     },
+    astylab: {
+      name: "Astylab",
+      body: "Η ιδέα για το Soundwatch Athens ξεκίνησε από την Astylab, που φέρνει κοντά ανθρώπους, ιδέες και πόρους για καλύτερες πόλεις. Η Astylab σχεδίασε την πρόταση μαζί με τη Schema Labs και την παρουσίασε στη Skroutz. Τώρα μοιράζεται τα δεδομένα του Soundwatch με το δίκτυό της.",
+      link: "astylab.gr",
+      href: "https://astylab.gr",
+    },
     review: {
       name: "Έλεγχος από το ΑΠΘ",
       body: "Οι αισθητήρες έχουν ελεγχθεί, και η μέθοδος που περιγράφεται σε αυτή τη σελίδα έχει επιβεβαιωθεί, από την ερευνητική ομάδα M3C (Multidisciplinary Media & Mediated Communication) του Αριστοτελείου Πανεπιστημίου Θεσσαλονίκης.",

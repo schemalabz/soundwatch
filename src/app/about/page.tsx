@@ -108,7 +108,17 @@ export default function AboutPage() {
               <p className="m-0 text-[15px] leading-[1.5] text-muted-foreground">{tr.who.skroutz.body}</p>
             </div>
           </div>
-          {/* the review is a credential for the method, not a third partner: a quiet line under the two */}
+          {/* Where the idea came from, and the credential for the method: two
+              quiet lines under the two partners, not a third and fourth card. */}
+          <div className="flex max-w-[860px] flex-col gap-1.5 border-l-2 border-border pl-4">
+            <div className="text-sm font-semibold text-foreground">{tr.who.astylab.name}</div>
+            <p className="m-0 text-sm leading-[1.5] text-muted-foreground">
+              {tr.who.astylab.body}{" "}
+              <a href={tr.who.astylab.href} className="font-semibold text-foreground">
+                {tr.who.astylab.link} ↗
+              </a>
+            </p>
+          </div>
           <div className="flex max-w-[860px] flex-col gap-1.5 border-l-2 border-border pl-4">
             <div className="text-sm font-semibold text-foreground">{tr.who.review.name}</div>
             <p className="m-0 text-sm leading-[1.5] text-muted-foreground">
