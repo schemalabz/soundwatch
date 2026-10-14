@@ -97,15 +97,15 @@ export default function AboutPage() {
           </div>
           <div className="grid gap-5 md:grid-cols-2">
             <div className={`${card} gap-3.5`}>
+              <Lockup logoOnly />
+              <p className="m-0 text-[15px] leading-[1.5] text-muted-foreground">{tr.who.skroutz.body}</p>
+            </div>
+            <div className={`${card} gap-3.5`}>
               <div className="text-[22px] font-bold tracking-tight">{tr.who.schema.name}</div>
               <p className="m-0 text-[15px] leading-[1.5] text-muted-foreground">{tr.who.schema.body}</p>
               <a href={tr.who.schema.href} className="text-sm font-semibold text-foreground">
                 {tr.who.schema.link} ↗
               </a>
-            </div>
-            <div className={`${card} gap-3.5`}>
-              <Lockup logoOnly />
-              <p className="m-0 text-[15px] leading-[1.5] text-muted-foreground">{tr.who.skroutz.body}</p>
             </div>
           </div>
           {/* Where the idea came from, and the credential for the method: two
