@@ -93,7 +93,7 @@ export default function AboutPage() {
         <div className="mx-auto flex w-full max-w-[1120px] flex-col gap-7 px-6">
           <div className="flex max-w-[720px] flex-col gap-2">
             <div className={kicker}>{tr.who.kicker}</div>
-            <h2 className="m-0 text-4xl font-bold leading-[1.1] tracking-tight">{tr.who.title}</h2>
+            <h2 className="m-0 text-balance text-4xl font-bold leading-[1.1] tracking-tight">{tr.who.title}</h2>
           </div>
           <div className="grid gap-5 md:grid-cols-2">
             <div className={`${card} gap-3.5`}>
@@ -138,7 +138,7 @@ export default function AboutPage() {
         <div className="mx-auto flex w-full max-w-[1120px] flex-col gap-7 px-6">
           <div className="flex max-w-[760px] flex-col gap-2">
             <div className={kicker}>{tr.honesty.kicker}</div>
-            <h2 className="m-0 text-4xl font-bold leading-[1.1] tracking-tight">{tr.honesty.title}</h2>
+            <h2 className="m-0 text-balance text-4xl font-bold leading-[1.1] tracking-tight">{tr.honesty.title}</h2>
             <p className="m-0 text-base leading-[1.5] text-muted-foreground">{tr.honesty.caveat}</p>
             <p className="m-0 text-base leading-[1.5] text-muted-foreground">
               {tr.honesty.verified.text}{" "}
@@ -186,7 +186,7 @@ export default function AboutPage() {
         <div className="mx-auto grid w-full max-w-[1120px] items-start gap-10 px-6 md:grid-cols-2">
           <div className="flex flex-col gap-3">
             <div className={kicker}>{tr.open.kicker}</div>
-            <h2 className="m-0 text-4xl font-bold leading-[1.1] tracking-tight">{tr.open.title}</h2>
+            <h2 className="m-0 text-balance text-4xl font-bold leading-[1.1] tracking-tight">{tr.open.title}</h2>
             <p className="m-0 text-base leading-[1.5] text-muted-foreground">{tr.open.lead}</p>
           </div>
           <div className="flex flex-col gap-3">
