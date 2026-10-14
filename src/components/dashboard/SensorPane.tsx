@@ -265,13 +265,13 @@ function SensorPane({
               <>
                 <UsualChart profile={hours} day={line} nowFraction={nowFraction} nowLevel={level} />
                 <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-[10px] text-muted-foreground">
+                  {/* One swatch for the band and its typical level: the
+                      dashed line through the tint, as drawn on the chart. */}
                   <span className="inline-flex items-center gap-1">
-                    <span className="inline-block h-2 w-3 rounded-[1px] bg-sound/30" />
+                    <span className="relative inline-block h-2.5 w-4 rounded-[1px] bg-sound/30">
+                      <span className="absolute inset-x-0 top-1/2 border-t border-dashed border-sound" />
+                    </span>
                     {tr.usual.legendBand}
-                  </span>
-                  <span className="inline-flex items-center gap-1">
-                    <span className="inline-block w-3 border-t border-dashed border-sound" />
-                    {tr.usual.legendMedian}
                   </span>
                   <span className="inline-flex items-center gap-1">
                     <span className="inline-block w-3 border-t-2 border-ink" />

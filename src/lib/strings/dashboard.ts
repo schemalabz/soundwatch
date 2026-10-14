@@ -122,7 +122,6 @@ export const dashboardStrings = {
     chartTitle: "Σήμερα και το συνηθισμένο",
     chartTitlePast: "Εκείνη τη μέρα και το συνηθισμένο",
     legendBand: "συνήθως",
-    legendMedian: "τυπικά",
     legendToday: "σήμερα",
     legendThatDay: "εκείνη τη μέρα",
     noProfile: "Χωρίς αρκετό ιστορικό για σύγκριση.",
