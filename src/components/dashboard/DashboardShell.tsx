@@ -41,6 +41,7 @@ import type { FreshnessResponse } from "@/types/freshness";
 import type { DeparturesResponse, UsualBand, UsualDayResponse } from "@/lib/api/dashboard";
 import { reverseGeocode } from "@/lib/dashboard/geocode";
 import { summarySentence } from "@/lib/dashboard/summary";
+import { pageTitle, siteStrings } from "@/lib/strings/site";
 import FilterRail from "./FilterRail";
 import NowRail from "./NowRail";
 import SensorLayer, { type SensorMeta } from "./SensorLayer";
@@ -67,7 +68,10 @@ const USUAL_REFRESH_MS = 10 * 60_000;
 // back and forward switch them again.
 const VIEW_PATH: Record<DashboardView, string> = { map: "/", summary: "/summary" };
 // Kept in step with each page's metadata: a native pushState leaves the title alone.
-const VIEW_TITLE: Record<DashboardView, string> = { map: "soundwatch", summary: "Σύνοψη · soundwatch" };
+const VIEW_TITLE: Record<DashboardView, string> = {
+  map: siteStrings.title,
+  summary: pageTitle(siteStrings.summary.title),
+};
 function viewForPath(pathname: string): DashboardView {
   return pathname.replace(/\/+$/, "") === VIEW_PATH.summary ? "summary" : "map";
 }

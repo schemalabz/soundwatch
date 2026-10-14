@@ -29,7 +29,7 @@ export interface AboutStage {
 
 export const aboutStrings = {
   meta: {
-    title: "Σχετικά — soundwatch",
+    title: "Σχετικά",
     description: "Τι είναι το Soundwatch, ποιοι το φτιάχνουν και αναλυτικά πώς οι μετρήσεις γίνονται κύκλοι στον χάρτη.",
   },
   nav: { map: "Χάρτης", status: "Κατάσταση", api: "API", about: "Σχετικά" },

@@ -1,5 +1,6 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Commissioner } from "next/font/google";
+import { SHARED_OPEN_GRAPH, SHARED_TWITTER, SITE_NAME, SITE_URL, siteStrings as tr } from "@/lib/strings/site";
 import "./globals.css";
 
 // Commissioner: a humanist grotesque with native Greek by Kostas Bartsokas —
@@ -11,9 +12,22 @@ const commissioner = Commissioner({
   display: "swap",
 });
 
+// Icons, the share card, the manifest, robots and the sitemap come from the
+// file conventions beside this layout (icon.svg, favicon.ico, apple-icon.png,
+// opengraph-image.tsx, manifest.ts, robots.ts, sitemap.ts). Pages set their
+// own title (the template adds « · soundwatch») and canonical path.
 export const metadata: Metadata = {
-  title: "soundwatch",
-  description: "Δίκτυο αισθητήρων θορύβου στην Αθήνα",
+  metadataBase: new URL(SITE_URL),
+  title: { default: tr.title, template: `%s · ${SITE_NAME}` },
+  description: tr.description,
+  applicationName: SITE_NAME,
+  openGraph: { ...SHARED_OPEN_GRAPH, title: tr.title, description: tr.description },
+  twitter: { ...SHARED_TWITTER, title: tr.title, description: tr.description },
+  formatDetection: { telephone: false },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#ffffff",
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {

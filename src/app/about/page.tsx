@@ -4,10 +4,14 @@ import { ArrowDown } from "lucide-react";
 import Lockup from "@/components/brand/Lockup";
 import HowItWorks from "@/components/about/HowItWorks";
 import { aboutStrings as tr } from "@/lib/strings/about";
+import { pageTitle, SHARED_OPEN_GRAPH, SHARED_TWITTER } from "@/lib/strings/site";
 
 export const metadata: Metadata = {
   title: tr.meta.title,
   description: tr.meta.description,
+  alternates: { canonical: "/about" },
+  openGraph: { ...SHARED_OPEN_GRAPH, url: "/about", title: pageTitle(tr.meta.title), description: tr.meta.description },
+  twitter: { ...SHARED_TWITTER, title: pageTitle(tr.meta.title), description: tr.meta.description },
 };
 
 // Copy comes from src/lib/strings/about.ts; nothing is written here. Square

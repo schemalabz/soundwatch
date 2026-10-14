@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import SensorLivePage from "@/components/sensor/SensorLivePage";
 import { SHARE_KEY_PARAM } from "@/lib/api/schemas";
+import { siteStrings } from "@/lib/strings/site";
 
 // One sensor, live. Public sensors need nothing; bench units open for an
 // admin (token in localStorage, sent by the client) or for a share link
@@ -9,7 +10,7 @@ import { SHARE_KEY_PARAM } from "@/lib/api/schemas";
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  title: "soundwatch — αισθητήρας",
+  title: siteStrings.sensor.title,
   robots: { index: false, follow: false },
 };
 
