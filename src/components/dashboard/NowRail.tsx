@@ -54,13 +54,12 @@ const dateFmt = new Intl.DateTimeFormat(LOCALE, {
 const clockFmt = new Intl.DateTimeFormat(LOCALE, { timeZone: ATHENS_TZ, hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
 const dayFmt = new Intl.DateTimeFormat(LOCALE, { timeZone: ATHENS_TZ, weekday: "long", day: "numeric", month: "long" });
 
-function Pill({ delta, className }: { delta: number; className?: string }) {
+function Pill({ delta }: { delta: number }) {
   return (
     <span
       className={cn(
         "inline-flex h-[18px] shrink-0 items-center rounded-full px-1.5 text-[11px] font-bold tabular-nums leading-none tracking-[0.02em]",
-        delta > 0 ? "bg-foreground text-background" : "border border-slate bg-card text-slate",
-        className
+        delta > 0 ? "bg-foreground text-background" : "border border-slate bg-card text-slate"
       )}
     >
       {fmtDelta(delta)}
@@ -149,12 +148,12 @@ function NowRail(p: NowRailProps) {
       <div className="flex-1 space-y-6 overflow-y-auto px-5 py-5">
         {/* the day's departures */}
         <section>
-          <div className="mb-2 flex items-baseline justify-between">
+          <div className="mb-2">
             <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-              {tr.now.departuresOn(dayFmt.format(p.cursorMs), {
-                today: p.isToday,
-                until: p.live ? null : clockFmt.format(p.cursorMs),
-              })}
+              {p.isToday ? tr.now.departuresToday : tr.now.departuresThatDay}
+            </div>
+            <div className="mt-0.5 text-[11px] text-muted-foreground">
+              {tr.now.departuresWhen(dayFmt.format(p.cursorMs), p.live ? null : clockFmt.format(p.cursorMs))}
             </div>
           </div>
           {p.departures == null ? (
@@ -177,32 +176,35 @@ function NowRail(p: NowRailProps) {
                         p.onJumpTo(e.peakAtMs);
                         p.onSensorClick(e.sensorId);
                       }}
-                      className="grid min-h-11 w-full grid-cols-[2.6rem_1fr_auto] items-baseline gap-2 px-1 py-2 text-left transition-colors hover:bg-silver/20"
+                      className="grid min-h-11 w-full grid-cols-[2.4rem_minmax(0,1fr)_auto] items-center gap-x-2 px-1 py-1.5 text-left transition-colors hover:bg-silver/20"
                     >
-                      <span className="text-[11.5px] tabular-nums text-muted-foreground">{clockFmt.format(e.peakAtMs)}</span>
-                      <span className="min-w-0 text-[12.5px] leading-snug">
-                        <span className="font-semibold">{names.get(e.sensorId) ?? e.sensorId.slice(0, 8)}</span>{" "}
-                        <span
-                          className="font-bold tabular-nums"
-                          style={{ color: e.verdict === "above" ? "var(--sw-level-loud)" : "var(--sw-slate)" }}
-                        >
-                          {Math.round(e.peakLaeq)}
-                        </span>{" "}
-                        <span className="text-[11px] text-muted-foreground">
+                      <span className="text-[11px] tabular-nums text-muted-foreground">{clockFmt.format(e.peakAtMs)}</span>
+                      <span className="min-w-0">
+                        <span className="block truncate text-[12.5px] font-semibold leading-tight text-foreground">
+                          {names.get(e.sensorId) ?? e.sensorId.slice(0, 8)}
+                        </span>
+                        <span className="mt-0.5 block truncate text-[11px] leading-tight text-muted-foreground">
+                          <span
+                            className="font-bold tabular-nums"
+                            style={{ color: e.verdict === "above" ? "var(--sw-level-loud)" : "var(--sw-slate)" }}
+                          >
+                            {Math.round(e.peakLaeq)}
+                          </span>
+                          {" dB · "}
                           {tr.now.usualRange(String(Math.round(e.l90)), String(Math.round(e.l10)))}
-                          {e.ongoing && p.live && (
-                            <>
-                              {" · "}
-                              <span className="relative mr-1 inline-flex size-1.5 align-middle">
-                                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-sound opacity-60" />
-                                <span className="relative inline-flex size-1.5 rounded-full bg-sound" />
-                              </span>
-                              {tr.now.ongoing}
-                            </>
-                          )}
                         </span>
                       </span>
-                      <Pill delta={delta} className="self-center" />
+                      <span className="inline-flex items-center gap-1.5">
+                        {/* Still going on: the live dot beside the pill, the words for a screen reader. */}
+                        {e.ongoing && p.live && (
+                          <span className="relative inline-flex size-1.5" title={tr.now.ongoing}>
+                            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-sound opacity-60" />
+                            <span className="relative inline-flex size-1.5 rounded-full bg-sound" />
+                            <span className="sr-only">{tr.now.ongoing}</span>
+                          </span>
+                        )}
+                        <Pill delta={delta} />
+                      </span>
                     </button>
                   </li>
                 );
@@ -210,9 +212,9 @@ function NowRail(p: NowRailProps) {
             </ol>
           )}
           {allEpisodes.length > episodes.length && (
-            <p className="mt-1.5 text-[11px] text-muted-foreground">{tr.now.more(allEpisodes.length - episodes.length)}</p>
+            <p className="mt-2 text-[11px] text-muted-foreground">{tr.now.more(allEpisodes.length - episodes.length)}</p>
           )}
-          <p className="mt-2 text-[10.5px] leading-snug text-muted-foreground">{tr.now.definition}</p>
+          <p className="mt-3 border-t border-dashed pt-2 text-[10.5px] leading-snug text-muted-foreground/80">{tr.now.definition}</p>
         </section>
 
         {/* the rest of the network */}

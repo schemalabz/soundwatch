@@ -90,16 +90,11 @@ export const dashboardStrings = {
     below: (n: number) => (n === 1 ? "1 κάτω από το συνηθισμένο της" : `${n} κάτω από το συνηθισμένο τους`),
     allUsual: "όλες όπως συνήθως",
     metricLine: (windowLabel: string) => `σχετική στάθμη Μέση (LAeq) · ${windowLabel}`,
-    /**
-     * The list's heading names its day: «Ξεχώρισαν σήμερα, Τρίτη 13
-     * Οκτωβρίου» live; «Ξεχώρισαν την Παρασκευή 31 Ιουλίου, ως τις 16:11»
-     * scrubbed. `day` is the weekday and date as Intl writes them; the
-     * article follows the weekday's gender (το Σάββατο, την Κυριακή).
-     */
-    departuresOn: (day: string, opts: { today: boolean; until: string | null }) => {
-      const when = opts.today ? `σήμερα, ${day}` : `${day.startsWith("Σάββατο") ? "το" : "την"} ${day}`;
-      return `Ξεχώρισαν ${when}${opts.until ? `, ως τις ${opts.until}` : ""}`;
-    },
+    /** The list's label, with its day on a line of its own underneath. */
+    departuresToday: "Ξεχώρισαν σήμερα",
+    departuresThatDay: "Ξεχώρισαν εκείνη τη μέρα",
+    /** «Τετάρτη 14 Οκτωβρίου · ως τις 09:00»; no cut while live. */
+    departuresWhen: (day: string, until: string | null) => (until ? `${day} · ως τις ${until}` : day),
     noDepartures: "Καμία θέση δεν βγήκε από το συνηθισμένο της.",
     more: (n: number) => (n === 1 ? "και 1 ακόμη" : `και ${n} ακόμη`),
     ongoing: "σε εξέλιξη",

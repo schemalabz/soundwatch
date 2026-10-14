@@ -184,7 +184,7 @@ function SensorPane({
   const edges = hasSupport(band) ? usualEdges(band) : null;
 
   return (
-    <div className="pointer-events-auto absolute right-3 top-3 z-10 flex max-h-[calc(100%-8.5rem)] w-[18.5rem] flex-col rounded-xl border bg-card/95 shadow-[0_2px_16px_-4px_rgb(45_49_66/0.18)] backdrop-blur-sm max-md:inset-x-2 max-md:right-16 max-md:top-auto max-md:bottom-16 max-md:max-h-[55%] max-md:w-auto">
+    <div className="pointer-events-auto absolute right-3 top-3 z-10 flex max-h-[calc(100%-8.5rem)] w-[18.5rem] flex-col rounded-xl xl:w-[22rem] 2xl:w-[25rem] border bg-card/95 shadow-[0_2px_16px_-4px_rgb(45_49_66/0.18)] backdrop-blur-sm max-md:inset-x-2 max-md:right-16 max-md:top-auto max-md:bottom-16 max-md:max-h-[55%] max-md:w-auto">
       <div className="flex items-start justify-between gap-2 border-b px-4 py-3">
         <div className="min-w-0">
           <div className="truncate text-[15px] font-semibold leading-tight">{d?.name ?? d?.address ?? "…"}</div>
@@ -200,7 +200,7 @@ function SensorPane({
         {level != null ? (
           <div className="flex items-baseline gap-2">
             <span
-              className="text-[34px] font-bold leading-none tabular-nums tracking-tight"
+              className="text-[34px] font-bold leading-none tabular-nums tracking-tight xl:text-[40px]"
               style={{ color: levelColor(level, stops) }}
             >
               {fmtDb(level)}
@@ -216,7 +216,7 @@ function SensorPane({
         )}
         {verdictLine && (
           <div className="mt-1.5">
-            <div className="text-[14px] font-bold leading-tight" style={{ color: verdictLine.color }}>
+            <div className="text-[14px] font-bold leading-tight xl:text-[15px]" style={{ color: verdictLine.color }}>
               {verdictLine.text}
             </div>
             {edges && (

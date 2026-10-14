@@ -32,7 +32,7 @@ function ViewSwitcher({
     <div
       className={cn(
         "pointer-events-auto flex items-center rounded-xl border bg-card/95 shadow-[0_2px_16px_-4px_rgb(45_49_66/0.18)] backdrop-blur-sm",
-        compact ? "h-11 gap-1 px-1.5" : "gap-4 px-3.5 py-1.5"
+        compact ? "h-11 gap-1 px-1.5" : "gap-6 px-5 py-2"
       )}
       role="tablist"
     >
@@ -45,15 +45,16 @@ function ViewSwitcher({
           aria-label={tr.views[key]}
           onClick={() => onViewChange(key)}
           className={cn(
-            "flex items-center gap-1.5 border-b-2 pb-0.5 pt-1 font-medium tracking-tight transition-colors",
-            // Phones: icon-only tabs, each a full 40 × 36 target.
-            compact ? "h-9 min-w-10 justify-center text-[10px]" : "text-[11.5px]",
+            "flex items-center border-b-2 font-medium tracking-tight transition-colors",
+            // Phones: icon-only tabs, each a full 40 × 36 target. Desktop: the
+            // lens is the top-level choice on the page; it reads like one.
+            compact ? "h-9 min-w-10 justify-center gap-1.5 text-[10px]" : "gap-2 pb-1 pt-1.5 text-[14px]",
             view === key
               ? "border-sound text-foreground"
               : "border-transparent text-muted-foreground hover:text-foreground"
           )}
         >
-          <Icon className="size-3.5" />
+          <Icon className={compact ? "size-3.5" : "size-4"} />
           {!compact && tr.views[key]}
         </button>
       ))}
