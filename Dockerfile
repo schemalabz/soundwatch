@@ -23,6 +23,17 @@ ENV NEXT_TELEMETRY_DISABLED=1
 RUN npx prisma generate
 RUN npm run build
 
+# The label renderer's Skia binary ships for glibc AND musl; Turbopack's
+# trace copies both and ignores outputFileTracingExcludes. The runtime image
+# is bookworm (glibc), so the musl copy (~30 MB) can never load — drop it
+# before the runner copies .next/standalone. The ls fails the build if the
+# traced layout moves, instead of silently shipping the wrong binaries — or
+# the fonts (traced via next.config.ts), without which every label 500s.
+RUN rm -rf .next/standalone/node_modules/@napi-rs/canvas-linux-*-musl \
+ && ls -d .next/standalone/node_modules/@napi-rs/canvas-linux-*-gnu \
+      .next/standalone/src/lib/label/fonts/DejaVuSans-Bold.ttf \
+      .next/standalone/src/lib/label/fonts/DejaVuSansMono-Bold.ttf >/dev/null
+
 # Bundle the TimescaleDB bootstrap to plain JS so the runner needs only node —
 # shipping tsx into the runtime image drags in esbuild's platform binary and
 # its resolver chain for one script.
