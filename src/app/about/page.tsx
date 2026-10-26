@@ -115,23 +115,14 @@ export default function AboutPage() {
               </a>
             </div>
           </div>
-          {/* Where the idea came from, and the credential for the method: two
-              quiet lines under the two partners, not a third and fourth card. */}
+          {/* Where the idea came from: a quiet line under the two partners,
+              not a third card. */}
           <div className="flex max-w-[860px] flex-col gap-1.5 border-l-2 border-border pl-4">
             <div className="text-sm font-semibold text-foreground">{tr.who.astylab.name}</div>
             <p className="m-0 text-sm leading-[1.5] text-muted-foreground">
               {tr.who.astylab.body}{" "}
               <a href={tr.who.astylab.href} className="font-semibold text-foreground">
                 {tr.who.astylab.link} ↗
-              </a>
-            </p>
-          </div>
-          <div className="flex max-w-[860px] flex-col gap-1.5 border-l-2 border-border pl-4">
-            <div className="text-sm font-semibold text-foreground">{tr.who.review.name}</div>
-            <p className="m-0 text-sm leading-[1.5] text-muted-foreground">
-              {tr.who.review.body}{" "}
-              <a href={tr.who.review.href} className="font-semibold text-foreground">
-                {tr.who.review.link} ↗
               </a>
             </p>
           </div>
@@ -147,12 +138,6 @@ export default function AboutPage() {
             <div className={kicker}>{tr.honesty.kicker}</div>
             <h2 className="m-0 text-balance text-4xl font-bold leading-[1.1] tracking-tight">{tr.honesty.title}</h2>
             <p className="m-0 text-base leading-[1.5] text-muted-foreground">{tr.honesty.caveat}</p>
-            <p className="m-0 text-base leading-[1.5] text-muted-foreground">
-              {tr.honesty.verified.text}{" "}
-              <a href={tr.honesty.verified.href} className="font-semibold text-foreground">
-                {tr.honesty.verified.link} ↗
-              </a>
-            </p>
           </div>
           <div className="grid gap-5 md:grid-cols-2">
             <div className={`${card} gap-3`}>

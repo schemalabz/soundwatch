@@ -78,12 +78,6 @@ export const aboutStrings = {
       link: "astylab.gr",
       href: "https://astylab.gr",
     },
-    review: {
-      name: "Έλεγχος από το ΑΠΘ",
-      body: "Οι αισθητήρες έχουν ελεγχθεί, και η μέθοδος που περιγράφεται σε αυτή τη σελίδα έχει επιβεβαιωθεί, από την ερευνητική ομάδα M3C (Multidisciplinary Media & Mediated Communication) του Αριστοτελείου Πανεπιστημίου Θεσσαλονίκης.",
-      link: "m3c.web.auth.gr",
-      href: "https://m3c.web.auth.gr/",
-    },
   },
   how: {
     kicker: "Πώς δουλεύει",
@@ -252,11 +246,6 @@ export const aboutStrings = {
     kicker: "Τι μπορούμε να πούμε",
     title: "Σχετικοί αριθμοί",
     caveat: LEVEL_CAVEAT,
-    verified: {
-      text: "Τη μέθοδο την έλεγξε και την επιβεβαίωσε η ερευνητική ομάδα M3C του ΑΠΘ.",
-      link: "m3c.web.auth.gr",
-      href: "https://m3c.web.auth.gr/",
-    },
     can: {
       title: "Μπορούμε να πούμε",
       items: [
