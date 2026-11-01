@@ -1,15 +1,16 @@
 "use client";
 
-// Orchestrates the dashboard: the two lenses (map, summary), the filter state
-// the summary answers to, the data range (from /api/freshness), the playback
-// clock the map answers to, the «usual» the map's circles are held against,
-// and the responsive frame — rail + horizontal timebar on desktop, sheet +
-// vertical timebar on mobile.
+// Orchestrates the dashboard: Σύνοψη (the page: the filtered time-set on the
+// map, ranked and charted) and Χρονογραμμή (the map, minute by minute, with
+// the timebar), the filter state the summary answers to, the data range (from
+// /api/freshness), the playback clock the map answers to, the «usual» the
+// map's circles are held against, and the responsive frame — rail + horizontal
+// timebar on desktop, sheet + vertical timebar on mobile.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { dashboardStrings as tr, LOCALE } from "@/lib/strings/dashboard";
-import { Clock3, SlidersHorizontal } from "lucide-react";
+import { ArrowLeft, Clock3, SlidersHorizontal } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -52,7 +53,6 @@ import SimulatedBanner from "./SimulatedBanner";
 import SkipFlash, { SKIP_HOLD_MS, type SkipEvent } from "./SkipFlash";
 import Timebar, { PLAYBACK_SPEEDS } from "./Timebar";
 import { type AggKey } from "@/lib/dashboard/metrics";
-import ViewSwitcher, { type DashboardView } from "./ViewSwitcher";
 import SummaryView from "./views/SummaryView";
 import { devRenderCount } from "@/lib/dashboard/devtools";
 
@@ -63,20 +63,43 @@ const FALLBACK_SPAN_DAYS = 90;
 // again this often.
 const USUAL_REFRESH_MS = 10 * 60_000;
 
-// Each lens has its own address, so a link to Σύνοψη opens Σύνοψη. Switching
-// lenses pushes the path natively (no page load: the map and its state stay);
-// back and forward switch them again.
-const VIEW_PATH: Record<DashboardView, string> = { map: "/", summary: "/summary" };
+// Σύνοψη is the page; Χρονογραμμή («map» here, after what it shows) is the
+// view it opens. Each has its own address, so a link to the timeline opens
+// the timeline. Moving between them pushes the path natively (no page load:
+// the map and its state stay); back and forward move between them again.
+export type DashboardView = "map" | "summary";
+const VIEW_PATH: Record<DashboardView, string> = { map: "/timeline", summary: "/" };
 // Kept in step with each page's metadata: a native pushState leaves the title alone.
 const VIEW_TITLE: Record<DashboardView, string> = {
-  map: siteStrings.title,
-  summary: pageTitle(siteStrings.summary.title),
+  map: pageTitle(siteStrings.timeline.title),
+  summary: siteStrings.title,
 };
 function viewForPath(pathname: string): DashboardView {
-  return pathname.replace(/\/+$/, "") === VIEW_PATH.summary ? "summary" : "map";
+  return pathname.replace(/\/+$/, "") === VIEW_PATH.map ? "map" : "summary";
 }
 
-export default function DashboardShell({ initialView = "map" }: { initialView?: DashboardView }) {
+// The sensors are fitted into the part of the canvas each view leaves
+// visible. Σύνοψη shows the map through a cutout at the top (46vh, at least
+// 16rem — SummaryView's classes) with a chip in its bottom-left and the
+// timeline button top-right; Χρονογραμμή has its title on top and the timebar
+// along the bottom (desktop) or the right edge (phones). CSS pixels, so this
+// stays in step with those classes by hand.
+const SUMMARY_CUTOUT_VH = 0.46;
+const SUMMARY_CUTOUT_MIN_PX = 256;
+type Padding = { top: number; right: number; bottom: number; left: number };
+function viewPadding(view: DashboardView, canvasHeightPx: number, mobile: boolean): Padding {
+  if (view === "summary") {
+    const cutout = Math.min(canvasHeightPx, Math.max(window.innerHeight * SUMMARY_CUTOUT_VH, SUMMARY_CUTOUT_MIN_PX));
+    // Leave at least a strip of map to fit into, whatever the viewport.
+    const bottom = Math.min(canvasHeightPx - cutout + 56, Math.max(0, canvasHeightPx - 120));
+    return { top: 64, right: 24, bottom, left: 24 };
+  }
+  return mobile ? { top: 64, right: 80, bottom: 104, left: 16 } : { top: 64, right: 24, bottom: 112, left: 24 };
+}
+// A sensor fitted alone would otherwise zoom to the street.
+const FIT_MAX_ZOOM = 13.5;
+
+export default function DashboardShell({ initialView = "summary" }: { initialView?: DashboardView }) {
   devRenderCount("DashboardShell");
 
   const locale = LOCALE;
@@ -124,6 +147,11 @@ export default function DashboardShell({ initialView = "map" }: { initialView?: 
   const [mapInstance, setMapInstance] = useState<
     import("mapbox-gl").Map | null
   >(null);
+  // A place to fly to once the view it belongs to is up (a pane's «show in
+  // the timeline»): consumed by the camera effect below, which otherwise
+  // fits the sensors — the two must not race.
+  const pendingFlyRef = useRef<[number, number] | null>(null);
+  const fittedOnceRef = useRef(false);
 
   // Wall clock: the live edge of the rail creeps forward once a second.
   useEffect(() => {
@@ -431,13 +459,13 @@ export default function DashboardShell({ initialView = "map" }: { initialView?: 
     [showView],
   );
 
-  // Pin placement: arming jumps to the map (that's where you click); the
-  // pin lands immediately with a null label and the reverse-geocoded street
-  // name streams in when Mapbox answers.
+  // Pin placement happens on the summary's own map (the cutout, which
+  // SummaryView scrolls back into view when this arms); the pin lands
+  // immediately with a null label and the reverse-geocoded street name
+  // streams in when Mapbox answers.
   const onTogglePlacing = useCallback(() => {
-    showView("map");
     setPlacingPin((prev) => !prev);
-  }, [showView]);
+  }, []);
 
   const onPlacePin = useCallback((lng: number, lat: number) => {
     setPlacingPin(false);
@@ -456,21 +484,23 @@ export default function DashboardShell({ initialView = "map" }: { initialView?: 
     });
   }, []);
 
-  // Address search picks arrive labeled; show the new pin when the map is up.
+  // Address search picks arrive labeled; show the new pin where the map is
+  // visible on this view.
   const onAddPin = useCallback(
     (lng: number, lat: number, label: string) => {
       setFilters((prev) => ({
         ...prev,
         locations: [...prev.locations, { lng, lat, radiusM: 500, label }],
       }));
-      if (view === "map")
-        mapInstance?.flyTo({
+      if (mapInstance && isMobile !== null)
+        mapInstance.flyTo({
           center: [lng, lat],
           zoom: Math.max(mapInstance.getZoom(), 12.5),
+          padding: viewPadding(view, mapInstance.getContainer().clientHeight, isMobile),
           duration: 1200,
         });
     },
-    [view, mapInstance],
+    [view, mapInstance, isMobile],
   );
 
   const onRemovePin = useCallback((index: number) => {
@@ -484,11 +514,38 @@ export default function DashboardShell({ initialView = "map" }: { initialView?: 
 
   const onGoToMap = useCallback(
     (lng: number, lat: number) => {
+      pendingFlyRef.current = [lng, lat];
       showView("map");
-      mapInstance?.flyTo({ center: [lng, lat], zoom: 13.5, duration: 1400 });
     },
-    [mapInstance, showView],
+    [showView],
   );
+
+  // The camera follows the view: each one fits every sensor into the part
+  // of the canvas it leaves visible — at once on first paint, eased when
+  // moving between views — unless a place was asked for.
+  useEffect(() => {
+    if (!mapInstance || isMobile === null || sensorList.length === 0) return;
+    const padding = viewPadding(view, mapInstance.getContainer().clientHeight, isMobile);
+    const fly = pendingFlyRef.current;
+    pendingFlyRef.current = null;
+    if (fly) {
+      mapInstance.flyTo({ center: fly, zoom: FIT_MAX_ZOOM, padding, duration: 1400 });
+      return;
+    }
+    let w = Infinity, s = Infinity, e = -Infinity, n = -Infinity;
+    for (const { longitude: x, latitude: y } of sensorList) {
+      if (x < w) w = x;
+      if (x > e) e = x;
+      if (y < s) s = y;
+      if (y > n) n = y;
+    }
+    mapInstance.fitBounds([[w, s], [e, n]], {
+      padding,
+      maxZoom: FIT_MAX_ZOOM,
+      duration: fittedOnceRef.current ? 700 : 0,
+    });
+    fittedOnceRef.current = true;
+  }, [mapInstance, view, sensorList, isMobile]);
 
   // A departure in the rail: scrub to the end of its peak window (so the
   // frame on the map IS that window) and open the place.
@@ -640,6 +697,8 @@ export default function DashboardShell({ initialView = "map" }: { initialView?: 
             />
             {view === "summary" && (
               <SummaryView
+                placingPin={placingPin}
+                onOpenTimeline={() => onViewChange("map")}
                 aggData={aggData}
                 aggStale={aggStale}
                 filterQualifiers={filterQualifiers}
@@ -674,14 +733,23 @@ export default function DashboardShell({ initialView = "map" }: { initialView?: 
               />
             )}
 
-            {/* view switcher: the top-level lens */}
-            <div className="pointer-events-none absolute left-1/2 top-3 z-10 -translate-x-1/2 md:top-4">
-              <ViewSwitcher
-                view={view}
-                compact={isMobile === true}
-                onViewChange={onViewChange}
-              />
-            </div>
+            {/* the timeline's title, and its way back (browser back works too).
+                Phones: top-right, clear of the «Τώρα» sheet trigger and above
+                the vertical timebar. */}
+            {view === "map" && (
+              <div className="pointer-events-none absolute right-2 top-3 z-10 md:left-1/2 md:right-auto md:top-4 md:-translate-x-1/2">
+                <button
+                  type="button"
+                  onClick={() => onViewChange("summary")}
+                  aria-label={tr.views.backToSummary}
+                  title={tr.views.backToSummary}
+                  className="pointer-events-auto flex h-11 items-center gap-2 rounded-xl border bg-card/95 pl-3 pr-4 text-[14px] font-semibold tracking-tight shadow-[0_2px_16px_-4px_rgb(45_49_66/0.18)] backdrop-blur-sm transition-colors hover:bg-card"
+                >
+                  <ArrowLeft className="size-4 text-muted-foreground" />
+                  {tr.views.timeline}
+                </button>
+              </div>
+            )}
 
             {/* mobile: the rail as a sheet */}
             {isMobile === true && (

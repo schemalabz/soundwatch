@@ -44,7 +44,7 @@ export const dashboardStrings = {
   },
   pane: {
     close: "Κλείσιμο",
-    goToMap: "Εμφάνιση στον χάρτη",
+    goToMap: "Εμφάνιση στη χρονογραμμή",
     lastReading: (ago: string) => `μέτρηση πριν ${ago}`,
     noData: "Χωρίς δεδομένα",
     liveWindow: (windowS: number) =>
@@ -74,8 +74,10 @@ export const dashboardStrings = {
     aggregate: "Συγκεντρωτικά",
   },
   views: {
-    map: "Χάρτης",
     summary: "Σύνοψη",
+    timeline: "Χρονογραμμή",
+    /** The timeline's way back; browser back does the same. */
+    backToSummary: "Πίσω στη σύνοψη",
   },
   // The map's rail: a moment, and how each place compares with its own usual.
   // The rule is src/lib/server/usual.ts; the words for it live here.

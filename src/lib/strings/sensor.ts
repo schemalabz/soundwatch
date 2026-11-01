@@ -6,7 +6,7 @@
 import { TOP_BIN_FLOOR_DB } from "@/lib/api/levels";
 
 export const sensorStrings = {
-  backToMap: "Χάρτης",
+  backToMap: "Σύνοψη",
   benchBadge: "μονάδα δοκιμών",
   notFound: "Δεν βρέθηκε αισθητήρας.",
   loading: "…",

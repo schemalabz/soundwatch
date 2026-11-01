@@ -18,7 +18,7 @@ export const SITE_URL = process.env.NEXT_PUBLIC_BASE_URL?.startsWith("http")
 export const SHARED_OPEN_GRAPH = { type: "website", siteName: SITE_NAME, locale: "el_GR" } as const;
 export const SHARED_TWITTER = { card: "summary_large_image" } as const;
 
-/** A page's title as every tab shows it: «Σύνοψη · soundwatch». */
+/** A page's title as every tab shows it: «Χρονογραμμή · soundwatch». */
 export function pageTitle(page: string): string {
   return `${page} · ${SITE_NAME}`;
 }
@@ -28,9 +28,9 @@ export const siteStrings = {
   title: `${SITE_NAME} · ο θόρυβος της Αθήνας, ζωντανά`,
   description:
     "Ο θόρυβος κάθε γειτονιάς της Αθήνας, ζωντανά: αισθητήρες σε Skroutz Points σε όλη την πόλη, ο χάρτης, η σύγκριση με το συνηθισμένο κάθε θέσης και ανοιχτά δεδομένα.",
-  summary: {
-    title: "Σύνοψη",
-    description: "Κατάταξη, χάρτης και γραφήματα του θορύβου της Αθήνας, για όποια περίοδο, μέρες και ώρες διαλέξετε.",
+  timeline: {
+    title: "Χρονογραμμή",
+    description: "Ο χάρτης του θορύβου της Αθήνας λεπτό προς λεπτό: κάθε θέση τη στιγμή που διαλέγετε, ζωντανά ή πίσω στον χρόνο.",
   },
   status: { title: "Κατάσταση δικτύου" },
   sensor: { title: "Αισθητήρας" },
@@ -43,7 +43,7 @@ export const siteStrings = {
       alt: "soundwatch × skroutz — ο θόρυβος της Αθήνας, ζωντανά, σε χάρτη με κύκλους",
     },
     aboutLabel: "Σχετικά",
-    summaryLabel: "Σύνοψη",
+    timelineLabel: "Χρονογραμμή",
   },
   manifest: { shortName: SITE_NAME },
 } as const;

@@ -1,8 +1,8 @@
 "use client";
 
-// Σύνοψη: the filtered time-set on the map, ranked, then charted, in one
-// scroll — what used to be two lenses (Κατάταξη, Γραφήματα). The filter rail
-// beside it is what all three answer to.
+// Σύνοψη: the page. The filtered time-set on the map, ranked, then charted,
+// in one scroll. The filter rail beside it is what all three answer to; the
+// one way onward is the Χρονογραμμή button on the map.
 //
 // The map at the top is not a second map: this overlay leaves its top
 // transparent and lets pointer events through, so the one map underneath
@@ -10,8 +10,8 @@
 // seen and dragged through the cutout, and scrolls out of sight as the
 // ranking comes up.
 
-import { memo, useCallback, useState } from "react";
-import { cn } from "@/lib/utils";
+import { memo, useEffect, useRef } from "react";
+import { Play } from "lucide-react";
 import { dashboardStrings as tr } from "@/lib/strings/dashboard";
 import MetricMention from "../MetricMention";
 import type { AggKey } from "@/lib/dashboard/metrics";
@@ -23,6 +23,8 @@ import { devRenderCount } from "@/lib/dashboard/devtools";
 
 
 function SummaryView({
+  placingPin,
+  onOpenTimeline,
   aggData,
   aggStale,
   filterQualifiers,
@@ -35,6 +37,9 @@ function SummaryView({
   onSensorClick,
   onMetricRefHover,
 }: {
+  /** A pin is being placed on the map: the cutout scrolls back into view. */
+  placingPin: boolean;
+  onOpenTimeline: () => void;
   aggData: Record<string, Record<AggKey, number> & { n: number }> | null;
   /** The filters moved and the ranking for them has not landed yet. */
   aggStale: boolean;
@@ -50,23 +55,24 @@ function SummaryView({
   onMetricRefHover?: (on: boolean) => void;
 }) {
   devRenderCount("SummaryView");
-  // Once the content has scrolled up under the floating lens switcher, a
-  // backdrop keeps it from showing through; over the map there is none.
-  const [scrolled, setScrolled] = useState(false);
-  const onScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
-    setScrolled(e.currentTarget.scrollTop > 8);
-  }, []);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (placingPin) scrollRef.current?.scrollTo({ top: 0, behavior: "smooth" });
+  }, [placingPin]);
   return (
-    <div className="pointer-events-none absolute inset-0 z-10 overflow-y-auto" onScroll={onScroll}>
-      <div
-        aria-hidden="true"
-        className={cn(
-          "sticky top-0 z-[1] h-[4.5rem] bg-gradient-to-b from-background from-60% to-transparent transition-opacity duration-200",
-          scrolled ? "opacity-100" : "opacity-0"
-        )}
-      />
-      {/* the cutout: the map underneath, with what it shows said in a chip */}
-      <div className="relative -mt-[4.5rem] h-[46vh] min-h-[16rem]">
+    <div ref={scrollRef} className="pointer-events-none absolute inset-0 z-10 overflow-y-auto">
+      {/* the cutout: the map underneath, with what it shows said in a chip.
+          Its size is mirrored in DashboardShell's viewPadding. */}
+      <div className="relative h-[46vh] min-h-[16rem]">
+        {/* onward: the same map, minute by minute */}
+        <button
+          type="button"
+          onClick={onOpenTimeline}
+          className="pointer-events-auto absolute right-3 top-3 flex h-11 items-center gap-2 rounded-xl bg-ink pl-3.5 pr-4 text-[14px] font-semibold tracking-tight text-white shadow-[0_2px_16px_-4px_rgb(45_49_66/0.35)] transition-colors hover:bg-ink/90 md:right-4 md:top-4"
+        >
+          <Play className="size-3.5" fill="currentColor" />
+          {tr.views.timeline}
+        </button>
         {/* Stacks on a phone, one line from md up. */}
         <div className="pointer-events-auto absolute bottom-3 left-3 flex max-w-[calc(100%-1.5rem)] flex-col gap-0.5 rounded-lg border bg-card/95 px-3 py-1.5 text-[11.5px] shadow-sm backdrop-blur-sm md:flex-row md:items-center md:gap-1.5">
           <span className="shrink-0 font-semibold text-foreground">{tr.summary.mapTitle}</span>

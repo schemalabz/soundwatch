@@ -143,7 +143,7 @@ export default function StatusPage() {
             href="/"
             className="inline-flex items-center gap-1.5 text-[12px] font-medium text-muted-foreground transition-colors hover:text-foreground"
           >
-            <ArrowLeft className="size-3.5" /> Χάρτης
+            <ArrowLeft className="size-3.5" /> Σύνοψη
           </Link>
           <Lockup size="sm" />
         </div>

@@ -57,7 +57,7 @@ function Stage({ stage, index }: { stage: AboutStage; index: number }) {
         )}
         {stage.id === "map" && (
           <Link
-            href="/"
+            href="/timeline"
             className="mt-1 inline-flex h-11 items-center self-start rounded-[10px] bg-sound px-[18px] text-sm font-bold text-ink no-underline"
           >
             {tr.how.openMap}
