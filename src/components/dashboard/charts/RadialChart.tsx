@@ -6,12 +6,21 @@
 // geometry, same hover behavior, same muting language as the timebar
 // (filtered-out slices collapse to a silver stub).
 //
+// Two channels, two scales. Colour is the absolute level ramp the map
+// circles use (orange means busy, wherever it appears). Radius is relative:
+// the chart's own range fills the ring, because the question these wheels
+// answer is «when is it louder?», and a day's hours sit within a few dB of
+// each other — on the absolute ramp they drew as one flat ring. The dB grid
+// rings are labelled so the spread is never read as more than it is, and a
+// range narrower than RANGE_MIN_SPAN_DB is not stretched to fill.
+//
 // The center is the readout: idle it presents the loudest slice, hovering
 // any slice inspects it. No tooltips floating over geometry.
 
 import { useMemo, useState } from "react";
-import { DEFAULT_STOPS, levelColor, paletteStops } from "@/lib/dashboard/levels";
+import { levelColor, paletteStops } from "@/lib/dashboard/levels";
 import { fmtDb } from "@/lib/dashboard/format";
+import { radialDomain, radialGrid } from "@/lib/dashboard/radial";
 
 export interface RadialSlice {
   label: string;
@@ -25,15 +34,6 @@ export interface RadialSlice {
   /** Draw this slice's label around the ring. */
   showLabel?: boolean;
 }
-
-// Radius shares the ramp with colour. These were 36 and 86 while levels.ts
-// moved to 35 and 100, so with the Μέγιστη metric an lmax_est of 92.7, 106.2
-// and 111.0 all drew the same maximum radius — every slice identical, which is
-// the exact saturation this branch set out to remove. Colour came from
-// levelColor on the new range, radius from the old one: two channels
-// disagreeing about the same slice.
-const DB_MIN = DEFAULT_STOPS.minDb;
-const DB_MAX = DEFAULT_STOPS.maxDb;
 
 function polar(cx: number, cy: number, r: number, deg: number): [number, number] {
   const rad = (deg * Math.PI) / 180;
@@ -72,8 +72,12 @@ export default function RadialChart({
   const step = 360 / n;
   const gap = n > 12 ? 1.6 : 2.4; // degrees between slices
 
+  const { lo, hi } = useMemo(
+    () => radialDomain(slices.filter((s) => !s.muted && s.value != null).map((s) => s.value as number)),
+    [slices],
+  );
   const radiusFor = (v: number) => {
-    const f = Math.min(1, Math.max(0, (v - DB_MIN) / (DB_MAX - DB_MIN)));
+    const f = Math.min(1, Math.max(0, (v - lo) / (hi - lo)));
     return rInner + 5 + f * (rOuter - rInner - 5);
   };
 
@@ -88,8 +92,7 @@ export default function RadialChart({
   const focus = hovered != null && slices[hovered].value != null ? hovered : loudest;
   const focusSlice = focus != null ? slices[focus] : null;
 
-  // dB grid rings at 50 / 70.
-  const gridLevels = [50, 70];
+  const gridLevels = radialGrid(lo, hi);
 
   return (
     <svg
@@ -154,6 +157,21 @@ export default function RadialChart({
           </g>
         );
       })}
+
+      {/* the grid's dB values, over the slices at the top, haloed to stay legible */}
+      {gridLevels.map((g) => (
+        <text
+          key={g}
+          x={cx + 2}
+          y={cy - radiusFor(g)}
+          textAnchor="start"
+          dominantBaseline="central"
+          className="fill-muted-foreground text-[7px] font-medium tabular-nums"
+          style={{ paintOrder: "stroke", stroke: "var(--card)", strokeWidth: 2.5, strokeLinejoin: "round" }}
+        >
+          {g}
+        </text>
+      ))}
 
       {/* center readout */}
       {focusSlice && focusSlice.value != null ? (
