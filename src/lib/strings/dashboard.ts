@@ -247,6 +247,7 @@ export const dashboardStrings = {
     liveExcluded: "Το «τώρα» δεν περιλαμβάνεται στα επιλεγμένα φίλτρα",
     play: "Αναπαραγωγή",
     pause: "Παύση",
+    buffering: "Φόρτωση δεδομένων…",
     speed: "Ταχύτητα αναπαραγωγής",
   },
 } as const;

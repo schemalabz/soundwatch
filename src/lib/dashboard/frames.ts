@@ -74,6 +74,19 @@ export function dropStaleRequests(inflight: Set<FrameRequest>, wanted: ReadonlyS
   }
 }
 
+/** A batch with no answer after this long is treated as failed. */
+export const FRAME_REQUEST_TIMEOUT_MS = 15_000;
+
+/**
+ * How long to leave the server alone after `failures` failed batches in a
+ * row: 2 s, 4 s, 8 s, then 10 s. Without it playback re-sent a full lookahead
+ * batch every second at a server that was already failing. The cap is also
+ * the longest a recovered server waits to be noticed, so it stays short.
+ */
+export function retryDelayMs(failures: number): number {
+  return Math.min(10_000, 1000 * 2 ** Math.max(1, failures));
+}
+
 const MAX_RESOLVED_FRAMES = 48;
 
 export class FrameStore {

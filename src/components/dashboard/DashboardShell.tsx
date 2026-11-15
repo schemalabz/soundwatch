@@ -185,6 +185,8 @@ export default function DashboardShell({ initialView = "map" }: { initialView?: 
   // and the clock waits for it (see the playback effect).
   const frameLoadingRef = useRef<((tMs: number) => boolean) | null>(null);
   const bufferingRef = useRef({ forMs: 0, since: 0, giveUpUntil: 0 });
+  // The same wait as state, for the play button's ring.
+  const [buffering, setBuffering] = useState(false);
   // Stable identity: MapCanvas keys its (create/destroy!) effect on the
   // onReady callback, and the shell re-renders every second — an inline
   // arrow here would tear the map down each tick. setState is stable.
@@ -342,9 +344,13 @@ export default function DashboardShell({ initialView = "map" }: { initialView?: 
       const tickMs = Date.now();
       if (upcoming != null && tickMs >= buffering.giveUpUntil && frameLoadingRef.current?.(upcoming)) {
         if (buffering.forMs !== upcoming) bufferingRef.current = { forMs: upcoming, since: tickMs, giveUpUntil: 0 };
-        if (tickMs - bufferingRef.current.since < MAX_BUFFER_HOLD_MS) return;
+        if (tickMs - bufferingRef.current.since < MAX_BUFFER_HOLD_MS) {
+          setBuffering(true);
+          return;
+        }
         bufferingRef.current = { forMs: 0, since: 0, giveUpUntil: tickMs + BUFFER_GIVE_UP_MS };
       }
+      setBuffering(false);
       setCursor((prev) => {
         const from = prev === "live" ? (segs[0]?.startMs ?? start) : prev;
         const next = advanceCursor(segs, from, stepMs);
@@ -361,7 +367,10 @@ export default function DashboardShell({ initialView = "map" }: { initialView?: 
         return next;
       });
     }, 1000);
-    return () => clearInterval(timer);
+    return () => {
+      clearInterval(timer);
+      setBuffering(false);
+    };
   }, [playing, speedIndex]);
 
   // Aggregate-over-the-filtered-set data feeds the summary's ranking: one
@@ -693,6 +702,7 @@ export default function DashboardShell({ initialView = "map" }: { initialView?: 
     filtered: filtered && !singleInterval,
     cursor,
     playing,
+    buffering: playing && buffering,
     speedIndex,
     liveAllowed,
     freshSecondsAgo: freshness?.fleet.newestSecondsAgo ?? null,

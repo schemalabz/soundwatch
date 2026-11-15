@@ -21,11 +21,13 @@
 import { memo, useEffect, useMemo, useReducer, useRef, useState, type RefObject } from "react";
 import type mapboxgl from "mapbox-gl";
 import {
+  FRAME_REQUEST_TIMEOUT_MS,
   FrameStore,
   dropStaleRequests,
   frameKey,
   frameWindowS,
   quantizeFrameMs,
+  retryDelayMs,
   upcomingFrameTimes,
   type FrameData,
   type FrameRequest,
@@ -446,6 +448,12 @@ function SensorLayer({ map, sensors, cursor, stepMs, segments, playing, metric, 
   // --- prefetcher: current frame + the playback path ahead, one batch ---
   const cursorQ = cursor === "live" ? "live" : quantizeFrameMs(cursor);
   const inflightRef = useRef(new Set<FrameRequest>());
+  // Failed batches back off: `until` gates the next attempt, and the timer
+  // bumps `retryTick` so the attempt happens even when nothing else changes
+  // (a paused playhead would otherwise sit on a frame that never loads).
+  const backoffRef = useRef({ failures: 0, until: 0 });
+  const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [retryTick, bumpRetry] = useReducer((v: number) => v + 1, 0);
   useEffect(() => {
     const store = storeRef.current;
     const inflight = inflightRef.current;
@@ -474,9 +482,16 @@ function SensorLayer({ map, sensors, cursor, stepMs, segments, playing, metric, 
     // starve: first play, post-skip, post-scrub all hit this path).
     const urgent = missing.includes(times[0]) || (times.length > 1 && missing.includes(times[1]));
     if (!urgent && missing.length < 3) return;
+    if (Date.now() < backoffRef.current.until) return; // the retry timer re-runs this effect
     const req: FrameRequest = { keys: missing.map((t) => frameKey(t, windowS, metric)), controller: new AbortController() };
     for (const k of req.keys) store.markPending(k);
     inflight.add(req);
+    // A request that never answers would keep its frames "pending" for good.
+    let failed = false;
+    const timeout = setTimeout(() => {
+      failed = true;
+      req.controller.abort();
+    }, FRAME_REQUEST_TIMEOUT_MS);
     fetch(`/api/frames?at=${missing.join(",")}&window=${windowS}&metric=${metric}`, { signal: req.controller.signal })
       .then((r) => {
         if (!r.ok) throw new Error(`frames ${r.status}`);
@@ -484,28 +499,48 @@ function SensorLayer({ map, sensors, cursor, stepMs, segments, playing, metric, 
       })
       .then((body: { frames: Record<string, FrameData> }) => {
         missing.forEach((t, i) => store.set(req.keys[i], body.frames[String(t)] ?? {}));
+        backoffRef.current = { failures: 0, until: 0 };
         bumpVersion();
       })
       .catch(() => {
-        // Aborted or failed: free the markers so a later step can retry.
+        // Free the markers so the frames can be asked for again.
         for (const k of req.keys) store.clearPending(k);
+        // A batch we cancelled ourselves (the playhead left it) is not a
+        // failure. A real one — network, non-2xx, timeout — backs off.
+        if (req.controller.signal.aborted && !failed) return;
+        const failures = backoffRef.current.failures + 1;
+        const delay = retryDelayMs(failures);
+        backoffRef.current = { failures, until: Date.now() + delay };
+        if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
+        retryTimerRef.current = setTimeout(bumpRetry, delay);
       })
-      .finally(() => inflight.delete(req));
-  }, [cursor, stepMs, segments, playing, metric, hasOverride]);
+      .finally(() => {
+        clearTimeout(timeout);
+        inflight.delete(req);
+      });
+  }, [cursor, stepMs, segments, playing, metric, hasOverride, retryTick]);
   useEffect(() => {
     const store = storeRef.current;
     const inflight = inflightRef.current;
-    return () => dropStaleRequests(inflight, new Set(), store);
+    return () => {
+      dropStaleRequests(inflight, new Set(), store);
+      if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
+    };
   }, []);
 
-  // Only a frame that is being fetched holds the clock. One nobody asked for
-  // (or whose request failed) must not: stepping onto it is what triggers its
-  // fetch.
+  // A frame holds the clock while it is being fetched, or while it is missing
+  // and a retry is scheduled. One nobody asked for must not: stepping onto it
+  // is what triggers its fetch.
   useEffect(() => {
     if (!frameLoadingRef) return;
     const store = storeRef.current;
     const windowS = frameWindowS(stepMs);
-    frameLoadingRef.current = hasOverride ? null : (tMs) => store.isPending(frameKey(tMs, windowS, metric));
+    frameLoadingRef.current = hasOverride
+      ? null
+      : (tMs) => {
+          const key = frameKey(tMs, windowS, metric);
+          return store.isPending(key) || (!store.has(key) && Date.now() < backoffRef.current.until);
+        };
     return () => {
       frameLoadingRef.current = null;
     };

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { FrameStore, dropStaleRequests, frameKey, frameWindowS, quantizeFrameMs, upcomingFrameTimes, type FrameRequest } from "./frames";
+import { FrameStore, dropStaleRequests, frameKey, frameWindowS, quantizeFrameMs, retryDelayMs, upcomingFrameTimes, type FrameRequest } from "./frames";
 import { levelColor, levelScale, DEFAULT_STOPS, audibleRadiusM, metersPerPixel } from "./levels";
 
 const HOUR = 3_600_000;
@@ -107,6 +107,12 @@ describe("dropStaleRequests", () => {
     store.set(req.keys[0], { a: { laeq: 60, n: 1 } });
     dropStaleRequests(inflight, new Set(), store);
     expect(store.get(req.keys[0])).toEqual({ a: { laeq: 60, n: 1 } });
+  });
+});
+
+describe("retryDelayMs", () => {
+  it("doubles from 2 s and stops at 10 s", () => {
+    expect([1, 2, 3, 4, 5, 20].map(retryDelayMs)).toEqual([2000, 4000, 8000, 10_000, 10_000, 10_000]);
   });
 });
 
