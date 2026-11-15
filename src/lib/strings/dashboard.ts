@@ -67,7 +67,6 @@ export const dashboardStrings = {
     api: "API",
     apiTitle: "Δημόσιο API — τεκμηρίωση και δοκιμή",
     status: "Κατάσταση",
-    soon: "σύντομα",
   },
   modes: {
     instants: "Στιγμιότυπα",

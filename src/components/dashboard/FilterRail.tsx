@@ -467,14 +467,14 @@ function FilterRail(p: FilterRailProps) {  devRenderCount("FilterRail");
         <Link href="/about" className="font-medium text-muted-foreground transition-colors hover:text-foreground">
           {tr.footer.about}
         </Link>
-        {([tr.footer.privacy, tr.footer.terms] as string[]).map((label) => (
-          <span key={label} className="cursor-default" title={tr.footer.soon}>
-            {label}
-          </span>
-        ))}
-        {/* The two that actually go somewhere, weighted so they read as links
-            among the placeholders. /api/docs is a route handler serving Scalar,
-            not a page — a plain anchor, not next/link. */}
+        <Link href="/privacy" className="font-medium text-muted-foreground transition-colors hover:text-foreground">
+          {tr.footer.privacy}
+        </Link>
+        <Link href="/terms" className="font-medium text-muted-foreground transition-colors hover:text-foreground">
+          {tr.footer.terms}
+        </Link>
+        {/* /api/docs is a route handler serving Scalar, not a page — a plain
+            anchor, not next/link. */}
         <a
           href="/api/docs"
           title={tr.footer.apiTitle}

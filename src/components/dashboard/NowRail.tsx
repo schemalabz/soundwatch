@@ -258,8 +258,12 @@ function NowRail(p: NowRailProps) {
         <Link href="/about" className="font-semibold text-foreground">
           {tr.footer.about}
         </Link>
-        <span className="text-muted-foreground">{tr.footer.privacy}</span>
-        <span className="text-muted-foreground">{tr.footer.terms}</span>
+        <Link href="/privacy" className="text-muted-foreground hover:text-foreground">
+          {tr.footer.privacy}
+        </Link>
+        <Link href="/terms" className="text-muted-foreground hover:text-foreground">
+          {tr.footer.terms}
+        </Link>
         <a href="/api/docs" title={tr.footer.apiTitle} className="text-muted-foreground hover:text-foreground">
           {tr.footer.api}
         </a>
