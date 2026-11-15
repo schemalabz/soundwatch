@@ -10,6 +10,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { dashboardStrings as tr, LOCALE } from "@/lib/strings/dashboard";
 import { Clock3, SlidersHorizontal } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -35,8 +36,9 @@ import {
   quantizeFrameMs,
   type FrameData,
 } from "@/lib/dashboard/frames";
-import { nextAthensMidnight } from "@/lib/dashboard/time";
+import { ATHENS_TZ, nextAthensMidnight } from "@/lib/dashboard/time";
 import { countVersusUsual, usualWindow } from "@/lib/dashboard/usual";
+import { toggleCompare } from "@/lib/dashboard/compare";
 import type { FreshnessResponse } from "@/types/freshness";
 import type { DeparturesResponse, UsualBand, UsualDayResponse } from "@/lib/api/dashboard";
 import { reverseGeocode } from "@/lib/dashboard/geocode";
@@ -48,6 +50,7 @@ import SensorLayer, { type SensorMeta } from "./SensorLayer";
 import LocationLayer from "./LocationLayer";
 import SensorPane from "./SensorPane";
 import CurrentDate from "./CurrentDate";
+import MapLegend from "./MapLegend";
 import SimulatedBanner from "./SimulatedBanner";
 import SkipFlash, { SKIP_HOLD_MS, type SkipEvent } from "./SkipFlash";
 import Timebar, { PLAYBACK_SPEEDS } from "./Timebar";
@@ -72,6 +75,9 @@ const VIEW_TITLE: Record<DashboardView, string> = {
   map: siteStrings.title,
   summary: pageTitle(siteStrings.summary.title),
 };
+const scopeClockFmt = new Intl.DateTimeFormat(LOCALE, { timeZone: ATHENS_TZ, hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
+const scopeDayFmt = new Intl.DateTimeFormat(LOCALE, { timeZone: ATHENS_TZ, weekday: "short", day: "numeric", month: "short" });
+
 function viewForPath(pathname: string): DashboardView {
   return pathname.replace(/\/+$/, "") === VIEW_PATH.summary ? "summary" : "map";
 }
@@ -100,6 +106,8 @@ export default function DashboardShell({ initialView = "map" }: { initialView?: 
   // A metric mention elsewhere is being hovered — the rail picker lights up.
   const [metricGlow, setMetricGlow] = useState(false);
   const [aggKey, setAggKey] = useState<AggKey>("laeq");
+  // The places held side by side on the summary, in the order they were added.
+  const [compareIds, setCompareIds] = useState<string[]>([]);
   // Tagged with the query that produced it: while a new filter's answer is
   // on its way, the ranking shows as stale instead of silently old.
   const [agg, setAgg] = useState<{
@@ -480,6 +488,9 @@ export default function DashboardShell({ initialView = "map" }: { initialView?: 
     }));
   }, []);
 
+  const onCompareToggle = useCallback((id: string) => setCompareIds((prev) => toggleCompare(prev, id)), []);
+  const onCompareClear = useCallback(() => setCompareIds([]), []);
+
   const onClosePane = useCallback(() => setSelectedSensorId(null), []);
 
   const onGoToMap = useCallback(
@@ -538,6 +549,16 @@ export default function DashboardShell({ initialView = "map" }: { initialView?: 
   const stepMs = PLAYBACK_SPEEDS[speedIndex].simSecondsPerRealSecond * 1000;
   const windowS = frameWindowS(stepMs);
 
+  // What each lens covers, said on its tab: the moment the map shows (the
+  // frame's trailing window) and the period the summary aggregates.
+  const viewScope = useMemo(() => {
+    const range = `${scopeClockFmt.format(cursorMinute - windowS * 1000)}–${scopeClockFmt.format(cursorMinute)}`;
+    return {
+      map: isLive ? tr.viewScope.now(range) : tr.viewScope.moment(scopeDayFmt.format(cursorMinute), range),
+      summary: filterQualifiers,
+    };
+  }, [cursorMinute, windowS, isLive, filterQualifiers]);
+
   const timebarProps = {
     rangeStartMs: domainStartMs,
     nowMs: domainEndMs,
@@ -593,6 +614,7 @@ export default function DashboardShell({ initialView = "map" }: { initialView?: 
         usual={usualForHour}
         departures={departuresShown}
         freshness={freshness}
+        showLegend={isMobile === true}
         onJumpTo={onJumpTo}
         onSensorClick={setSelectedSensorId}
       />
@@ -651,6 +673,9 @@ export default function DashboardShell({ initialView = "map" }: { initialView?: 
                 nowMs={nowMinute}
                 onSensorClick={setSelectedSensorId}
                 onMetricRefHover={setMetricGlow}
+                compareIds={compareIds}
+                onCompareToggle={onCompareToggle}
+                onCompareClear={onCompareClear}
               />
             )}
             {selectedSensorId && (
@@ -665,6 +690,10 @@ export default function DashboardShell({ initialView = "map" }: { initialView?: 
                 onGoToMap={view !== "map" ? onGoToMap : undefined}
               />
             )}
+            {/* the key to the circles: on the map on desktop, in the sheet on phones */}
+            {view === "map" && isMobile === false && (
+              <MapLegend className="pointer-events-auto absolute bottom-[6.25rem] left-4 z-10" />
+            )}
             {view === "map" && <SkipFlash skip={skip} />}
             {view === "map" && (
               <CurrentDate
@@ -675,10 +704,18 @@ export default function DashboardShell({ initialView = "map" }: { initialView?: 
             )}
 
             {/* view switcher: the top-level lens */}
-            <div className="pointer-events-none absolute left-1/2 top-3 z-10 -translate-x-1/2 md:top-4">
+            {/* Centred on desktop; on a phone it sits right of the sheet button. */}
+            <div
+              className={cn(
+                "pointer-events-none absolute top-3 z-10 md:top-4",
+                isMobile === true ? "right-3" : "left-1/2 -translate-x-1/2"
+              )}
+            >
               <ViewSwitcher
                 view={view}
                 compact={isMobile === true}
+                scope={viewScope}
+                live={isLive}
                 onViewChange={onViewChange}
               />
             </div>

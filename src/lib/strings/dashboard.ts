@@ -73,9 +73,36 @@ export const dashboardStrings = {
     instants: "Στιγμιότυπα",
     aggregate: "Συγκεντρωτικά",
   },
+  // The lenses are named for the time they cover, because that is the whole
+  // difference between them: both draw circles on the same map.
   views: {
-    map: "Χάρτης",
-    summary: "Σύνοψη",
+    map: "Μια στιγμή",
+    summary: "Μια περίοδος",
+  },
+  /** Phones: one word each, beside the sheet button. */
+  viewsShort: {
+    map: "Στιγμή",
+    summary: "Περίοδος",
+  },
+  viewHints: {
+    map: "Τι ακουγόταν μια συγκεκριμένη στιγμή: τώρα, ή όποτε πας με τη γραμμή του χρόνου",
+    summary: "Μέσοι όροι για όλες τις ώρες και τις μέρες που κρατούν τα φίλτρα",
+  },
+  /** The second line of each lens tab: the time it is showing. */
+  viewScope: {
+    now: (range: string) => `Τώρα · ${range}`,
+    moment: (day: string, range: string) => `${day} · ${range}`,
+  },
+  // The key to the circles. The caveat is LEVEL_CAVEAT cut to a legend's
+  // width; the full wording stays one click away in the metric picker.
+  legend: {
+    title: "Στάθμη θορύβου",
+    unit: "σχετικά dB",
+    quiet: "ήσυχα",
+    loud: "θορυβώδη",
+    size: "μέγεθος: πόσο μακριά ακούγεται",
+    pill: "dB πάνω από το συνηθισμένο της",
+    caveat: "Χωρίς βαθμονόμηση: για σύγκριση θέσεων και ωρών, όχι με όρια θορύβου.",
   },
   // The map's rail: a moment, and how each place compares with its own usual.
   // The rule is src/lib/server/usual.ts; the words for it live here.
@@ -130,6 +157,34 @@ export const dashboardStrings = {
     empty: "Χωρίς δεδομένα για τα επιλεγμένα φίλτρα.",
     showAll: (hidden: number) => (hidden === 1 ? "Και 1 ακόμη θέση" : `Και οι ${hidden} ακόμη θέσεις`),
     showLess: "Μόνο οι πρώτες 5",
+  },
+  // The comparison: up to four places from the ranking, over the same period.
+  compare: {
+    title: "Σύγκριση θέσεων",
+    subtitleEmpty: "Δύο ή περισσότερες θέσεις, η μία δίπλα στην άλλη, για την ίδια περίοδο",
+    empty: (max: number) => `Πρόσθεσε έως ${max} θέσεις με το + δίπλα σε κάθε γραμμή της κατάταξης, για να δεις πότε και πόσο διαφέρουν.`,
+    add: (name: string) => `Προσθήκη στη σύγκριση: ${name}`,
+    remove: (name: string) => `Αφαίρεση από τη σύγκριση: ${name}`,
+    full: (max: number) => `Η σύγκριση χωράει έως ${max} θέσεις`,
+    clear: "Καθαρισμός σύγκρισης",
+    network: "όλες οι θέσεις μαζί",
+    dayTitle: "Το εικοσιτετράωρο κάθε θέσης",
+    dayCaption: "στάθμη ανά ώρα της ημέρας, σε όλη την περίοδο",
+    dayHint: "Πέρνα πάνω από το γράφημα για τις τιμές κάθε ώρας.",
+    weekTitle: "Η εβδομάδα κάθε θέσης",
+    weekCaption: "Δευτέρα ως Κυριακή, 00:00 ως 24:00",
+    sharedScale: "ίδια κλίμακα χρώματος σε όλες τις θέσεις",
+  },
+  // The week x hour heatmap. Its colour is relative to the grid, and says so.
+  heat: {
+    title: "Η εβδομάδα, ώρα με την ώρα",
+    caption: "κάθε κελί: μία ώρα μιας μέρας της εβδομάδας, σε όλη την περίοδο",
+    loudest: "Πιο θορυβώδης ώρα",
+    quietest: "πιο ήσυχη",
+    quieter: "πιο ήσυχα",
+    louder: "πιο θορυβώδη",
+    relative: "το χρώμα απλώνεται ανάμεσα στην πιο ήσυχη και την πιο θορυβώδη ώρα αυτού του πίνακα",
+    excluded: "εκτός φίλτρων",
   },
   charts: {
     timeline: "Χρονική εξέλιξη",

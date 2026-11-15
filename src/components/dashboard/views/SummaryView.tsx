@@ -1,7 +1,7 @@
 "use client";
 
-// Σύνοψη: the filtered time-set on the map, ranked, then charted, in one
-// scroll — what used to be two lenses (Κατάταξη, Γραφήματα). The filter rail
+// Σύνοψη: the filtered time-set on the map, ranked, compared place against
+// place, then charted, in one scroll — what used to be two lenses (Κατάταξη, Γραφήματα). The filter rail
 // beside it is what all three answer to.
 //
 // The map at the top is not a second map: this overlay leaves its top
@@ -19,6 +19,7 @@ import type { DashboardFilters } from "@/lib/dashboard/filters";
 import type { SensorMeta } from "../SensorLayer";
 import Leaderboard from "./Leaderboard";
 import ChartsView from "./ChartsView";
+import CompareSection from "./CompareSection";
 import { devRenderCount } from "@/lib/dashboard/devtools";
 
 
@@ -34,6 +35,9 @@ function SummaryView({
   nowMs,
   onSensorClick,
   onMetricRefHover,
+  compareIds,
+  onCompareToggle,
+  onCompareClear,
 }: {
   aggData: Record<string, Record<AggKey, number> & { n: number }> | null;
   /** The filters moved and the ranking for them has not landed yet. */
@@ -48,6 +52,10 @@ function SummaryView({
   nowMs: number;
   onSensorClick: (id: string) => void;
   onMetricRefHover?: (on: boolean) => void;
+  /** The places held side by side in the comparison (≤ MAX_COMPARE). */
+  compareIds: readonly string[];
+  onCompareToggle: (id: string) => void;
+  onCompareClear: () => void;
 }) {
   devRenderCount("SummaryView");
   // Once the content has scrolled up under the floating lens switcher, a
@@ -85,6 +93,20 @@ function SummaryView({
           metric={metric}
           sensors={sensors}
           onSensorClick={onSensorClick}
+          onMetricRefHover={onMetricRefHover}
+          compareIds={compareIds}
+          onCompareToggle={onCompareToggle}
+        />
+        <div className="mx-auto my-6 h-px max-w-4xl bg-border" />
+        <CompareSection
+          ids={compareIds}
+          sensors={sensors}
+          aggQuery={aggQuery}
+          metric={metric}
+          filters={filters}
+          scope={filterQualifiers}
+          onRemove={onCompareToggle}
+          onClear={onCompareClear}
           onMetricRefHover={onMetricRefHover}
         />
         <div className="mx-auto my-6 h-px max-w-4xl bg-border" />

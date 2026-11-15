@@ -127,7 +127,7 @@ function makeMarkerElement(): { root: HTMLDivElement; circle: HTMLSpanElement; l
     "transform:scale(0.35)",
     "opacity:0.6",
     "will-change:transform,opacity",
-    `transition:transform ${PLAYBACK_TWEEN_MS}ms linear,border-color ${PLAYBACK_TWEEN_MS}ms linear,opacity 400ms linear`,
+    `transition:transform ${PLAYBACK_TWEEN_MS}ms linear,border-color ${PLAYBACK_TWEEN_MS}ms linear,opacity 400ms linear,background-color ${PLAYBACK_TWEEN_MS}ms linear`,
   ].join(";");
   // dB value, centered over (not inside) the scaled ring so text never warps.
   const label = document.createElement("span");
@@ -184,7 +184,8 @@ function makeMarkerElement(): { root: HTMLDivElement; circle: HTMLSpanElement; l
  * quiet difference stops being visible and the target stops being clickable;
  * above MAX_PX one sensor swallows the city.
  */
-const MIN_PX = 11;
+const MIN_PX = 12;
+const FILL_PERCENT = 24;
 const MAX_PX = 900;
 
 function scaleForLevel(laeq: number, mPerPx: number): number {
@@ -211,11 +212,12 @@ function applyValue(
   timing: "linear" | "ease" = "linear"
 ): void {
   const fn = timing === "linear" ? "linear" : "cubic-bezier(0.25,0,0.2,1)";
-  h.circle.style.transitionDuration = `${tweenMs}ms,${tweenMs}ms,400ms`;
-  h.circle.style.transitionTimingFunction = `${fn},${fn},linear`;
+  h.circle.style.transitionDuration = `${tweenMs}ms,${tweenMs}ms,400ms,${tweenMs}ms`;
+  h.circle.style.transitionTimingFunction = `${fn},${fn},linear,${fn}`;
   h.label.style.transitionDuration = `${tweenMs}ms,300ms`;
   if (laeq == null) {
     h.circle.style.borderColor = "color-mix(in srgb, var(--sw-silver) 55%, transparent)";
+    h.circle.style.backgroundColor = "transparent";
     h.circle.style.transform = "scale(0.35)";
     h.circle.style.borderWidth = `${(1.5 / 0.35).toFixed(3)}px`;
     h.circle.style.opacity = "0.6";
@@ -226,6 +228,10 @@ function applyValue(
     const scale = scaleForLevel(laeq, mPerPx);
     const color = levelColor(laeq, stops);
     h.circle.style.borderColor = color;
+    // A tint of the ring's own colour: at city zoom the rings are a dozen
+    // pixels wide and a 1.5 px outline alone disappears into the streets.
+    // Light enough that overlapping circles and the map stay readable.
+    h.circle.style.backgroundColor = `color-mix(in srgb, ${color} ${FILL_PERCENT}%, transparent)`;
     h.circle.style.transform = `scale(${scale.toFixed(3)})`;
     // transform scales the border with everything else, so a 40x circle would
     // get a 60px rim. Counter-scale to keep the stroke visually constant.

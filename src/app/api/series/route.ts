@@ -9,8 +9,8 @@ import { BIN_LO, BIN_HI, BIN_COUNT } from "@/lib/server/levelBins";
 import type { SeriesResponse } from "@/lib/api/dashboard";
 
 // Grouped series over the FILTERED time-set, network-wide, for the charts
-// view: hour-of-day (24), day-of-week (7), month (12), and a time series at
-// the requested resolution.
+// view: hour-of-day (24), day-of-week (7), month (12), the week's hours
+// (7 x 24, the heatmap), and a time series at the requested resolution.
 //
 // TWO sources, one rollup. At an hour or coarser the rows come from the
 // readings_hour_bins continuous aggregate — a small scan at any domain
@@ -126,6 +126,7 @@ export async function GET(req: NextRequest) {
     hours: new Map<number, BinAccumulator>(),
     dows: new Map<number, BinAccumulator>(),
     months: new Map<number, BinAccumulator>(),
+    dowHours: new Map<number, BinAccumulator>(),
     timeline: new Map<number, BinAccumulator>(),
   };
   const into = (map: Map<number, BinAccumulator>, key: number, row: BinSqlRow) => {
@@ -157,6 +158,7 @@ export async function GET(req: NextRequest) {
     into(dims.hours, info.hod, row);
     into(dims.dows, info.dow, row);
     into(dims.months, info.mon + 1, row); // 1-12 on the wire, matching /api/aggregate
+    into(dims.dowHours, info.dow * 24 + info.hod, row);
     into(dims.timeline, info.tKey, row);
   }
 
@@ -175,6 +177,7 @@ export async function GET(req: NextRequest) {
     hours: emit(dims.hours),
     dows: emit(dims.dows),
     months: emit(dims.months),
+    dowHours: emit(dims.dowHours),
     timeline,
   };
   return NextResponse.json(payload);
