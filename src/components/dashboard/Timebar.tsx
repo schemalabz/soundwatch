@@ -80,6 +80,9 @@ function useCursorLabel(p: TimebarProps): string {
         month: "short",
         hour: "2-digit",
         minute: "2-digit",
+        // 24-hour, like every other clock on the page: without it the Greek
+        // locale answers «04:03 μ.μ.» beside a chip that says 16:03.
+        hourCycle: "h23",
       }).format(cursorMs),
     [p.locale, cursorMs]
   );

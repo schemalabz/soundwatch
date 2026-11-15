@@ -110,7 +110,9 @@ export default function WeekHeatmap({
       role="img"
       aria-label={tr.heat.title}
       className="w-full select-none"
-      onMouseLeave={() => {
+      // A finger that lifts keeps its cell read out; a mouse that leaves clears it.
+      onPointerLeave={(e) => {
+        if (e.pointerType !== "mouse") return;
         setHovered(null);
         onHover?.(null);
       }}
@@ -130,10 +132,11 @@ export default function WeekHeatmap({
         {rows.map((row) => (
           <div
             key={row.dow}
-            className={cn("grid items-center", mini ? "grid-cols-[1rem_repeat(24,minmax(0,1fr))] gap-px" : "grid-cols-[2.25rem_repeat(24,minmax(0,1fr))] gap-0.5")}
+            className={cn("grid items-center", mini ? "grid-cols-[1.25rem_repeat(24,minmax(0,1fr))] gap-px" : "grid-cols-[2.25rem_repeat(24,minmax(0,1fr))] gap-0.5")}
           >
             <span className={cn("text-muted-foreground", mini ? "text-[8px] leading-[10px]" : "text-[10.5px]")}>
-              {mini ? DOW_SHORT[row.dow].slice(0, 1) : DOW_SHORT[row.dow]}
+              {/* Two letters: one cannot tell Τρίτη from Τετάρτη, or Πέμπτη from Παρασκευή. */}
+              {mini ? DOW_SHORT[row.dow].slice(0, 2) : DOW_SHORT[row.dow]}
             </span>
             {row.cells.map((c) => {
               const key = dowHourKey(row.dow, c.hour);
@@ -142,7 +145,7 @@ export default function WeekHeatmap({
                 <span
                   key={c.hour}
                   title={has ? `${weekCellLabel(row.dow, c.hour)} · ${fmtDb(c.value!)} dB · ${tr.board.measurements(fmtInt(c.n))}` : undefined}
-                  onMouseEnter={() => {
+                  onPointerEnter={() => {
                     setHovered(key);
                     onHover?.(has ? { dow: row.dow, hour: c.hour, value: c.value!, n: c.n } : null);
                   }}

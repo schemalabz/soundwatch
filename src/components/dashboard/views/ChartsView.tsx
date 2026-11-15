@@ -25,7 +25,7 @@ import WeekHeatmap, { weekCellLabel, weekExtremes, type WeekCell } from "../char
 import { fmtDb, fmtInt } from "@/lib/dashboard/format";
 import { heatGradient, heatScale } from "@/lib/dashboard/heat";
 import type { SeriesBucketData, SeriesResponse } from "@/lib/api/dashboard";
-import { BUCKETS, bucketViable, defaultBucket } from "@/lib/dashboard/buckets";
+import { BUCKETS, bucketViable, chartDefaultBucket } from "@/lib/dashboard/buckets";
 import { devRenderCount } from "@/lib/dashboard/devtools";
 
 // Slow enough not to hammer a raw-readings query, fast enough that a
@@ -216,7 +216,7 @@ function ChartsView({
   // buckets across 90 days.
   const [chosenBucket, setChosenBucket] = useState<string | null>(null);
   const chosenViable = BUCKETS.find((b) => b.id === chosenBucket && bucketViable(domainMs, b.seconds));
-  const bucket = chosenViable ?? defaultBucket(domainMs);
+  const bucket = chosenViable ?? chartDefaultBucket(domainMs);
 
   const query = `${aggQuery}&bucket=${bucket.id}`;
   const series = result?.query === query ? result.data : null;

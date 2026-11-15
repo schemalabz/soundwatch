@@ -8,7 +8,7 @@
 // The readout under the chart is the hovered hour (idle: nothing), one value
 // per line, in the line's colour. No floating tooltip over the geometry.
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, type PointerEvent } from "react";
 import { fmtDb } from "@/lib/dashboard/format";
 import { useMeasuredWidth } from "./useMeasuredWidth";
 
@@ -22,7 +22,7 @@ export interface ProfileLine {
   values: (number | null)[];
 }
 
-const H = 190;
+const DEFAULT_H = 190;
 const PAD_L = 26;
 const PAD_R = 8;
 const PAD_T = 10;
@@ -34,13 +34,17 @@ export default function ProfileChart({
   lines,
   hourMask,
   idleHint,
+  height,
 }: {
   lines: ProfileLine[];
   /** Hours the filters admit; excluded hours are shaded. */
   hourMask?: boolean[];
   /** Shown in the readout row while nothing is hovered. */
   idleHint: string;
+  /** Chart height in px (defaults to the comparison's size). */
+  height?: number;
 }) {
+  const H = height ?? DEFAULT_H;
   const [ref, width] = useMeasuredWidth();
   const [hour, setHour] = useState<number | null>(null);
 
@@ -79,7 +83,14 @@ export default function ProfileChart({
     const ticks: number[] = [];
     for (let v = lo; v <= hi; v += 5) ticks.push(v);
     return { x, y, paths, ticks, innerW };
-  }, [width, lines]);
+  }, [width, lines, H]);
+
+  const readHour = (e: PointerEvent<SVGSVGElement>) => {
+    if (!geom) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const h = Math.floor(((e.clientX - rect.left - PAD_L) / geom.innerW) * 24);
+    setHour(h >= 0 && h < 24 ? h : null);
+  };
 
   return (
     <div ref={ref} className="w-full">
@@ -89,12 +100,15 @@ export default function ProfileChart({
           height={H}
           role="img"
           className="block overflow-visible"
-          onMouseMove={(e) => {
-            const rect = e.currentTarget.getBoundingClientRect();
-            const h = Math.floor(((e.clientX - rect.left - PAD_L) / geom.innerW) * 24);
-            setHour(h >= 0 && h < 24 ? h : null);
+          // Pointer events, so a tap or a sideways drag of a finger reads the
+          // chart like a mouse does. A finger that lifts keeps its readout
+          // (there is no hover to come back to); a mouse that leaves clears it.
+          style={{ touchAction: "pan-y" }}
+          onPointerDown={readHour}
+          onPointerMove={readHour}
+          onPointerLeave={(e) => {
+            if (e.pointerType === "mouse") setHour(null);
           }}
-          onMouseLeave={() => setHour(null)}
         >
           {hourMask?.map((on, h) =>
             on ? null : (

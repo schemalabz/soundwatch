@@ -100,7 +100,7 @@ export const dashboardStrings = {
     unit: "σχετικά dB",
     quiet: "ήσυχα",
     loud: "θορυβώδη",
-    size: "μέγεθος: πόσο μακριά ακούγεται",
+    size: "μεγαλύτερος κύκλος: πιο δυνατός ήχος",
     pill: "dB πάνω από το συνηθισμένο της",
     caveat: "Χωρίς βαθμονόμηση: για σύγκριση θέσεων και ωρών, όχι με όρια θορύβου.",
   },
@@ -116,7 +116,7 @@ export const dashboardStrings = {
     above: (n: number) => (n === 1 ? "1 πάνω από το συνηθισμένο της" : `${n} πάνω από το συνηθισμένο τους`),
     below: (n: number) => (n === 1 ? "1 κάτω από το συνηθισμένο της" : `${n} κάτω από το συνηθισμένο τους`),
     allUsual: "όλες όπως συνήθως",
-    metricLine: (windowLabel: string) => `σχετική στάθμη Μέση (LAeq) · ${windowLabel}`,
+    metricLine: (windowLabel: string) => `μέση στάθμη ${windowLabel}, σε σχετικά dB`,
     /** The list's label, with its day on a line of its own underneath. */
     departuresToday: "Ξεχώρισαν σήμερα",
     departuresThatDay: "Ξεχώρισαν εκείνη τη μέρα",
@@ -132,7 +132,7 @@ export const dashboardStrings = {
     silent: (n: number) => (n === 1 ? "1 σιωπηλή από το πρωί" : `${n} σιωπηλές από το πρωί`),
     offline: (n: number) => `${n} εκτός λειτουργίας`,
     definition:
-      "Συνηθισμένο = το εύρος L90–L10 της ίδιας ώρας, το ίδιο είδος ημέρας, τις τελευταίες 4 εβδομάδες, για την ίδια μονάδα. «Ξεχώρισε» = βγήκε έξω από αυτό το εύρος.",
+      "«Συνηθισμένο» είναι το εύρος όπου κινείται η ίδια θέση την ίδια ώρα, σε ίδιο είδος ημέρας (καθημερινή ή ΣΚ), τις τελευταίες 4 εβδομάδες (L90–L10). «Ξεχώρισε» όποια βγήκε έξω από αυτό.",
     loading: "…",
   },
   usual: {
@@ -149,8 +149,8 @@ export const dashboardStrings = {
     noProfile: "Χωρίς αρκετό ιστορικό για σύγκριση.",
   },
   board: {
-    title: "Κατάταξη αισθητήρων",
-    subtitlePrefix: "Από τον πιο θορυβώδη στον πιο ήσυχο · ",
+    title: "Κατάταξη θέσεων",
+    subtitlePrefix: "Από την πιο θορυβώδη στην πιο ήσυχη · ",
     /** Joined after the metric: what the ranking is OF, in the rail's words. */
     subtitleScope: (qualifiers: string) => ` · ${qualifiers}`,
     measurements: (n: string) => `${n} μετρήσεις`,
@@ -170,10 +170,22 @@ export const dashboardStrings = {
     network: "όλες οι θέσεις μαζί",
     dayTitle: "Το εικοσιτετράωρο κάθε θέσης",
     dayCaption: "στάθμη ανά ώρα της ημέρας, σε όλη την περίοδο",
-    dayHint: "Πέρνα πάνω από το γράφημα για τις τιμές κάθε ώρας.",
+    dayHint: "Πέρνα ή πάτα πάνω στο γράφημα για τις τιμές κάθε ώρας.",
     weekTitle: "Η εβδομάδα κάθε θέσης",
     weekCaption: "Δευτέρα ως Κυριακή, 00:00 ως 24:00",
     sharedScale: "ίδια κλίμακα χρώματος σε όλες τις θέσεις",
+  },
+  // One place over the period, opened inside its ranking row.
+  place: {
+    rank: (n: number, total: number) => (n === 1 ? `Η πιο θορυβώδης από ${total} θέσεις` : `${n}η πιο θορυβώδης από ${total} θέσεις`),
+    dayTitle: "Το εικοσιτετράωρό της",
+    dayHint: "Πέρνα ή πάτα πάνω στο γράφημα για τις τιμές.",
+    weekTitle: "Η εβδομάδα της",
+    quietest: "Πιο ήσυχη ώρα",
+    goToMoment: "Δες την τώρα στον χάρτη",
+    addToCompare: "Στη σύγκριση",
+    inCompare: "Στη σύγκριση",
+    open: (name: string) => `Άνοιγμα: ${name}`,
   },
   // The week x hour heatmap. Its colour is relative to the grid, and says so.
   heat: {

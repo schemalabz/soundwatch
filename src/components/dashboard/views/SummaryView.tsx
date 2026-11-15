@@ -38,6 +38,9 @@ function SummaryView({
   compareIds,
   onCompareToggle,
   onCompareClear,
+  selectedId,
+  onSelect,
+  onGoToMap,
 }: {
   aggData: Record<string, Record<AggKey, number> & { n: number }> | null;
   /** The filters moved and the ranking for them has not landed yet. */
@@ -56,6 +59,11 @@ function SummaryView({
   compareIds: readonly string[];
   onCompareToggle: (id: string) => void;
   onCompareClear: () => void;
+  /** The place opened in the ranking (a row, or its circle on the map above). */
+  selectedId: string | null;
+  onSelect: (id: string | null) => void;
+  /** Switch to the moment and show this place there. */
+  onGoToMap: (id: string) => void;
 }) {
   devRenderCount("SummaryView");
   // Once the content has scrolled up under the floating lens switcher, a
@@ -96,6 +104,11 @@ function SummaryView({
           onMetricRefHover={onMetricRefHover}
           compareIds={compareIds}
           onCompareToggle={onCompareToggle}
+          selectedId={selectedId}
+          onSelect={onSelect}
+          aggQuery={aggQuery}
+          filters={filters}
+          onGoToMap={onGoToMap}
         />
         <div className="mx-auto my-6 h-px max-w-4xl bg-border" />
         <CompareSection

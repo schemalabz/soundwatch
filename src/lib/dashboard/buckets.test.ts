@@ -3,6 +3,7 @@ import {
   BUCKETS,
   bucketById,
   bucketViable,
+  chartDefaultBucket,
   defaultBucket,
   needsRawReadings,
   pointCount,
@@ -88,5 +89,16 @@ describe("bucket ladder", () => {
       expect(n).toBeGreaterThanOrEqual(6);
       expect(n).toBeLessThanOrEqual(2000);
     }
+  });
+
+  it("opens a chart on a resolution it can draw", () => {
+    // Three months of hourly points is 1,800 on a ~1,000 px chart: a band.
+    expect(defaultBucket(75 * D).id).toBe("1h");
+    expect(chartDefaultBucket(75 * D).id).toBe("1d");
+    // Where the server's default is already readable, the chart keeps it.
+    expect(chartDefaultBucket(30 * D).id).toBe("1h");
+    expect(chartDefaultBucket(7 * D).id).toBe("1h");
+    // The last-24h minute workflow is untouched.
+    expect(chartDefaultBucket(24 * H).id).toBe("1m");
   });
 });

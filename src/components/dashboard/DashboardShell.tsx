@@ -493,12 +493,16 @@ export default function DashboardShell({ initialView = "map" }: { initialView?: 
 
   const onClosePane = useCallback(() => setSelectedSensorId(null), []);
 
-  const onGoToMap = useCallback(
-    (lng: number, lat: number) => {
+  // From a place on the period lens to the same place at the moment: the
+  // map lens, flown to it, with its pane open.
+  const onGoToMoment = useCallback(
+    (id: string) => {
+      const s = sensorList.find((x) => x.id === id);
       showView("map");
-      mapInstance?.flyTo({ center: [lng, lat], zoom: 13.5, duration: 1400 });
+      setSelectedSensorId(id);
+      if (s) mapInstance?.flyTo({ center: [s.longitude, s.latitude], zoom: 13.5, duration: 1400 });
     },
-    [mapInstance, showView],
+    [mapInstance, showView, sensorList],
   );
 
   // A departure in the rail: scrub to the end of its peak window (so the
@@ -676,9 +680,14 @@ export default function DashboardShell({ initialView = "map" }: { initialView?: 
                 compareIds={compareIds}
                 onCompareToggle={onCompareToggle}
                 onCompareClear={onCompareClear}
+                selectedId={selectedSensorId}
+                onSelect={setSelectedSensorId}
+                onGoToMap={onGoToMoment}
               />
             )}
-            {selectedSensorId && (
+            {/* The pane is the MOMENT's view of a place. On the period lens a
+                place opens inside the ranking instead, with period data. */}
+            {selectedSensorId && view === "map" && (
               <SensorPane
                 sensorId={selectedSensorId}
                 windowS={windowS}
@@ -687,7 +696,6 @@ export default function DashboardShell({ initialView = "map" }: { initialView?: 
                 level={frame?.[selectedSensorId]?.laeq ?? null}
                 usualBand={usualForHour ? (usualForHour[selectedSensorId] ?? null) : undefined}
                 onClose={onClosePane}
-                onGoToMap={view !== "map" ? onGoToMap : undefined}
               />
             )}
             {/* the key to the circles: on the map on desktop, in the sheet on phones */}
