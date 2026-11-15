@@ -8,28 +8,16 @@
 // Filter gaps are honest: buckets that aren't adjacent in time break the
 // line and the band, exactly like the muted washes on the timebar.
 
-import { useEffect, useId, useMemo, useRef, useState, type PointerEvent } from "react";
+import { useId, useMemo, useState, type PointerEvent } from "react";
 import { levelColor, paletteStops } from "@/lib/dashboard/levels";
 import { fmtDb, fmtInt } from "@/lib/dashboard/format";
 import { LOCALE, dashboardStrings as tr } from "@/lib/strings/dashboard";
 import type { AggKey } from "@/lib/dashboard/metrics";
 import MetricMention from "../MetricMention";
 import type { SeriesPoint } from "@/lib/api/dashboard";
+import { useMeasuredWidth } from "./useMeasuredWidth";
 
 const DEFAULT_H = 200;
-
-function useMeasuredWidth(): [React.RefObject<HTMLDivElement | null>, number] {
-  const ref = useRef<HTMLDivElement | null>(null);
-  const [width, setWidth] = useState(0);
-  useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    const ro = new ResizeObserver(([entry]) => setWidth(entry.contentRect.width));
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, []);
-  return [ref, width];
-}
 
 export default function TimelineChart({
   points,

@@ -12,7 +12,7 @@
 // src/lib/dashboard/usual.ts, the same one that draws the pill.
 
 import { memo, useEffect, useMemo, useState } from "react";
-import { BatteryMedium, MapPin, Wifi, X } from "lucide-react";
+import { BatteryMedium, Wifi, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { levelColor, paletteStops } from "@/lib/dashboard/levels";
@@ -58,7 +58,6 @@ function SensorPane({
   level,
   usualBand,
   onClose,
-  onGoToMap,
 }: {
   sensorId: string;
   /** The live frame window (speed-dependent) — the hero must equal the circle. */
@@ -71,8 +70,6 @@ function SensorPane({
   /** This sensor's usual band for the cursor's hour; undefined while loading. */
   usualBand?: UsualBand | null;
   onClose: () => void;
-  /** Present outside the map view: jump to the map and fly to this sensor. */
-  onGoToMap?: (lng: number, lat: number) => void;
 }) {
   devRenderCount("SensorPane");
   // Payloads are tagged with the sensor they belong to; switching sensors
@@ -289,18 +286,6 @@ function SensorPane({
           )}
         </div>
 
-        {/* the map jump: a real button, not an icon to hunt for */}
-        {onGoToMap && (
-          <button
-            type="button"
-            disabled={d?.latitude == null || d?.longitude == null}
-            onClick={() => d?.latitude != null && d?.longitude != null && onGoToMap(d.longitude, d.latitude)}
-            className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-md border border-sound/40 py-1.5 text-[12px] font-medium text-sound transition-colors hover:bg-sound/10 disabled:opacity-35"
-          >
-            <MapPin className="size-3.5" />
-            {tr.pane.goToMap}
-          </button>
-        )}
       </div>
     </div>
   );

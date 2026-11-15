@@ -44,7 +44,6 @@ export const dashboardStrings = {
   },
   pane: {
     close: "Κλείσιμο",
-    goToMap: "Εμφάνιση στον χάρτη",
     lastReading: (ago: string) => `μέτρηση πριν ${ago}`,
     noData: "Χωρίς δεδομένα",
     liveWindow: (windowS: number) =>
@@ -152,7 +151,6 @@ export const dashboardStrings = {
     title: "Κατάταξη θέσεων",
     subtitlePrefix: "Από την πιο θορυβώδη στην πιο ήσυχη · ",
     /** Joined after the metric: what the ranking is OF, in the rail's words. */
-    subtitleScope: (qualifiers: string) => ` · ${qualifiers}`,
     measurements: (n: string) => `${n} μετρήσεις`,
     empty: "Χωρίς δεδομένα για τα επιλεγμένα φίλτρα.",
     showAll: (hidden: number) => (hidden === 1 ? "Και 1 ακόμη θέση" : `Και οι ${hidden} ακόμη θέσεις`),
@@ -191,7 +189,7 @@ export const dashboardStrings = {
     goToMoment: "Τώρα στον χάρτη",
     addToCompare: "Στη σύγκριση",
     inCompare: "Στη σύγκριση",
-    open: (name: string) => `Άνοιγμα: ${name}`,
+    unranked: "δεν έχει μετρήσεις σε αυτή την επιλογή.",
   },
   // The week x hour heatmap. Its colour is relative to the grid, and says so.
   heat: {

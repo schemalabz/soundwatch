@@ -12,7 +12,7 @@ import { cn } from "@/lib/utils";
 import { levelColor, paletteStops } from "@/lib/dashboard/levels";
 import { dashboardStrings as tr } from "@/lib/strings/dashboard";
 
-function MapLegend({ className, showPills = true }: { className?: string; showPills?: boolean }) {
+function MapLegend({ className }: { className?: string }) {
   const stops = useMemo(() => paletteStops(), []);
   const anchors = stops.colors.map(([db]) => db);
   const gradient = `linear-gradient(to right, ${anchors.map((db) => levelColor(db, stops)).join(", ")})`;
@@ -40,16 +40,14 @@ function MapLegend({ className, showPills = true }: { className?: string; showPi
           </span>
           {tr.legend.size}
         </li>
-        {showPills && (
-          <li className="flex items-center gap-2">
-            <span className="flex w-7 shrink-0 justify-center">
-              <span className="inline-flex h-[15px] items-center rounded-full bg-foreground px-1 text-[9.5px] font-bold leading-none text-background">
-                +8
-              </span>
+        <li className="flex items-center gap-2">
+          <span className="flex w-7 shrink-0 justify-center">
+            <span className="inline-flex h-[15px] items-center rounded-full bg-foreground px-1 text-[9.5px] font-bold leading-none text-background">
+              +8
             </span>
-            {tr.legend.pill}
-          </li>
-        )}
+          </span>
+          {tr.legend.pill}
+        </li>
       </ul>
       <p className="mt-2 border-t border-dashed pt-1.5 text-[10px] leading-snug text-muted-foreground">{tr.legend.caveat}</p>
     </div>

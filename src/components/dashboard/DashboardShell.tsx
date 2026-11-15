@@ -109,6 +109,16 @@ function viewPadding(view: DashboardView, canvas: HTMLElement, mobile: boolean):
   if (mobile) return { top: 64, right: 80, bottom: 104, left: 16 };
   return { top: 84, right: 24, bottom: 112, left: canvas.clientWidth >= LEGEND_CLEARANCE_MIN_CANVAS_PX ? LEGEND_CLEARANCE_PX : 24 };
 }
+/** The moment lens's padding with the place's pane open: a place flown to
+ *  must not land under the pane that opens with it. The pane docks top-right
+ *  on desktop (SensorPane: 18.5rem, 22rem from xl, 25rem from 2xl) and along
+ *  the bottom on a phone (up to 55% of the canvas, above a 4rem inset). */
+function withPanePadding(p: Padding, canvas: HTMLElement, mobile: boolean): Padding {
+  if (mobile) return { ...p, bottom: Math.round(canvas.clientHeight * 0.55) + 64 };
+  const paneW = window.innerWidth >= 1536 ? 400 : window.innerWidth >= 1280 ? 352 : 296;
+  // Not at the cost of the whole canvas: a narrow one keeps the plain fit.
+  return canvas.clientWidth - p.left - paneW >= 320 ? { ...p, right: paneW + 12 + 24 } : p;
+}
 // A sensor fitted alone would otherwise zoom to the street.
 const FIT_MAX_ZOOM = 13.5;
 
@@ -575,7 +585,7 @@ export default function DashboardShell({ initialView = "map" }: { initialView?: 
     const fly = pendingFlyRef.current;
     pendingFlyRef.current = null;
     if (fly) {
-      mapInstance.flyTo({ center: fly, zoom: FIT_MAX_ZOOM, padding, duration: 1400 });
+      mapInstance.flyTo({ center: fly, zoom: FIT_MAX_ZOOM, padding: withPanePadding(padding, mapInstance.getContainer(), isMobile), duration: 1400 });
       fittedOnceRef.current = true;
       return;
     }

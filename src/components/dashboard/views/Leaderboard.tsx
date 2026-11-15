@@ -9,7 +9,7 @@
 // (nights) redrew exactly the same bars, and the filters looked broken.
 
 import { memo, useEffect, useMemo, useRef, useState } from "react";
-import { Check, ChevronDown, ChevronUp, Plus } from "lucide-react";
+import { Check, ChevronDown, ChevronUp, Plus, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { dashboardStrings as tr } from "@/lib/strings/dashboard";
 import { levelColor, paletteStops } from "@/lib/dashboard/levels";
@@ -124,9 +124,15 @@ function Leaderboard({
   }, [rows, showAll]);
   const inline = onSelect != null && aggQuery != null && filters != null;
   const selectedRef = useRef<HTMLLIElement | null>(null);
+  // On a new selection only. Keyed on the row's position too, a re-rank (the
+  // metric, the minute's refresh) pulled the page back to the row from
+  // wherever the reader had gone. The ref is set only on an open row.
   useEffect(() => {
-    if (selectedIndex >= 0) selectedRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
-  }, [selectedId, selectedIndex]);
+    if (selectedId) selectedRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }, [selectedId]);
+  // The selected place has no row: it has no readings in this selection (a
+  // grey circle on the map above). Said, instead of the click doing nothing.
+  const unranked = inline && selectedId != null && rows != null && selectedIndex < 0 ? selectedId : null;
   const compareFull = (compareIds?.length ?? 0) >= MAX_COMPARE;
   const hiddenCount = rows ? Math.max(0, rows.length - TOP_N) : 0;
   const [lo, hi] = BAR_SCALE[metric];
@@ -147,6 +153,30 @@ function Leaderboard({
           )}
         </p>
 
+        {unranked && (
+          <div className="mt-4 flex items-center gap-2 rounded-lg border border-dashed px-3 py-2 text-[12px]">
+            <p className="min-w-0 flex-1 text-muted-foreground">
+              <span className="font-semibold text-foreground">{meta.get(unranked)?.name ?? unranked.slice(0, 8)}</span> {tr.place.unranked}
+            </p>
+            {onGoToMap && (
+              <button
+                type="button"
+                onClick={() => onGoToMap(unranked)}
+                className="shrink-0 whitespace-nowrap rounded-md border px-2 py-1 text-[11.5px] font-medium text-foreground transition-colors hover:bg-secondary"
+              >
+                {tr.place.goToMoment}
+              </button>
+            )}
+            <button
+              type="button"
+              aria-label={tr.pane.close}
+              onClick={() => onSelect?.(null)}
+              className="grid size-7 shrink-0 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+            >
+              <X className="size-3.5" />
+            </button>
+          </div>
+        )}
         {rows == null ? (
           <div className="mt-6 flex flex-col gap-2">
             {Array.from({ length: TOP_N }, (_, i) => (
@@ -173,7 +203,14 @@ function Leaderboard({
                   <button
                     type="button"
                     aria-expanded={inline ? open : undefined}
-                    onClick={() => (inline ? onSelect(open ? null : row.id) : onSensorClick(row.id))}
+                    onClick={() => {
+                      if (!inline) return onSensorClick(row.id);
+                      // A list opened for a place below the fold stays open
+                      // once that place is closed or another is picked:
+                      // forty rows must not vanish under the reader.
+                      if (showAll) setExpanded(true);
+                      onSelect(open ? null : row.id);
+                    }}
                     className={cn(
                       "group grid min-h-11 min-w-0 flex-1 items-center gap-2 rounded-md px-2 py-1.5 text-left transition-colors sm:gap-3",
                       inline

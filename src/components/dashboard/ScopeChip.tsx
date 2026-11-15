@@ -36,10 +36,6 @@ export function ScopeProvider({ text, onHover, onClick, children }: ScopeLink & 
   return <ScopeContext.Provider value={value}>{children}</ScopeContext.Provider>;
 }
 
-/** The chip's look, shared with the rail header's own (non-interactive) one. */
-export const SCOPE_CHIP_CLASS =
-  "sw-scope-chip inline-flex max-w-full items-center gap-1 rounded-full px-1.5 py-px align-baseline font-medium text-foreground";
-
 export default function ScopeChip({
   fallback,
   className,
@@ -59,7 +55,12 @@ export default function ScopeChip({
       onMouseEnter={() => scope.onHover?.(true)}
       onMouseLeave={() => scope.onHover?.(false)}
       onClick={scope.onClick}
-      className={cn(SCOPE_CHIP_CLASS, "cursor-pointer transition-shadow hover:ring-1 hover:ring-sound", className)}
+      // .sw-scope-chip (globals.css) is the colour and the flash, and is what
+      // the rail header's own chip shares with this one.
+      className={cn(
+        "sw-scope-chip inline-flex max-w-full cursor-pointer items-center gap-1 rounded-full px-1.5 py-px align-baseline font-medium text-foreground transition-shadow hover:ring-1 hover:ring-sound",
+        className
+      )}
     >
       <SlidersHorizontal className="size-2.5 shrink-0 text-sound" />
       <span className="truncate">{scope.text}</span>

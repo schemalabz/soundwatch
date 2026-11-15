@@ -17,6 +17,7 @@ import { dashboardStrings as tr } from "@/lib/strings/dashboard";
 import { dowSelectionMask, hourSelectionMask, type DashboardFilters } from "@/lib/dashboard/filters";
 import { fmtDb } from "@/lib/dashboard/format";
 import { heatGradient, heatScale } from "@/lib/dashboard/heat";
+import { fetchHourlySeries, hourStableQuery } from "@/lib/dashboard/seriesCache";
 import type { AggKey } from "@/lib/dashboard/metrics";
 import type { SeriesResponse } from "@/lib/api/dashboard";
 import ProfileChart, { type ProfileLine } from "../charts/ProfileChart";
@@ -51,27 +52,33 @@ function PlaceDetail({
   onCompareToggle?: () => void;
   onGoToMap?: () => void;
 }) {
+  // Floored to the hour: a trailing period moves from= every minute, and an
+  // hourly series cannot change with it (see seriesCache).
+  const query = useMemo(() => hourStableQuery(aggQuery), [aggQuery]);
   // Tagged with the request that produced it: another place or other filters
   // make it stale by derivation.
-  const key = `${aggQuery}|${sensorId}`;
-  const [loaded, setLoaded] = useState<{ key: string; place: SeriesResponse; network: SeriesResponse } | null>(null);
+  const [loaded, setLoaded] = useState<{ query: string; sensorId: string; place: SeriesResponse; network: SeriesResponse } | null>(null);
 
   useEffect(() => {
     let cancelled = false;
-    const get = (extra: string) => fetch(`/api/series?${aggQuery}&bucket=1h${extra}`, { cache: "no-store" }).then((r) => r.json() as Promise<SeriesResponse>);
-    Promise.all([get(`&sensor=${sensorId}`), get("")])
+    Promise.all([fetchHourlySeries(query, sensorId), fetchHourlySeries(query)])
       .then(([place, network]) => {
-        if (!cancelled) setLoaded({ key: `${aggQuery}|${sensorId}`, place, network });
+        if (!cancelled) setLoaded({ query, sensorId, place, network });
       })
       .catch(() => {});
     return () => {
       cancelled = true;
     };
-  }, [aggQuery, sensorId]);
+  }, [query, sensorId]);
 
-  const data = loaded?.key === key ? loaded : null;
+  // The same place under other filters keeps its charts, dimmed, until the
+  // new ones land: back to skeletons, the card would shrink and grow and
+  // push everything under it around.
+  const data = loaded?.sensorId === sensorId ? loaded : null;
+  const stale = data != null && data.query !== query;
   // Opened from a circle on the map, the row is scrolled to before its
   // charts have arrived and grown it: once they have, bring all of it in.
+  // Once per opening: `ready` stays true through later filter changes.
   const rootRef = useRef<HTMLDivElement | null>(null);
   const ready = data != null;
   useEffect(() => {
@@ -107,7 +114,7 @@ function PlaceDetail({
         {address && address !== name && <> · {address}</>}
       </p>
 
-      <div className="mt-3 grid grid-cols-1 gap-x-6 gap-y-4 sm:grid-cols-2">
+      <div className={cn("mt-3 grid grid-cols-1 gap-x-6 gap-y-4 transition-opacity duration-200 sm:grid-cols-2", stale && "opacity-45")} aria-busy={stale || undefined}>
         <div className="min-w-0">
           <h3 className="text-[11.5px] font-semibold tracking-tight text-foreground">{tr.place.dayTitle}</h3>
           <p className="mb-1.5 flex items-center gap-1.5 text-[10px] text-muted-foreground">
