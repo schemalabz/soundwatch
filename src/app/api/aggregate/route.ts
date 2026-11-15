@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db";
 import { PUBLIC_SENSOR_SQL, filterSql, locationSql, rangesSql } from "@/lib/server/filterSql";
 import { parseEpochMs, parseWireFilters } from "@/lib/dashboard/filters";
 import { BinAccumulator } from "@/lib/server/levelBins";
+import { RB_HOUR, rbHourRangeSql } from "@/lib/server/hourBucket";
 
 // Aggregates over the FILTERED time-set, per sensor: the acoustic summary
 // canon — energy-mean LAeq, L50, L10 (loud tail), L90 (background floor),
@@ -36,10 +37,10 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "from= requires epoch ms" }, { status: 400 });
   }
 
-  const fromHourIso = new Date(Math.floor(fromMs / HOUR_MS) * HOUR_MS).toISOString();
+  const fromHourMs = Math.floor(fromMs / HOUR_MS) * HOUR_MS;
   const f = parseWireFilters(q);
-  const filters = filterSql(f, "rb.bucket");
-  const ranges = rangesSql(f, "rb.bucket");
+  const filters = filterSql(f, RB_HOUR);
+  const ranges = rangesSql(f, RB_HOUR);
   const locations = locationSql(f);
 
   const rows = await prisma.$queryRawUnsafe<SensorBinRow[]>(`
@@ -51,7 +52,7 @@ export async function GET(req: NextRequest) {
     FROM readings_hour_bins rb
     JOIN sensors s ON s.id = rb.sensor_id
     WHERE ${PUBLIC_SENSOR_SQL}
-      AND rb.bucket >= '${fromHourIso}'::timestamptz
+      ${rbHourRangeSql(fromHourMs)}
       ${filters}
       ${ranges}
       ${locations}

@@ -15,6 +15,7 @@
 // json_to_recordset for 10k-row batches).
 
 import { PrismaClient } from "@prisma/client";
+import { correctClock, emptyClockState, type ClockState } from "../src/lib/fleet/clockOffset";
 import { FLEET, phaseOffsetS } from "./fleet";
 import { generateReading } from "./model";
 import { isOnline } from "./outages";
@@ -31,11 +32,16 @@ const INSERT_CONCURRENCY = 4;
 // Column spec: SQL column name, ReadingRow field, and the unnest element type.
 // Timestamps travel as UTC ISO strings (with Z) cast ::timestamptz — an
 // absolute instant regardless of the session/container timezone.
-type SqlType = "text" | "timestamptz" | "float8" | "int4" | "jsonb";
+type SqlType = "text" | "timestamptz" | "float8" | "int2" | "int4" | "jsonb";
+
+/** A ReadingRow plus the clock correction the live ingester adds after deriving it. */
+export type BatchRow = ReadingRow & { correctedAt: Date | null; correctedHourShift: number };
 export const COLUMNS = [
   { col: "sensor_id", field: "sensorId", type: "text" },
   { col: "recorded_at", field: "recordedAt", type: "timestamptz" },
   { col: "received_at", field: "receivedAt", type: "timestamptz" },
+  { col: "corrected_at", field: "correctedAt", type: "timestamptz" },
+  { col: "corrected_hour_shift", field: "correctedHourShift", type: "int2" },
   { col: "noise_dba", field: "noiseDba", type: "float8" },
   { col: "temperature", field: "temperature", type: "float8" },
   { col: "humidity", field: "humidity", type: "float8" },
@@ -86,14 +92,14 @@ export const COLUMNS = [
   { col: "sam_git_hash", field: "samGitHash", type: "text" },
   { col: "esp_git_hash", field: "espGitHash", type: "text" },
   { col: "energy_saturations", field: "energySaturations", type: "int4" },
-] as const satisfies readonly { col: string; field: keyof ReadingRow | "sensorId"; type: SqlType }[];
+] as const satisfies readonly { col: string; field: keyof BatchRow | "sensorId"; type: SqlType }[];
 
 // Compile-time guard: adding a field to ReadingRow (mqtt-ingester/row.ts)
 // without adding it here must not compile — otherwise the backfill would
 // silently insert NULL for the new column and backfill/live parity breaks.
 // (backfill.test.ts additionally checks the col names against the Prisma
 // schema, catching @map drift.)
-type MissingColumns = Exclude<keyof ReadingRow | "sensorId", (typeof COLUMNS)[number]["field"]>;
+type MissingColumns = Exclude<keyof BatchRow | "sensorId", (typeof COLUMNS)[number]["field"]>;
 const _allReadingRowFieldsCovered: [MissingColumns] extends [never] ? true : { missing: MissingColumns } = true;
 void _allReadingRowFieldsCovered;
 
@@ -107,7 +113,7 @@ const INSERT_SQL = (() => {
   );
 })();
 
-function toBatchObject(sensorId: string, row: ReadingRow): Record<string, unknown> {
+function toBatchObject(sensorId: string, row: BatchRow): Record<string, unknown> {
   const obj: Record<string, unknown> = {};
   for (const c of COLUMNS) {
     const value = c.field === "sensorId" ? sensorId : row[c.field];
@@ -119,7 +125,7 @@ function toBatchObject(sensorId: string, row: ReadingRow): Record<string, unknow
 }
 
 /** Returns the number of rows actually inserted (ON CONFLICT skips excluded). */
-async function insertBatch(prisma: PrismaClient, rows: { sensorId: string; row: ReadingRow }[]): Promise<number> {
+async function insertBatch(prisma: PrismaClient, rows: { sensorId: string; row: BatchRow }[]): Promise<number> {
   const payload = JSON.stringify(rows.map(({ sensorId, row }) => toBatchObject(sensorId, row)));
   return prisma.$executeRawUnsafe(INSERT_SQL, payload);
 }
@@ -142,7 +148,7 @@ export async function backfill(prisma: PrismaClient): Promise<void> {
   // the process dies with a clean error (not ERR_UNHANDLED_REJECTION).
   const inflight = new Set<Promise<void>>();
   let firstError: unknown = null;
-  const submit = (batch: { sensorId: string; row: ReadingRow }[]): Promise<void> => {
+  const submit = (batch: { sensorId: string; row: BatchRow }[]): Promise<void> => {
     const p: Promise<void> = insertBatch(prisma, batch)
       .then((count) => {
         totalInserted += count;
@@ -166,6 +172,10 @@ export async function backfill(prisma: PrismaClient): Promise<void> {
     await Promise.all(inflight);
     if (firstError) throw firstError;
   };
+
+  // Clock estimator per sensor, kept across passes: the same correction the
+  // live ingester applies, so staging's hourly views match production's.
+  const clocks = new Map<string, ClockState>();
 
   // One pass = top up every sensor to endT, resuming from its newest reading.
   const runPass = async (endT: number, horizonT: number, quiet: boolean): Promise<void> => {
@@ -200,7 +210,9 @@ export async function backfill(prisma: PrismaClient): Promise<void> {
 
       let generated = 0;
       let darkSlots = 0;
-      let batch: { sensorId: string; row: ReadingRow }[] = [];
+      let clock = clocks.get(sensorId);
+      if (!clock) clocks.set(sensorId, (clock = emptyClockState()));
+      let batch: { sensorId: string; row: BatchRow }[] = [];
       for (; t <= endT; t += intervalS) {
         // Outage: the device was dark — no reading exists for this slot.
         if (!isOnline(sensor.deviceId, t)) {
@@ -212,7 +224,8 @@ export async function backfill(prisma: PrismaClient): Promise<void> {
         // drifted device clock, exactly as a live unit would.
         const row = payloadToRow(buildPayload(sim), sim.receivedAt);
         if (!row) throw new Error(`Simulator payload failed to parse for ${sensor.deviceId} at t=${t}`);
-        batch.push({ sensorId, row });
+        const c = correctClock(clock, row);
+        batch.push({ sensorId, row: { ...row, correctedAt: c.correctedAt, correctedHourShift: c.hourShift } });
         if (batch.length >= BATCH_ROWS) {
           await throttle();
           submit(batch);

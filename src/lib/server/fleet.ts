@@ -66,7 +66,7 @@ export async function loadFleet(prisma: PrismaClient, now = new Date()): Promise
     prisma.$queryRaw<LevelRow[]>`
       SELECT sensor_id, 10 * log(sum(energy) / nullif(sum(n), 0)) AS laeq
       FROM readings_hour_bins
-      WHERE bucket > ${now}::timestamptz - INTERVAL '7 days'
+      WHERE device_bucket > ${now}::timestamptz - INTERVAL '7 days'
       GROUP BY 1`,
     // Router restarts and unscheduled restarts, as src/lib/fleet/eventsSql.ts
     // classifies them (never during the installation itself).

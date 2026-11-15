@@ -8,6 +8,7 @@
 import { Prisma } from "@prisma/client";
 
 import { HOUR_PRESET_RANGES, type DashboardFilters } from "@/lib/dashboard/filters";
+import { R_TIME } from "@/lib/server/hourBucket";
 
 /**
  * Who the public is allowed to see. Active, sited, and not a bench unit.
@@ -36,8 +37,8 @@ export function athensTimeSql(col: string): string {
   return `timezone('Europe/Athens', ${col})`;
 }
 
-/** Default time column: raw readings. Rollup queries pass the cagg bucket. */
-const DEFAULT_TIME_COL = "r.recorded_at";
+/** Default time column: raw readings, clock-corrected. Rollup queries pass RB_HOUR. */
+const DEFAULT_TIME_COL = R_TIME;
 
 /** Day/hour/month predicates over Athens wall time ('' when unrestricted).
  *  The wire encoder only sends restricted sets, so no "everything selected"

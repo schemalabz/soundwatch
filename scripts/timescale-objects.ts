@@ -15,6 +15,16 @@
 // (src/lib/server/levelBins.ts — the bin constants there MUST match the SQL
 // below; levelBins.test.ts pins them together).
 //
+// Two hours per row, because the device clock is not the real one (issue #12).
+// device_bucket is the hour on the device clock — the aggregate's time
+// dimension, since a hypertable aggregate may only bucket on the partition
+// column. hour_shift (-1/0/+1, from the ingester's clock estimate) moves a
+// row into the hour the sound actually happened in. Readers never use
+// device_bucket alone for "when": they read the corrected hour through
+// RB_HOUR in src/lib/server/hourBucket.ts. ~20% of rows sit in a shifted
+// hour, so an hour can have two rows per bin; every reader sums, so that is
+// harmless.
+//
 // materialized_only=false makes queries merge the not-yet-materialized tail
 // straight from raw readings, so the live edge is always fresh; the refresh
 // policy (Timescale's own job scheduler, no external cron) materializes an
@@ -37,14 +47,15 @@ const STATEMENTS: { label: string; sql: string; call?: boolean }[] = [
       WITH (timescaledb.continuous, timescaledb.materialized_only = false) AS
       SELECT
         sensor_id,
-        time_bucket('1 hour', recorded_at) AS bucket,
+        time_bucket('1 hour', recorded_at) AS device_bucket,
+        corrected_hour_shift                AS hour_shift,
         width_bucket(laeq, ${CAGG_BINS.lo}, ${CAGG_BINS.hi}, ${CAGG_BINS.count}) AS bin,
         count(*)                            AS n,
         sum(power(10, laeq / 10))           AS energy,
         max(COALESCE(lmax_est, laeq))       AS lmax
       FROM readings
       WHERE laeq IS NOT NULL
-      GROUP BY 1, 2, 3
+      GROUP BY 1, 2, 3, 4
       WITH NO DATA`,
   },
 
@@ -211,6 +222,8 @@ interface Aggregate {
   view: string;
   statements: { label: string; sql: string; call?: boolean }[];
   stamp: string;
+  /** The aggregate's time-dimension column. */
+  bucketCol: string;
   /** Earliest raw bucket the aggregate must cover (an hour, as a timestamp). */
   rawEarliestSql: string;
   /** Rows that must exist before "covered" means anything. */
@@ -224,6 +237,7 @@ const AGGREGATES: Aggregate[] = [
     view: "readings_hour_bins",
     statements: STATEMENTS,
     stamp: CAGG_STAMP,
+    bucketCol: "device_bucket",
     rawEarliestSql: `SELECT time_bucket('1 hour', min(recorded_at)) FROM readings WHERE laeq IS NOT NULL`,
     rawCountSql: `SELECT count(*) AS n FROM readings WHERE laeq IS NOT NULL`,
     legacy: { stamp: LEGACY_STAMP, equivalentTo: LEGACY_EQUIVALENT_STAMP },
@@ -232,6 +246,7 @@ const AGGREGATES: Aggregate[] = [
     view: "readings_hour_health",
     statements: HEALTH_STATEMENTS,
     stamp: stampFor(HEALTH_CAGG_SQL),
+    bucketCol: "bucket",
     rawEarliestSql: `SELECT time_bucket('1 hour', min(recorded_at)) FROM readings`,
     rawCountSql: `SELECT count(*) AS n FROM readings`,
   },
@@ -302,7 +317,7 @@ async function coverageIsComplete(prisma: PrismaClient, agg: Aggregate): Promise
   const raw = await prisma.$queryRawUnsafe<{ n: bigint }[]>(agg.rawCountSql);
   if (Number(raw[0].n) === 0) return true;
   const rows = await prisma.$queryRawUnsafe<{ ok: boolean | null }[]>(
-    `SELECT (SELECT min(bucket) FROM ${agg.view}) <= (${agg.rawEarliestSql}) AS ok`
+    `SELECT (SELECT min(${agg.bucketCol}) FROM ${agg.view}) <= (${agg.rawEarliestSql}) AS ok`
   );
   return rows[0]?.ok === true;
 }
