@@ -1,4 +1,4 @@
-FROM node:22-bookworm-slim AS base
+FROM node:22.23.5-bookworm-slim AS base
 
 # openssl must exist before `prisma generate` runs: Prisma detects the host
 # openssl version to pick the "native" query engine, and without the binary
