@@ -23,6 +23,7 @@ import { heatGradient, heatScale } from "@/lib/dashboard/heat";
 import type { AggKey } from "@/lib/dashboard/metrics";
 import type { SeriesResponse } from "@/lib/api/dashboard";
 import MetricMention from "../MetricMention";
+import ScopeChip from "../ScopeChip";
 import ProfileChart, { type ProfileLine } from "../charts/ProfileChart";
 import WeekHeatmap from "../charts/WeekHeatmap";
 import type { SensorMeta } from "../SensorLayer";
@@ -145,7 +146,7 @@ function CompareSection({
           tr.compare.subtitleEmpty
         ) : (
           <>
-            <MetricMention metric={metric} onHover={onMetricRefHover} /> · {scope}
+            <MetricMention metric={metric} onHover={onMetricRefHover} /> · <ScopeChip fallback={scope} />
           </>
         )}
       </p>

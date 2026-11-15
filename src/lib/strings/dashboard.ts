@@ -175,6 +175,12 @@ export const dashboardStrings = {
     weekCaption: "Δευτέρα ως Κυριακή, 00:00 ως 24:00",
     sharedScale: "ίδια κλίμακα χρώματος σε όλες τις θέσεις",
   },
+  // The selection, tied from the rail's header to the sections it governs.
+  scope: {
+    kicker: "Τι βλέπεις",
+    kickerRight: " δεξιά",
+    chipHint: "Ό,τι βλέπεις εδώ αφορά αυτή την επιλογή. Αλλάζει από τα φίλτρα.",
+  },
   // One place over the period, opened inside its ranking row.
   place: {
     rank: (n: number, total: number) => (n === 1 ? `Η πιο θορυβώδης από ${total} θέσεις` : `${n}η πιο θορυβώδης από ${total} θέσεις`),
@@ -182,7 +188,7 @@ export const dashboardStrings = {
     dayHint: "Πέρνα ή πάτα πάνω στο γράφημα για τις τιμές.",
     weekTitle: "Η εβδομάδα της",
     quietest: "Πιο ήσυχη ώρα",
-    goToMoment: "Δες την τώρα στον χάρτη",
+    goToMoment: "Τώρα στον χάρτη",
     addToCompare: "Στη σύγκριση",
     inCompare: "Στη σύγκριση",
     open: (name: string) => `Άνοιγμα: ${name}`,
@@ -199,6 +205,7 @@ export const dashboardStrings = {
     excluded: "εκτός φίλτρων",
   },
   charts: {
+    groupTitle: "Όλες οι θέσεις μαζί",
     timeline: "Χρονική εξέλιξη",
     resolution: "Ανάλυση",
     resolutionUnavailable: "Δεν ταιριάζει σε αυτή την περίοδο",

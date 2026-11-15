@@ -101,7 +101,7 @@ function PlaceDetail({
   const scale = extremes ? heatScale([extremes.loudest.value, extremes.quietest.value]) : null;
 
   return (
-    <div ref={rootRef} className="mb-2 ml-2 mr-1 scroll-mb-4 rounded-lg border bg-card px-4 py-3.5">
+    <div ref={rootRef} className="scroll-mb-6 px-4 pb-4 pt-3.5">
       <p className="text-[11.5px] text-muted-foreground">
         <span className="font-semibold text-foreground">{tr.place.rank(rank, total)}</span>
         {address && address !== name && <> · {address}</>}
@@ -155,12 +155,13 @@ function PlaceDetail({
         </div>
       </div>
 
-      <div className="mt-3.5 flex flex-wrap gap-2 border-t pt-3">
+      {/* One line, also on a phone: the two share the width there. */}
+      <div className="mt-3.5 flex gap-2 border-t pt-3">
         {onGoToMap && (
           <button
             type="button"
             onClick={onGoToMap}
-            className="inline-flex min-h-8 items-center gap-1.5 rounded-md border px-2.5 text-[12px] font-medium text-foreground transition-colors hover:bg-secondary max-md:min-h-10"
+            className="inline-flex min-h-8 items-center justify-center gap-1.5 whitespace-nowrap rounded-md border px-2.5 text-[12px] font-medium text-foreground transition-colors hover:bg-secondary max-sm:flex-1 max-md:min-h-10"
           >
             <MapPin className="size-3.5" />
             {tr.place.goToMoment}
@@ -173,7 +174,7 @@ function PlaceDetail({
             disabled={!inCompare && compareFull}
             onClick={onCompareToggle}
             className={cn(
-              "inline-flex min-h-8 items-center gap-1.5 rounded-md border px-2.5 text-[12px] font-medium transition-colors max-md:min-h-10",
+              "inline-flex min-h-8 items-center justify-center gap-1.5 whitespace-nowrap rounded-md border px-2.5 text-[12px] font-medium transition-colors max-sm:flex-1 max-md:min-h-10",
               inCompare ? "border-transparent bg-foreground text-background" : "text-foreground hover:bg-secondary",
               !inCompare && compareFull && "pointer-events-none opacity-40"
             )}

@@ -14,6 +14,7 @@ import { memo, useCallback, useState } from "react";
 import { cn } from "@/lib/utils";
 import { dashboardStrings as tr } from "@/lib/strings/dashboard";
 import MetricMention from "../MetricMention";
+import ScopeChip, { ScopeProvider } from "../ScopeChip";
 import type { AggKey } from "@/lib/dashboard/metrics";
 import type { DashboardFilters } from "@/lib/dashboard/filters";
 import type { SensorMeta } from "../SensorLayer";
@@ -41,6 +42,8 @@ function SummaryView({
   selectedId,
   onSelect,
   onGoToMap,
+  onScopeHover,
+  onScopeClick,
 }: {
   aggData: Record<string, Record<AggKey, number> & { n: number }> | null;
   /** The filters moved and the ranking for them has not landed yet. */
@@ -64,6 +67,9 @@ function SummaryView({
   onSelect: (id: string | null) => void;
   /** Switch to the moment and show this place there. */
   onGoToMap: (id: string) => void;
+  /** The selection chips on the sections: hover and click reach the rail. */
+  onScopeHover?: (on: boolean) => void;
+  onScopeClick?: () => void;
 }) {
   devRenderCount("SummaryView");
   // Once the content has scrolled up under the floating lens switcher, a
@@ -73,6 +79,7 @@ function SummaryView({
     setScrolled(e.currentTarget.scrollTop > 8);
   }, []);
   return (
+    <ScopeProvider text={filterQualifiers} onHover={onScopeHover} onClick={onScopeClick}>
     <div className="pointer-events-none absolute inset-0 z-10 overflow-y-auto" onScroll={onScroll}>
       <div
         aria-hidden="true"
@@ -88,7 +95,7 @@ function SummaryView({
           <span className="shrink-0 font-semibold text-foreground">{tr.summary.mapTitle}</span>
           <span className="text-muted-foreground md:truncate">
             <span className="hidden md:inline">· </span>
-            <MetricMention metric={metric} onHover={onMetricRefHover} /> · {filterQualifiers}
+            <MetricMention metric={metric} onHover={onMetricRefHover} /> · <ScopeChip fallback={filterQualifiers} />
           </span>
         </div>
       </div>
@@ -134,6 +141,7 @@ function SummaryView({
         />
       </div>
     </div>
+    </ScopeProvider>
   );
 }
 

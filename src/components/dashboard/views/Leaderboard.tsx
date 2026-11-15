@@ -20,6 +20,7 @@ import type { AggKey } from "@/lib/dashboard/metrics";
 import PlaceDetail from "./PlaceDetail";
 import type { SensorMeta } from "../SensorLayer";
 import MetricMention from "../MetricMention";
+import ScopeChip from "../ScopeChip";
 import { devRenderCount } from "@/lib/dashboard/devtools";
 
 /** The ranking opens on its head; the rest is one tap away. */
@@ -138,7 +139,12 @@ function Leaderboard({
         <p className="mt-0.5 text-[11px] text-muted-foreground">
           {tr.board.subtitlePrefix}
           <MetricMention metric={metric} onHover={onMetricRefHover} />
-          {scope && tr.board.subtitleScope(scope)}
+          {scope && (
+            <>
+              {" · "}
+              <ScopeChip fallback={scope} />
+            </>
+          )}
         </p>
 
         {rows == null ? (
@@ -156,13 +162,25 @@ function Leaderboard({
               const color = levelColor(row.value, stops);
               const open = inline && row.id === selectedId;
               return (
-                <li key={row.id} ref={open ? selectedRef : undefined} className="scroll-mt-24">
-                  <div className={cn("flex items-center gap-1", open && "rounded-md bg-silver/20")}>
+                // Open, the row and its detail are ONE raised card: the row is
+                // its header (bold name, chevron up), the detail its body.
+                <li
+                  key={row.id}
+                  ref={open ? selectedRef : undefined}
+                  className={cn("scroll-mt-24", open && "-mx-2 my-2 overflow-hidden rounded-xl border border-foreground/20 bg-card shadow-md")}
+                >
+                  <div className={cn("flex items-center gap-1", open && "border-b bg-silver/20 px-2 py-1")}>
                   <button
                     type="button"
                     aria-expanded={inline ? open : undefined}
                     onClick={() => (inline ? onSelect(open ? null : row.id) : onSensorClick(row.id))}
-                    className="group grid min-h-11 min-w-0 flex-1 grid-cols-[1.75rem_minmax(0,1fr)_4.5rem_auto] items-center gap-3 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-silver/20 sm:grid-cols-[2rem_minmax(7rem,11rem)_1fr_auto]"
+                    className={cn(
+                      "group grid min-h-11 min-w-0 flex-1 items-center gap-2 rounded-md px-2 py-1.5 text-left transition-colors sm:gap-3",
+                      inline
+                        ? "grid-cols-[1.75rem_minmax(0,1fr)_3.25rem_auto_0.875rem] sm:grid-cols-[2rem_minmax(7rem,11rem)_1fr_auto_0.875rem]"
+                        : "grid-cols-[1.75rem_minmax(0,1fr)_4.5rem_auto] sm:grid-cols-[2rem_minmax(7rem,11rem)_1fr_auto]",
+                      !open && "hover:bg-silver/20"
+                    )}
                   >
                     <span
                       className={
@@ -174,7 +192,7 @@ function Leaderboard({
                       {i + 1}
                     </span>
                     <span className="truncate">
-                      <span className="block truncate text-[12.5px] font-medium leading-tight text-foreground">
+                      <span className={cn("block truncate text-[12.5px] leading-tight text-foreground", open ? "font-bold" : "font-medium")}>
                         {m?.name ?? row.id.slice(0, 8)}
                       </span>
                       <span className="block truncate text-[9.5px] leading-tight text-muted-foreground">
@@ -193,6 +211,12 @@ function Leaderboard({
                       </span>
                       <span className="ml-0.5 text-[9px] text-muted-foreground">dB</span>
                     </span>
+                    {inline && (
+                      <ChevronDown
+                        aria-hidden="true"
+                        className={cn("size-3.5 transition-transform duration-200", open ? "rotate-180 text-foreground" : "text-muted-foreground/60 group-hover:text-foreground")}
+                      />
+                    )}
                   </button>
                   {onCompareToggle && <CompareToggle name={m?.name ?? row.id.slice(0, 8)} slot={compareIds?.indexOf(row.id) ?? -1} full={compareFull} onToggle={() => onCompareToggle(row.id)} />}
                   </div>

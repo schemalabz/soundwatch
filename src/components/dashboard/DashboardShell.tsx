@@ -105,6 +105,12 @@ export default function DashboardShell({ initialView = "map" }: { initialView?: 
   const [placingPin, setPlacingPin] = useState(false);
   // A metric mention elsewhere is being hovered — the rail picker lights up.
   const [metricGlow, setMetricGlow] = useState(false);
+  // The rail header lit up from a selection chip beside it: held while a
+  // chip is hovered, pulsed once when one is clicked.
+  const [scopeHover, setScopeHover] = useState(false);
+  const [scopePulse, setScopePulse] = useState(false);
+  const scopePulseTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => void (scopePulseTimer.current && clearTimeout(scopePulseTimer.current)), []);
   const [aggKey, setAggKey] = useState<AggKey>("laeq");
   // The places held side by side on the summary, in the order they were added.
   const [compareIds, setCompareIds] = useState<string[]>([]);
@@ -492,6 +498,17 @@ export default function DashboardShell({ initialView = "map" }: { initialView?: 
   const onCompareClear = useCallback(() => setCompareIds([]), []);
 
   const onClosePane = useCallback(() => setSelectedSensorId(null), []);
+  // A selection chip was clicked: show where the selection is made. On a
+  // phone that is the filter sheet; beside the rail, its header pulses.
+  const onScopeClick = useCallback(() => {
+    if (isMobile === true) {
+      setSheetOpen(true);
+      return;
+    }
+    setScopePulse(true);
+    if (scopePulseTimer.current) clearTimeout(scopePulseTimer.current);
+    scopePulseTimer.current = setTimeout(() => setScopePulse(false), 1200);
+  }, [isMobile]);
 
   // From a place on the period lens to the same place at the moment: the
   // map lens, flown to it, with its pane open.
@@ -604,6 +621,7 @@ export default function DashboardShell({ initialView = "map" }: { initialView?: 
     onTogglePlacing,
     onAddPin,
     metricGlow,
+    scopeGlow: scopeHover || scopePulse,
   };
 
   const rail =
@@ -683,6 +701,8 @@ export default function DashboardShell({ initialView = "map" }: { initialView?: 
                 selectedId={selectedSensorId}
                 onSelect={setSelectedSensorId}
                 onGoToMap={onGoToMoment}
+                onScopeHover={setScopeHover}
+                onScopeClick={onScopeClick}
               />
             )}
             {/* The pane is the MOMENT's view of a place. On the period lens a

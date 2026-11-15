@@ -19,6 +19,7 @@ import {
 import { athensWallTime, ATHENS_TZ } from "@/lib/dashboard/time";
 import type { AggKey } from "@/lib/dashboard/metrics";
 import MetricMention from "../MetricMention";
+import ScopeChip from "../ScopeChip";
 import RadialChart, { type RadialSlice } from "../charts/RadialChart";
 import TimelineChart from "../charts/TimelineChart";
 import WeekHeatmap, { weekCellLabel, weekExtremes, type WeekCell } from "../charts/WeekHeatmap";
@@ -39,9 +40,12 @@ function Section({
   title,
   caption,
   aside,
+  scoped,
   children,
 }: {
   title: string;
+  /** Carries the selection chip: the chart is of exactly that selection. */
+  scoped?: boolean;
   caption?: React.ReactNode;
   /** Controls that belong to this chart, right-aligned on the title row. */
   aside?: React.ReactNode;
@@ -53,6 +57,11 @@ function Section({
         <h2 className="text-[13px] font-semibold tracking-tight text-foreground">
           {title}
           {caption && <span className="ml-2 text-[10.5px] font-normal text-muted-foreground">{caption}</span>}
+          {scoped && (
+            <span className="ml-2 text-[10.5px] font-normal">
+              <ScopeChip />
+            </span>
+          )}
         </h2>
         {aside}
       </div>
@@ -321,6 +330,16 @@ function ChartsView({
   return (
     <div className={embedded ? "" : "absolute inset-0 z-10 overflow-y-auto bg-background"}>
       <div className={embedded ? "mx-auto max-w-4xl px-6 pb-16 pt-4 md:px-10" : "mx-auto max-w-4xl px-6 pb-16 pt-[4.5rem] md:px-10"}>
+        {/* Like the ranking and the comparison above: a heading that says
+            what the charts are of, and for which selection. */}
+        {embedded && (
+          <div className="mb-6">
+            <h2 className="text-[15px] font-semibold tracking-tight">{tr.charts.groupTitle}</h2>
+            <p className="mt-0.5 text-[11px] text-muted-foreground">
+              <MetricMention metric={metric} onHover={onMetricRefHover} /> · <ScopeChip />
+            </p>
+          </div>
+        )}
         <div className="flex flex-col gap-10">
           <Section title={tr.heat.title} caption={tr.heat.caption}>
             {loading || !series ? (
@@ -331,6 +350,7 @@ function ChartsView({
           </Section>
 
           <Section
+            scoped
             title={tr.charts.timeline}
             caption={
               <>
