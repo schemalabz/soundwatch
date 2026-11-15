@@ -65,6 +65,8 @@ const FALLBACK_SPAN_DAYS = 90;
 // The band for a day changes as yesterday's hours close; a live map asks
 // again this often.
 const USUAL_REFRESH_MS = 10 * 60_000;
+// Longest the playback clock waits for a frame that is still loading.
+const MAX_BUFFER_HOLD_MS = 5000;
 
 // Each lens has its own address, so a link to Σύνοψη opens Σύνοψη. Switching
 // lenses pushes the path natively (no page load: the map and its state stay);
@@ -177,6 +179,10 @@ export default function DashboardShell({ initialView = "map" }: { initialView?: 
   const fittedOnceRef = useRef(false);
   const skipSeq = useRef(0);
   const skipHoldUntilRef = useRef(0);
+  // Buffering: the map layer says whether the next frame is still loading,
+  // and the clock waits for it (see the playback effect).
+  const frameLoadingRef = useRef<((tMs: number) => boolean) | null>(null);
+  const bufferingSinceRef = useRef(0);
   // Stable identity: MapCanvas keys its (create/destroy!) effect on the
   // onReady callback, and the shell re-renders every second — an inline
   // arrow here would tear the map down each tick. setState is stable.
@@ -311,6 +317,7 @@ export default function DashboardShell({ initialView = "map" }: { initialView?: 
 
   useEffect(() => {
     if (!playing) return;
+    bufferingSinceRef.current = 0;
     const stepMs = PLAYBACK_SPEEDS[speedIndex].simSecondsPerRealSecond * 1000;
     const timer = setInterval(() => {
       // A skip is a held beat: the clock stands still on the landing frame
@@ -328,6 +335,15 @@ export default function DashboardShell({ initialView = "map" }: { initialView?: 
           setPlaying(false);
           return allowed ? "live" : prev;
         }
+        // The next frame is still on its way: stand still this tick, like a
+        // video buffering, so every step the playhead takes shows its data.
+        // Time-based (not a tick count) so a repeated call of this updater
+        // changes nothing; capped so a hung request cannot freeze playback.
+        if (frameLoadingRef.current?.(next)) {
+          if (bufferingSinceRef.current === 0) bufferingSinceRef.current = Date.now();
+          if (Date.now() - bufferingSinceRef.current < MAX_BUFFER_HOLD_MS) return prev;
+        }
+        bufferingSinceRef.current = 0;
         // Landing further than one step away means a gap was skipped: flash
         // the jump cut so the discontinuity reads as intentional.
         if (next - from > stepMs + 1) {
@@ -756,6 +772,7 @@ export default function DashboardShell({ initialView = "map" }: { initialView?: 
               usual={usualForHour}
               onFrame={setFrame}
               overrideFrame={summaryFrame}
+              frameLoadingRef={frameLoadingRef}
             />
             <LocationLayer
               map={mapInstance}
