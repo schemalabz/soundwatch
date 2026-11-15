@@ -186,3 +186,10 @@
 
 /* Liveness underline: a quiet breathing line under the live timestamp. */
 
+
+/* A heatmap cell the filters exclude: hatched, so it reads as "not part of
+   this view" and never as a very quiet hour. */
+.sw-heat-muted {
+  background-image: repeating-linear-gradient(135deg, var(--sw-silver) 0px, var(--sw-silver) 1px, transparent 1px, transparent 4px);
+  opacity: 0.55;
+}

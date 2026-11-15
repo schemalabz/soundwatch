@@ -1,7 +1,7 @@
 "use client";
 
-// The charts view: the filtered time-set summarized four ways — timeline,
-// 24-hour clock, week rose, month wheel. Everything answers to the rail:
+// The charts view: the filtered time-set summarized five ways — timeline,
+// the week hour by hour, 24-hour clock, week rose, month wheel. Everything answers to the rail:
 // filtered-out sectors mute, and a chart whose question the current filters
 // make unanswerable (the month wheel inside a 24-hour period) says why
 // instead of drawing something meaningless.
@@ -21,6 +21,9 @@ import type { AggKey } from "@/lib/dashboard/metrics";
 import MetricMention from "../MetricMention";
 import RadialChart, { type RadialSlice } from "../charts/RadialChart";
 import TimelineChart from "../charts/TimelineChart";
+import WeekHeatmap, { weekCellLabel, weekExtremes, type WeekCell } from "../charts/WeekHeatmap";
+import { fmtDb, fmtInt } from "@/lib/dashboard/format";
+import { heatGradient, heatScale } from "@/lib/dashboard/heat";
 import type { SeriesBucketData, SeriesResponse } from "@/lib/api/dashboard";
 import { BUCKETS, bucketViable, defaultBucket } from "@/lib/dashboard/buckets";
 import { devRenderCount } from "@/lib/dashboard/devtools";
@@ -94,6 +97,69 @@ function BucketPicker({
           </button>
         );
       })}
+    </div>
+  );
+}
+
+/** The network's week as a grid, with its readout and its own colour key. */
+function WeekSection({
+  cells,
+  metric,
+  hourMask,
+  dowMask,
+  filtered,
+}: {
+  cells: Record<number, SeriesBucketData>;
+  metric: AggKey;
+  hourMask: boolean[];
+  dowMask: boolean[];
+  /** Some cells are outside the filters: the key explains the hatching. */
+  filtered: boolean;
+}) {
+  const [hovered, setHovered] = useState<WeekCell | null>(null);
+  const extremes = useMemo(() => weekExtremes(cells, metric, hourMask, dowMask), [cells, metric, hourMask, dowMask]);
+  const scale = useMemo(() => (extremes ? heatScale([extremes.loudest.value, extremes.quietest.value]) : null), [extremes]);
+  if (!extremes || !scale) return <Unavailable reason={tr.charts.noData} />;
+  return (
+    <div>
+      {/* the readout: the hovered hour, else the week's two ends */}
+      <p className="mb-2 min-h-[1.1rem] text-[11.5px] tabular-nums text-muted-foreground">
+        {hovered ? (
+          <>
+            <span className="font-semibold text-foreground">{weekCellLabel(hovered.dow, hovered.hour)}</span>
+            {" · "}
+            <span className="font-semibold text-foreground">{fmtDb(hovered.value)} dB</span>
+            {" · "}
+            {tr.board.measurements(fmtInt(hovered.n))}
+          </>
+        ) : (
+          <>
+            {tr.heat.loudest}:{" "}
+            <span className="font-semibold text-foreground">
+              {weekCellLabel(extremes.loudest.dow, extremes.loudest.hour)} · {fmtDb(extremes.loudest.value)} dB
+            </span>
+            {" · "}
+            {tr.heat.quietest}: {weekCellLabel(extremes.quietest.dow, extremes.quietest.hour)} · {fmtDb(extremes.quietest.value)} dB
+          </>
+        )}
+      </p>
+      <WeekHeatmap cells={cells} metric={metric} scale={scale} hourMask={hourMask} dowMask={dowMask} onHover={setHovered} />
+      <div className="mt-2.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px] tabular-nums text-muted-foreground">
+        <span>
+          {tr.heat.quieter} {fmtDb(scale.lo)}
+        </span>
+        <span className="h-1.5 w-28 rounded-full" style={{ background: heatGradient() }} />
+        <span>
+          {fmtDb(scale.hi)} dB {tr.heat.louder}
+        </span>
+        {filtered && (
+          <span className="ml-2 inline-flex items-center gap-1">
+            <span className="sw-heat-muted inline-block h-2.5 w-4 rounded-[2px]" />
+            {tr.heat.excluded}
+          </span>
+        )}
+        <span className="basis-full text-muted-foreground/80">{tr.heat.relative}</span>
+      </div>
     </div>
   );
 }
@@ -256,6 +322,14 @@ function ChartsView({
     <div className={embedded ? "" : "absolute inset-0 z-10 overflow-y-auto bg-background"}>
       <div className={embedded ? "mx-auto max-w-4xl px-6 pb-16 pt-4 md:px-10" : "mx-auto max-w-4xl px-6 pb-16 pt-[4.5rem] md:px-10"}>
         <div className="flex flex-col gap-10">
+          <Section title={tr.heat.title} caption={tr.heat.caption}>
+            {loading || !series ? (
+              <Skeleton />
+            ) : (
+              <WeekSection cells={series.dowHours} metric={metric} hourMask={hourMask} dowMask={dowMask} filtered={hourMask.includes(false) || dowMask.includes(false)} />
+            )}
+          </Section>
+
           <Section
             title={tr.charts.timeline}
             caption={

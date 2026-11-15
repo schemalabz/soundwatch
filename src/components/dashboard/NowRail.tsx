@@ -19,6 +19,7 @@ import type { FrameData } from "@/lib/dashboard/frames";
 import type { DeparturesResponse, UsualBand } from "@/lib/api/dashboard";
 import type { FreshnessResponse } from "@/types/freshness";
 import type { SensorMeta } from "./SensorLayer";
+import MapLegend from "./MapLegend";
 import { devRenderCount } from "@/lib/dashboard/devtools";
 
 /** A unit silent longer than this has left the network, not just the morning. */
@@ -40,6 +41,8 @@ export interface NowRailProps {
   usual: Record<string, UsualBand> | null;
   departures: DeparturesResponse | null;
   freshness: FreshnessResponse | null;
+  /** Carry the map's key here (phones, where the map has no room for it). */
+  showLegend?: boolean;
   onJumpTo: (epochMs: number) => void;
   onSensorClick: (sensorId: string) => void;
 }
@@ -247,6 +250,8 @@ function NowRail(p: NowRailProps) {
             </ul>
           </section>
         )}
+        {/* Phones have no room for the key on the map: it lives in the sheet. */}
+        {p.showLegend && <MapLegend className="w-full shadow-none" />}
       </div>
 
       <footer className="flex flex-wrap gap-x-3 gap-y-1 border-t px-5 py-3 text-[11px]">

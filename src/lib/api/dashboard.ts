@@ -57,6 +57,9 @@ export interface SeriesResponse {
   dows: Record<number, SeriesBucketData>;
   /** Keyed 1-12. */
   months: Record<number, SeriesBucketData>;
+  /** The week's hours, keyed dow * 24 + hour (dow 0 = Sunday). Summed from the
+   *  same bins as the rest, so its percentiles are exact, never averaged. */
+  dowHours: Record<number, SeriesBucketData>;
   timeline: SeriesPoint[];
 }
 

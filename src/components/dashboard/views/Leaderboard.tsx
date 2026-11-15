@@ -9,11 +9,12 @@
 // (nights) redrew exactly the same bars, and the filters looked broken.
 
 import { memo, useMemo, useState } from "react";
-import { ChevronDown, ChevronUp } from "lucide-react";
+import { Check, ChevronDown, ChevronUp, Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { dashboardStrings as tr } from "@/lib/strings/dashboard";
 import { levelColor, paletteStops } from "@/lib/dashboard/levels";
 import { fmtDb, fmtInt } from "@/lib/dashboard/format";
+import { COMPARE_COLORS, MAX_COMPARE } from "@/lib/dashboard/compare";
 import type { AggKey } from "@/lib/dashboard/metrics";
 import type { SensorMeta } from "../SensorLayer";
 import MetricMention from "../MetricMention";
@@ -32,6 +33,31 @@ const BAR_SCALE: Record<AggKey, [number, number]> = {
   lmax: [70, 120],
 };
 
+/** The + at the end of a row: adds the place to the comparison below, and
+ *  once added wears that place's colour there. */
+function CompareToggle({ name, slot, full, onToggle }: { name: string; slot: number; full: boolean; onToggle: () => void }) {
+  const on = slot >= 0;
+  const label = on ? tr.compare.remove(name) : full ? tr.compare.full(MAX_COMPARE) : tr.compare.add(name);
+  return (
+    <button
+      type="button"
+      aria-pressed={on}
+      aria-label={label}
+      title={label}
+      disabled={!on && full}
+      onClick={onToggle}
+      className={cn(
+        "grid size-7 shrink-0 place-items-center rounded-md border transition-colors max-md:size-10",
+        on ? "border-transparent text-white" : "bg-card text-muted-foreground hover:border-slate hover:text-foreground",
+        !on && full && "pointer-events-none opacity-30"
+      )}
+      style={on ? { backgroundColor: COMPARE_COLORS[slot % COMPARE_COLORS.length] } : undefined}
+    >
+      {on ? <Check className="size-3.5" /> : <Plus className="size-3.5" />}
+    </button>
+  );
+}
+
 function Leaderboard({
   aggData,
   metric,
@@ -41,6 +67,8 @@ function Leaderboard({
   embedded,
   stale,
   scope,
+  compareIds,
+  onCompareToggle,
 }: {
   aggData: Record<string, Record<AggKey, number> & { n: number }> | null;
   metric: AggKey;
@@ -53,6 +81,9 @@ function Leaderboard({
   stale?: boolean;
   /** What the ranking covers, in the rail's words: «τις νύχτες, μόνο ΣΚ». */
   scope?: string;
+  /** The places in the comparison; with onCompareToggle, each row gets a +. */
+  compareIds?: readonly string[];
+  onCompareToggle?: (id: string) => void;
 }) {
   devRenderCount("Leaderboard");
   const [expanded, setExpanded] = useState(false);
@@ -70,6 +101,7 @@ function Leaderboard({
     if (!rows) return [];
     return expanded ? rows : rows.slice(0, TOP_N);
   }, [rows, expanded]);
+  const compareFull = (compareIds?.length ?? 0) >= MAX_COMPARE;
   const hiddenCount = rows ? Math.max(0, rows.length - TOP_N) : 0;
   const [lo, hi] = BAR_SCALE[metric];
   const barFraction = (v: number) => 0.04 + 0.96 * Math.min(1, Math.max(0, (v - lo) / (hi - lo)));
@@ -98,11 +130,11 @@ function Leaderboard({
               const m = meta.get(row.id);
               const color = levelColor(row.value, stops);
               return (
-                <li key={row.id}>
+                <li key={row.id} className="flex items-center gap-1">
                   <button
                     type="button"
                     onClick={() => onSensorClick(row.id)}
-                    className="group grid min-h-11 w-full grid-cols-[1.75rem_minmax(0,1fr)_4.5rem_auto] items-center gap-3 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-silver/20 sm:grid-cols-[2rem_minmax(7rem,11rem)_1fr_auto]"
+                    className="group grid min-h-11 min-w-0 flex-1 grid-cols-[1.75rem_minmax(0,1fr)_4.5rem_auto] items-center gap-3 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-silver/20 sm:grid-cols-[2rem_minmax(7rem,11rem)_1fr_auto]"
                   >
                     <span
                       className={
@@ -134,6 +166,7 @@ function Leaderboard({
                       <span className="ml-0.5 text-[9px] text-muted-foreground">dB</span>
                     </span>
                   </button>
+                  {onCompareToggle && <CompareToggle name={m?.name ?? row.id.slice(0, 8)} slot={compareIds?.indexOf(row.id) ?? -1} full={compareFull} onToggle={() => onCompareToggle(row.id)} />}
                 </li>
               );
             })}
