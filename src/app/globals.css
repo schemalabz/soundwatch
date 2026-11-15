@@ -187,6 +187,35 @@
 /* Liveness underline: a quiet breathing line under the live timestamp. */
 
 
+/* Playback buffering: a ring running around the play button while the clock
+   waits for the next frame. With reduced motion it breathes instead. */
+@keyframes sw-buffer-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@keyframes sw-buffer-in {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes sw-buffer-breathe {
+  50% {
+    opacity: 0.35;
+  }
+}
+.sw-buffer-ring {
+  transform-origin: center;
+  animation:
+    sw-buffer-spin 900ms linear infinite,
+    sw-buffer-in 250ms ease-out;
+}
+@media (prefers-reduced-motion: reduce) {
+  .sw-buffer-ring {
+    animation: sw-buffer-breathe 1600ms ease-in-out infinite;
+  }
+}
+
 /* The selection chip (ScopeChip): the same token in the rail's header and on
    every section it governs. It flashes when it (re)mounts, i.e. whenever the
    selection changes, so a filter's effect is seen landing everywhere.

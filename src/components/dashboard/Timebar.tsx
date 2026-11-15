@@ -39,12 +39,14 @@ export interface TimebarProps {
   filtered: boolean;
   cursor: number | "live";
   playing: boolean;
+  /** Playing, but the clock is waiting for the next frame's data. */
+  buffering: boolean;
   speedIndex: number;
   liveAllowed: boolean;
   freshSecondsAgo: number | null;
   orientation: "horizontal" | "vertical";
   locale: string;
-  labels: { live: string; liveExcluded: string; play: string; pause: string; speed: string };
+  labels: { live: string; liveExcluded: string; play: string; pause: string; buffering: string; speed: string };
   onCursorChange: (cursor: number | "live") => void;
   onPlayToggle: () => void;
   onSpeedSelect: (index: number) => void;
@@ -316,15 +318,30 @@ function SpeedLadder({ p, compact }: { p: TimebarProps; compact?: boolean }) {
 function PlayControls({ p, vertical }: { p: TimebarProps; vertical?: boolean }) {
   return (
     <div className={cn("flex items-center", vertical ? "flex-col gap-1" : "gap-1.5")}>
-      <Button
-        variant="ghost"
-        size="icon"
-        className="size-8 rounded-full text-foreground hover:bg-secondary"
-        onClick={p.onPlayToggle}
-        aria-label={p.playing ? p.labels.pause : p.labels.play}
-      >
-        {p.playing ? <Pause className="size-3.5" /> : <Play className="size-3.5 translate-x-px" />}
-      </Button>
+      <span className="relative grid place-items-center">
+        <Button
+          variant="ghost"
+          size="icon"
+          className="size-8 rounded-full text-foreground hover:bg-secondary"
+          onClick={p.onPlayToggle}
+          aria-label={p.playing ? p.labels.pause : p.labels.play}
+          aria-busy={p.buffering || undefined}
+          title={p.buffering ? p.labels.buffering : undefined}
+        >
+          {p.playing ? <Pause className="size-3.5" /> : <Play className="size-3.5 translate-x-px" />}
+        </Button>
+        {/* Buffering: the clock is waiting for the next frame. A ring runs
+            around the button, which stays a working pause button. */}
+        {p.buffering && (
+          <svg aria-hidden viewBox="0 0 36 36" className="sw-buffer-ring pointer-events-none absolute -inset-0.5 size-9">
+            <circle cx="18" cy="18" r="16.5" fill="none" stroke="currentColor" strokeOpacity="0.14" strokeWidth="1.5" />
+            <circle cx="18" cy="18" r="16.5" fill="none" stroke="var(--sw-sound)" strokeWidth="1.75" strokeLinecap="round" strokeDasharray="28 76" />
+          </svg>
+        )}
+        <span role="status" className="sr-only">
+          {p.buffering ? p.labels.buffering : ""}
+        </span>
+      </span>
       <SpeedLadder p={p} compact={vertical} />
     </div>
   );

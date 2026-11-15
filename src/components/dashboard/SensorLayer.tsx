@@ -18,15 +18,19 @@
 //   map says: this place is outside its own usual for this hour (the rule is
 //   src/lib/dashboard/usual.ts). Most places, most of the time, have none.
 
-import { memo, useEffect, useMemo, useReducer, useRef, useState } from "react";
+import { memo, useEffect, useMemo, useReducer, useRef, useState, type RefObject } from "react";
 import type mapboxgl from "mapbox-gl";
 import {
+  FRAME_REQUEST_TIMEOUT_MS,
   FrameStore,
+  dropStaleRequests,
   frameKey,
   frameWindowS,
   quantizeFrameMs,
+  retryDelayMs,
   upcomingFrameTimes,
   type FrameData,
+  type FrameRequest,
 } from "@/lib/dashboard/frames";
 import { audibleRadiusM, levelColor, metersPerPixel, paletteStops } from "@/lib/dashboard/levels";
 import { withinLocations, type LocationPin, type TimeSegment } from "@/lib/dashboard/filters";
@@ -69,6 +73,12 @@ export interface SensorLayerProps {
    * the lifted frame stays the moment's, so the pane keeps saying «now».
    */
   overrideFrame?: FrameData | null;
+  /**
+   * Filled with "is the frame for this instant still on its way?". The
+   * playback clock asks before each step and waits for a loading frame
+   * instead of stepping onto circles that would not change.
+   */
+  frameLoadingRef?: RefObject<((tMs: number) => boolean) | null>;
 }
 
 const MARKER_PX = 30;
@@ -303,7 +313,7 @@ function applyValue(
   }
 }
 
-function SensorLayer({ map, sensors, cursor, stepMs, segments, playing, metric, onSensorClick, locations, clickThrough, usual, onFrame, overrideFrame }: SensorLayerProps) {
+function SensorLayer({ map, sensors, cursor, stepMs, segments, playing, metric, onSensorClick, locations, clickThrough, usual, onFrame, overrideFrame, frameLoadingRef }: SensorLayerProps) {
   devRenderCount("SensorLayer");
   const hasOverride = overrideFrame != null;
   const [version, bumpVersion] = useReducer((v: number) => v + 1, 0);
@@ -437,14 +447,33 @@ function SensorLayer({ map, sensors, cursor, stepMs, segments, playing, metric, 
 
   // --- prefetcher: current frame + the playback path ahead, one batch ---
   const cursorQ = cursor === "live" ? "live" : quantizeFrameMs(cursor);
+  const inflightRef = useRef(new Set<FrameRequest>());
+  // Failed batches back off: `until` gates the next attempt, and the timer
+  // bumps `retryTick` so the attempt happens even when nothing else changes
+  // (a paused playhead would otherwise sit on a frame that never loads).
+  const backoffRef = useRef({ failures: 0, until: 0 });
+  const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [retryTick, bumpRetry] = useReducer((v: number) => v + 1, 0);
   useEffect(() => {
-    if (cursorQ === "live" || hasOverride) return;
+    const store = storeRef.current;
+    const inflight = inflightRef.current;
+    if (cursor === "live" || hasOverride) {
+      dropStaleRequests(inflight, new Set(), store);
+      return;
+    }
     const windowS = frameWindowS(stepMs);
     const ahead = playing ? PREFETCH_AHEAD : 2;
-    const times = upcomingFrameTimes(segments, cursorQ, stepMs, ahead)
+    // Walk from the cursor itself, not its quantized minute: the clock steps
+    // from the raw value, and across a filter gap the two can land a minute
+    // apart — the frame fetched must be the one the clock will ask for.
+    const times = upcomingFrameTimes(segments, cursor, stepMs, ahead)
       .map(quantizeFrameMs)
       .filter((t, i, arr) => arr.indexOf(t) === i);
-    const missing = times.filter((t) => !storeRef.current.has(frameKey(t, windowS, metric)));
+    // Only batches that left the path are cancelled. This effect has NO abort
+    // in its cleanup on purpose: the cleanup runs on every playhead step, and
+    // a batch must be allowed to outlive the tick that sent it.
+    dropStaleRequests(inflight, new Set(times.map((t) => frameKey(t, windowS, metric))), store);
+    const missing = times.filter((t) => !store.has(frameKey(t, windowS, metric)));
     if (missing.length === 0) return;
     // Batch the lookahead: at steady state playback creates exactly one new
     // missing frame per tick, and fetching it immediately meant one request
@@ -453,21 +482,69 @@ function SensorLayer({ map, sensors, cursor, stepMs, segments, playing, metric, 
     // starve: first play, post-skip, post-scrub all hit this path).
     const urgent = missing.includes(times[0]) || (times.length > 1 && missing.includes(times[1]));
     if (!urgent && missing.length < 3) return;
-    for (const t of missing) storeRef.current.markPending(frameKey(t, windowS, metric));
-    const controller = new AbortController();
-    fetch(`/api/frames?at=${missing.join(",")}&window=${windowS}&metric=${metric}`, { signal: controller.signal })
-      .then((r) => r.json())
+    if (Date.now() < backoffRef.current.until) return; // the retry timer re-runs this effect
+    const req: FrameRequest = { keys: missing.map((t) => frameKey(t, windowS, metric)), controller: new AbortController() };
+    for (const k of req.keys) store.markPending(k);
+    inflight.add(req);
+    // A request that never answers would keep its frames "pending" for good.
+    let failed = false;
+    const timeout = setTimeout(() => {
+      failed = true;
+      req.controller.abort();
+    }, FRAME_REQUEST_TIMEOUT_MS);
+    fetch(`/api/frames?at=${missing.join(",")}&window=${windowS}&metric=${metric}`, { signal: req.controller.signal })
+      .then((r) => {
+        if (!r.ok) throw new Error(`frames ${r.status}`);
+        return r.json();
+      })
       .then((body: { frames: Record<string, FrameData> }) => {
-        for (const t of missing) {
-          storeRef.current.set(frameKey(t, windowS, metric), body.frames[String(t)] ?? {});
-        }
+        missing.forEach((t, i) => store.set(req.keys[i], body.frames[String(t)] ?? {}));
+        backoffRef.current = { failures: 0, until: 0 };
         bumpVersion();
       })
       .catch(() => {
-        for (const t of missing) storeRef.current.clearPending(frameKey(t, windowS, metric));
+        // Free the markers so the frames can be asked for again.
+        for (const k of req.keys) store.clearPending(k);
+        // A batch we cancelled ourselves (the playhead left it) is not a
+        // failure. A real one — network, non-2xx, timeout — backs off.
+        if (req.controller.signal.aborted && !failed) return;
+        const failures = backoffRef.current.failures + 1;
+        const delay = retryDelayMs(failures);
+        backoffRef.current = { failures, until: Date.now() + delay };
+        if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
+        retryTimerRef.current = setTimeout(bumpRetry, delay);
+      })
+      .finally(() => {
+        clearTimeout(timeout);
+        inflight.delete(req);
       });
-    return () => controller.abort();
-  }, [cursorQ, stepMs, segments, playing, metric, hasOverride]);
+  }, [cursor, stepMs, segments, playing, metric, hasOverride, retryTick]);
+  useEffect(() => {
+    const store = storeRef.current;
+    const inflight = inflightRef.current;
+    return () => {
+      dropStaleRequests(inflight, new Set(), store);
+      if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
+    };
+  }, []);
+
+  // A frame holds the clock while it is being fetched, or while it is missing
+  // and a retry is scheduled. One nobody asked for must not: stepping onto it
+  // is what triggers its fetch.
+  useEffect(() => {
+    if (!frameLoadingRef) return;
+    const store = storeRef.current;
+    const windowS = frameWindowS(stepMs);
+    frameLoadingRef.current = hasOverride
+      ? null
+      : (tMs) => {
+          const key = frameKey(tMs, windowS, metric);
+          return store.isPending(key) || (!store.has(key) && Date.now() < backoffRef.current.until);
+        };
+    return () => {
+      frameLoadingRef.current = null;
+    };
+  }, [frameLoadingRef, stepMs, metric, hasOverride]);
 
   // --- apply the current frame to the marker elements ---
   useEffect(() => {

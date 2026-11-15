@@ -48,6 +48,45 @@ export function upcomingFrameTimes(
   return out;
 }
 
+/** One in-flight /api/frames batch: the store keys it will fill. */
+export interface FrameRequest {
+  keys: string[];
+  controller: AbortController;
+}
+
+/**
+ * Abort the in-flight batches that no longer cover ANY frame on the path
+ * ahead (a scrub or a filter change moved the playhead elsewhere), and free
+ * their pending markers at once so the same frames can be asked for again.
+ *
+ * A batch that still covers an upcoming frame is left alone. Aborting on
+ * every playhead step — which is what an effect cleanup does — killed each
+ * batch one second after it was sent: whenever the server needed longer than
+ * a tick (cold chunks do), no frame ever landed and the circles froze while
+ * the playhead kept moving.
+ */
+export function dropStaleRequests(inflight: Set<FrameRequest>, wanted: ReadonlySet<string>, store: FrameStore): void {
+  for (const req of inflight) {
+    if (req.keys.some((k) => wanted.has(k))) continue;
+    inflight.delete(req);
+    for (const k of req.keys) store.clearPending(k);
+    req.controller.abort();
+  }
+}
+
+/** A batch with no answer after this long is treated as failed. */
+export const FRAME_REQUEST_TIMEOUT_MS = 15_000;
+
+/**
+ * How long to leave the server alone after `failures` failed batches in a
+ * row: 2 s, 4 s, 8 s, then 10 s. Without it playback re-sent a full lookahead
+ * batch every second at a server that was already failing. The cap is also
+ * the longest a recovered server waits to be noticed, so it stays short.
+ */
+export function retryDelayMs(failures: number): number {
+  return Math.min(10_000, 1000 * 2 ** Math.max(1, failures));
+}
+
 const MAX_RESOLVED_FRAMES = 48;
 
 export class FrameStore {
@@ -61,6 +100,11 @@ export class FrameStore {
   /** True when the key is resolved OR already being fetched. */
   has(key: string): boolean {
     return this.entries.has(key);
+  }
+
+  /** True only while the key's fetch is in flight. */
+  isPending(key: string): boolean {
+    return this.entries.get(key) === "pending";
   }
 
   markPending(key: string): void {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { FrameStore, frameKey, frameWindowS, quantizeFrameMs, upcomingFrameTimes } from "./frames";
+import { FrameStore, dropStaleRequests, frameKey, frameWindowS, quantizeFrameMs, retryDelayMs, upcomingFrameTimes, type FrameRequest } from "./frames";
 import { levelColor, levelScale, DEFAULT_STOPS, audibleRadiusM, metersPerPixel } from "./levels";
 
 const HOUR = 3_600_000;
@@ -59,6 +59,60 @@ describe("FrameStore", () => {
     expect(store.get("k59")).toBeDefined();
     expect(store.has("inflight")).toBe(true); // pending survives
     expect(store.size).toBeLessThanOrEqual(49 + 1);
+  });
+});
+
+describe("dropStaleRequests", () => {
+  const T0 = 1_786_000_020_000;
+  const whole = [{ startMs: T0 - 100 * HOUR, endMs: T0 + 100 * HOUR }];
+  const keysAt = (cursor: number, count: number) => upcomingFrameTimes(whole, cursor, HOUR, count).map((t) => frameKey(t, 3600, "laeq"));
+  const send = (store: FrameStore, inflight: Set<FrameRequest>, keys: string[]) => {
+    const req = { keys, controller: new AbortController() };
+    for (const k of keys) store.markPending(k);
+    inflight.add(req);
+    return req;
+  };
+
+  // The regression: playback aborted its own lookahead on every step, so a
+  // response slower than one tick never arrived and the circles never moved.
+  it("lets a batch outlive the playhead steps it was sent for", () => {
+    const store = new FrameStore();
+    const inflight = new Set<FrameRequest>();
+    const req = send(store, inflight, keysAt(T0, 6));
+    for (let step = 1; step <= 5; step++) {
+      dropStaleRequests(inflight, new Set(keysAt(T0 + step * HOUR, 6)), store);
+      expect(req.controller.signal.aborted).toBe(false);
+      expect(store.isPending(req.keys[5])).toBe(true);
+    }
+    // Past its last frame nothing in it can be shown any more.
+    dropStaleRequests(inflight, new Set(keysAt(T0 + 6 * HOUR, 6)), store);
+    expect(req.controller.signal.aborted).toBe(true);
+  });
+
+  it("cancels a batch the playhead scrubbed away from, and frees its frames at once", () => {
+    const store = new FrameStore();
+    const inflight = new Set<FrameRequest>();
+    const req = send(store, inflight, keysAt(T0, 2));
+    dropStaleRequests(inflight, new Set(keysAt(T0 + 30 * HOUR, 2)), store);
+    expect(req.controller.signal.aborted).toBe(true);
+    expect(inflight.size).toBe(0);
+    // Scrubbing straight back must be able to ask for them again.
+    expect(store.has(req.keys[0])).toBe(false);
+  });
+
+  it("does not free a frame that already landed", () => {
+    const store = new FrameStore();
+    const inflight = new Set<FrameRequest>();
+    const req = send(store, inflight, keysAt(T0, 2));
+    store.set(req.keys[0], { a: { laeq: 60, n: 1 } });
+    dropStaleRequests(inflight, new Set(), store);
+    expect(store.get(req.keys[0])).toEqual({ a: { laeq: 60, n: 1 } });
+  });
+});
+
+describe("retryDelayMs", () => {
+  it("doubles from 2 s and stops at 10 s", () => {
+    expect([1, 2, 3, 4, 5, 20].map(retryDelayMs)).toEqual([2000, 4000, 8000, 10_000, 10_000, 10_000]);
   });
 });
 
