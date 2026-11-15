@@ -217,8 +217,12 @@ export default function AboutPage() {
             <a href="/api/docs" className="text-muted-foreground hover:text-foreground">
               {tr.nav.api}
             </a>
-            <span className="text-muted-foreground/70">{tr.footer.privacy}</span>
-            <span className="text-muted-foreground/70">{tr.footer.terms}</span>
+            <Link href="/privacy" className="text-muted-foreground hover:text-foreground">
+              {tr.footer.privacy}
+            </Link>
+            <Link href="/terms" className="text-muted-foreground hover:text-foreground">
+              {tr.footer.terms}
+            </Link>
           </nav>
           <div className="text-[13px] text-muted-foreground">{tr.footer.org}</div>
         </div>
