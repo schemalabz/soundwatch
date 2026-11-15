@@ -29,6 +29,11 @@ export const PLAYBACK_SPEEDS = [
   { label: "6ω/δ", labelEn: "6h/s", simSecondsPerRealSecond: 21600 },
 ] as const;
 
+// How close (px along the rail) the hover chip may come before the cursor
+// chip hides: about one chip's width when side by side, its height when stacked.
+const HOVER_CHIP_CLEARANCE_X_PX = 84;
+const HOVER_CHIP_CLEARANCE_Y_PX = 18;
+
 export type BarMode = "instants" | "aggregate";
 
 export interface TimebarProps {
@@ -72,11 +77,11 @@ function useFraction(p: TimebarProps): (t: number) => number {
   );
 }
 
-function useCursorLabel(p: TimebarProps): string {
-  const cursorMs = useCursorMs(p);
+/** "3 Οκτ, 06:48" — the cursor chip and the hover chip speak the same format. */
+function useInstantFormat(locale: string): Intl.DateTimeFormat {
   return useMemo(
     () =>
-      new Intl.DateTimeFormat(p.locale, {
+      new Intl.DateTimeFormat(locale, {
         timeZone: ATHENS_TZ,
         day: "numeric",
         month: "short",
@@ -85,9 +90,15 @@ function useCursorLabel(p: TimebarProps): string {
         // 24-hour, like every other clock on the page: without it the Greek
         // locale answers «04:03 μ.μ.» beside a chip that says 16:03.
         hourCycle: "h23",
-      }).format(cursorMs),
-    [p.locale, cursorMs]
+      }),
+    [locale]
   );
+}
+
+function useCursorLabel(p: TimebarProps): string {
+  const cursorMs = useCursorMs(p);
+  const format = useInstantFormat(p.locale);
+  return useMemo(() => format.format(cursorMs), [format, cursorMs]);
 }
 
 /** Observed pixel length of the rail along its axis. */
@@ -167,7 +178,9 @@ function usePointerScrub(p: TimebarProps, axis: "x" | "y") {
     (e: React.PointerEvent) => {
       const f = fractionFromEvent(e);
       if (dragging) commit(f, false);
-      else setHoverFraction(f);
+      // Hover is a mouse idea: a finger has no "over" that outlives the touch,
+      // and its stray moves would leave a chip behind.
+      else if (e.pointerType !== "touch") setHoverFraction(f);
     },
     [dragging, commit, fractionFromEvent]
   );
@@ -207,7 +220,15 @@ function usePointerScrub(p: TimebarProps, axis: "x" | "y") {
     [p, axis]
   );
 
-  return { railRef, dragging, hoverFraction, onPointerDown, onPointerMove, onPointerUp, onPointerLeave, onKeyDown };
+  // What the pointer is over, as a time: shown next to the hover line so the
+  // rail can be read before it is clicked.
+  const format = useInstantFormat(p.locale);
+  const hover = useMemo(
+    () => (hoverFraction == null || dragging ? null : { fraction: hoverFraction, label: format.format(toTime(hoverFraction)) }),
+    [hoverFraction, dragging, format, toTime]
+  );
+
+  return { railRef, dragging, hover, onPointerDown, onPointerMove, onPointerUp, onPointerLeave, onKeyDown };
 }
 
 /** The complement of the selected segments within the domain. */
@@ -357,7 +378,7 @@ function HorizontalTimebar(p: TimebarProps) {
   const fraction = useFraction(p);
   const cursorMs = useCursorMs(p);
   const cursorLabel = useCursorLabel(p);
-  const { railRef, dragging, hoverFraction, onPointerDown, onPointerMove, onPointerUp, onPointerLeave, onKeyDown } =
+  const { railRef, dragging, hover, onPointerDown, onPointerMove, onPointerUp, onPointerLeave, onKeyDown } =
     usePointerScrub(p, "x");
   const railLength = useRailLength(railRef, "x");
   const graduations = useGraduations(p, railLength);
@@ -432,10 +453,10 @@ function HorizontalTimebar(p: TimebarProps) {
             </div>
           ))}
         {/* hover ghost */}
-        {hoverFraction != null && !dragging && (
+        {hover && (
           <div
             className="pointer-events-none absolute inset-y-0 w-px bg-slate/40"
-            style={{ left: `${hoverFraction * 100}%` }}
+            style={{ left: `${hover.fraction * 100}%` }}
           />
         )}
         {/* the aggregation window: the frame is a TRAILING mean, so the
@@ -472,13 +493,24 @@ function HorizontalTimebar(p: TimebarProps) {
           <div className="mx-auto h-full w-[1.5px] bg-ink" />
           <div className="absolute left-1/2 top-1/2 size-[9px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-sound shadow-sm ring-2 ring-card" />
         </div>
-        {/* cursor time chip */}
-        {!isLive && (
+        {/* cursor time chip — it steps aside when the hover chip would land on
+            it: two overlapping dates read as neither. */}
+        {!isLive && !(hover && Math.abs(hover.fraction - cursorF) * railLength < HOVER_CHIP_CLEARANCE_X_PX) && (
           <div
             className="pointer-events-none absolute -top-1 -translate-x-1/2 whitespace-nowrap rounded border bg-card px-1 py-px text-[9.5px] font-medium tabular-nums leading-tight text-foreground shadow-sm"
             style={{ left: `min(max(${cursorF * 100}%, 2.5rem), calc(100% - 2.5rem))` }}
           >
             {cursorLabel}
+          </div>
+        )}
+        {/* hover chip: the time under the pointer. Inverted, and painted over
+            the cursor chip when the two meet — the pointer is where the eye is. */}
+        {hover && (
+          <div
+            className="pointer-events-none absolute -top-1 z-10 -translate-x-1/2 whitespace-nowrap rounded bg-ink px-1 py-px text-[9.5px] font-medium tabular-nums leading-tight text-paper shadow-sm"
+            style={{ left: `min(max(${hover.fraction * 100}%, 2.5rem), calc(100% - 2.5rem))` }}
+          >
+            {hover.label}
           </div>
         )}
       </div>
@@ -501,10 +533,8 @@ function VerticalTimebar(p: TimebarProps) {
   const fraction = useFraction(p);
   const cursorMs = useCursorMs(p);
   const cursorLabel = useCursorLabel(p);
-  const { railRef, dragging, hoverFraction, onPointerDown, onPointerMove, onPointerUp, onPointerLeave, onKeyDown } =
+  const { railRef, hover, onPointerDown, onPointerMove, onPointerUp, onPointerLeave, onKeyDown } =
     usePointerScrub(p, "y");
-  void dragging;
-  void hoverFraction;
   const railLength = useRailLength(railRef, "y");
   const graduations = useGraduations(p, railLength);
   const isLive = p.cursor === "live";
@@ -607,13 +637,28 @@ function VerticalTimebar(p: TimebarProps) {
           <div className="absolute left-1/2 top-1/2 size-[9px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-sound shadow-sm ring-2 ring-card" />
         </div>
         {/* cursor chip: floats left of the rail */}
-        {!isLive && (
+        {!isLive && !(hover && Math.abs(hover.fraction - cursorF) * railLength < HOVER_CHIP_CLEARANCE_Y_PX) && (
           <div
             className="pointer-events-none absolute right-full mr-1.5 -translate-y-1/2 whitespace-nowrap rounded border bg-card px-1 py-px text-[9.5px] font-medium tabular-nums text-foreground shadow-sm"
             style={{ top: `min(max(${(1 - cursorF) * 100}%, 0.75rem), calc(100% - 0.75rem))` }}
           >
             {cursorLabel}
           </div>
+        )}
+        {/* hover (a mouse on a narrow window): line and chip, as on desktop */}
+        {hover && (
+          <>
+            <div
+              className="pointer-events-none absolute inset-x-0 h-px bg-slate/40"
+              style={{ top: `${(1 - hover.fraction) * 100}%` }}
+            />
+            <div
+              className="pointer-events-none absolute right-full z-10 mr-1.5 -translate-y-1/2 whitespace-nowrap rounded bg-ink px-1 py-px text-[9.5px] font-medium tabular-nums text-paper shadow-sm"
+              style={{ top: `min(max(${(1 - hover.fraction) * 100}%, 0.75rem), calc(100% - 0.75rem))` }}
+            >
+              {hover.label}
+            </div>
+          </>
         )}
       </div>
 
