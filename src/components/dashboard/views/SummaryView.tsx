@@ -9,6 +9,10 @@
 // (showing each place's aggregate, see DashboardShell's summaryFrame) is
 // seen and dragged through the cutout, and scrolls out of sight as the
 // ranking comes up.
+//
+// On a touch screen the overlay takes the touches instead (see TOUCH_SCROLL):
+// there the page has to scroll from anywhere, and a finger on a map that
+// fills the top half of a phone would pan the map and never reach the page.
 
 import { memo, useCallback, useEffect, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
@@ -23,6 +27,13 @@ import ChartsView from "./ChartsView";
 import CompareSection from "./CompareSection";
 import { devRenderCount } from "@/lib/dashboard/devtools";
 
+
+// A scroller with pointer-events:none is not a touch-scroll target in WebKit,
+// even under a finger that is on one of its pointer-events:auto children: on
+// an iPhone this page did not scroll at all. So where the primary pointer is a
+// finger the scroller takes pointer events itself. The map in the cutout is
+// then looked at, not dragged; a tap on a circle is handed down to it.
+const TOUCH_SCROLL = "[@media(pointer:coarse)]:pointer-events-auto";
 
 function SummaryView({
   aggData,
@@ -85,18 +96,33 @@ function SummaryView({
   useEffect(() => {
     if (placingPin) scrollRef.current?.scrollTo({ top: 0, behavior: "smooth" });
   }, [placingPin]);
+  // Reached only on a touch screen (elsewhere the cutout lets events through):
+  // pass a tap to the circle under the finger, so a place still opens from the map.
+  const onCutoutClick = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    if (e.target !== e.currentTarget) return;
+    const marker = document
+      .elementsFromPoint(e.clientX, e.clientY)
+      .map((el) => el.closest<HTMLElement>(".mapboxgl-marker"))
+      .find((el) => el != null);
+    marker?.click();
+  }, []);
   return (
     <ScopeProvider text={filterQualifiers} onHover={onScopeHover} onClick={onScopeClick}>
-    <div ref={scrollRef} className="pointer-events-none absolute inset-0 z-10 overflow-y-auto" onScroll={onScroll}>
+    <div
+      ref={scrollRef}
+      // Placing a pin needs the map itself to get the tap, on any screen.
+      className={cn("pointer-events-none absolute inset-0 z-10 overflow-y-auto", !placingPin && TOUCH_SCROLL)}
+      onScroll={onScroll}
+    >
       <div
         aria-hidden="true"
         className={cn(
-          "sticky top-0 z-[1] h-[4.5rem] bg-gradient-to-b from-background from-60% to-transparent transition-opacity duration-200",
+          "pointer-events-none sticky top-0 z-[1] h-[4.5rem] bg-gradient-to-b from-background from-60% to-transparent transition-opacity duration-200",
           scrolled ? "opacity-100" : "opacity-0"
         )}
       />
       {/* the cutout: the map underneath, with what it shows said in a chip */}
-      <div className="relative -mt-[4.5rem] h-[46vh] min-h-[16rem]">
+      <div className="relative -mt-[4.5rem] h-[46vh] min-h-[16rem]" onClick={onCutoutClick}>
         {/* Stacks on a phone, one line from md up. */}
         <div className="pointer-events-auto absolute bottom-3 left-3 flex max-w-[calc(100%-1.5rem)] flex-col gap-0.5 rounded-lg border bg-card/95 px-3 py-1.5 text-[11.5px] shadow-sm backdrop-blur-sm md:flex-row md:items-center md:gap-1.5">
           <span className="shrink-0 font-semibold text-foreground">{tr.summary.mapTitle}</span>
