@@ -6,6 +6,7 @@ import { instantMatches, parseEpochMs, parseWireFilters } from "@/lib/dashboard/
 import { athensWallTime } from "@/lib/dashboard/time";
 import { needsRawReadings, resolveBucket } from "@/lib/dashboard/buckets";
 import { BIN_LO, BIN_HI, BIN_COUNT } from "@/lib/server/levelBins";
+import { RB_HOUR, R_TIME, rTimeRangeSql, rbHourRangeSql } from "@/lib/server/hourBucket";
 import type { SeriesResponse } from "@/lib/api/dashboard";
 
 // Grouped series over the FILTERED time-set, network-wide, for the charts
@@ -89,13 +90,13 @@ export async function GET(req: NextRequest) {
   // The domain edge is quantized down to a bucket boundary: the partial first
   // bucket is included whole, consistent with the real-time tail including the
   // partial current one.
-  const fromIso = new Date(Math.floor(fromMs / (bucketS * 1000)) * bucketS * 1000).toISOString();
+  const fromEdgeMs = Math.floor(fromMs / (bucketS * 1000)) * bucketS * 1000;
 
   const rows = needsRawReadings(bucketS)
     ? // Sub-hour: the aggregate is hourly and cannot answer. Same 1-dB
       // width_bucket it uses, applied to raw rows at this resolution.
       await prisma.$queryRawUnsafe<BinSqlRow[]>(`
-        SELECT (EXTRACT(epoch FROM r.recorded_at)::bigint / ${bucketS}) * ${bucketS} AS t,
+        SELECT (EXTRACT(epoch FROM ${R_TIME})::bigint / ${bucketS}) * ${bucketS} AS t,
                width_bucket(r.laeq, ${BIN_LO}, ${BIN_HI}, ${BIN_COUNT}) AS bin,
                sum(power(10, r.laeq / 10)) AS energy,
                max(COALESCE(r.lmax_est, r.laeq)) AS lmax,
@@ -104,12 +105,12 @@ export async function GET(req: NextRequest) {
         JOIN sensors s ON s.id = r.sensor_id
         WHERE ${PUBLIC_SENSOR_SQL}
           AND r.laeq IS NOT NULL
-          AND r.recorded_at >= '${fromIso}'::timestamptz
+          ${rTimeRangeSql(fromEdgeMs)}
           ${locationSql(filters)}
           ${sensorSql.replace(/\brb\./g, "r.")}
         GROUP BY 1, 2`)
     : await prisma.$queryRawUnsafe<BinSqlRow[]>(`
-        SELECT EXTRACT(epoch FROM rb.bucket)::bigint AS t,
+        SELECT EXTRACT(epoch FROM ${RB_HOUR})::bigint AS t,
                rb.bin,
                sum(rb.energy) AS energy,
                max(rb.lmax)   AS lmax,
@@ -117,7 +118,7 @@ export async function GET(req: NextRequest) {
         FROM readings_hour_bins rb
         JOIN sensors s ON s.id = rb.sensor_id
         WHERE ${PUBLIC_SENSOR_SQL}
-          AND rb.bucket >= '${fromIso}'::timestamptz
+          ${rbHourRangeSql(fromEdgeMs)}
           ${locationSql(filters)}
           ${sensorSql}
         GROUP BY 1, 2`);

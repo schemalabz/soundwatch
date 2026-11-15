@@ -13,6 +13,7 @@ import { athensWallTime } from "@/lib/dashboard/time";
 import { classify, USUAL_DAYS, USUAL_MIN_BUCKETS } from "@/lib/dashboard/usual";
 import { athensTimeSql, PUBLIC_SENSOR_SQL } from "@/lib/server/filterSql";
 import { BinAccumulator } from "@/lib/server/levelBins";
+import { RB_HOUR, R_TIME, rTimeRangeSql, rbHourRangeSql } from "@/lib/server/hourBucket";
 import type { DayType, DepartureEpisode, UsualBand } from "@/lib/api/dashboard";
 
 /** A ten-minute figure needs this many readings to count at all. */
@@ -51,13 +52,10 @@ function dayTypeSql(dayType: DayType, localCol: string): string {
  * /api/series do, so the three never disagree about a level.
  */
 async function computeFleetUsual(dayStartMs: number, dayType: DayType): Promise<FleetUsual> {
-  const fromIso = new Date(dayStartMs - USUAL_DAYS * DAY_MS).toISOString();
-  const toIso = new Date(dayStartMs).toISOString();
-  const local = athensTimeSql("rb.bucket");
+  const local = athensTimeSql(RB_HOUR);
   const where = `
     WHERE ${PUBLIC_SENSOR_SQL}
-      AND rb.bucket >= '${fromIso}'::timestamptz
-      AND rb.bucket < '${toIso}'::timestamptz
+      ${rbHourRangeSql(dayStartMs - USUAL_DAYS * DAY_MS, dayStartMs)}
       AND ${dayTypeSql(dayType, local)}`;
   const [bins, buckets] = await Promise.all([
     prisma.$queryRawUnsafe<BinSqlRow[]>(`
@@ -74,7 +72,7 @@ async function computeFleetUsual(dayStartMs: number, dayType: DayType): Promise<
     prisma.$queryRawUnsafe<BucketSqlRow[]>(`
       SELECT rb.sensor_id,
              EXTRACT(hour FROM ${local})::int AS hour,
-             count(DISTINCT rb.bucket)::bigint AS buckets
+             count(DISTINCT ${RB_HOUR})::bigint AS buckets
       FROM readings_hour_bins rb
       JOIN sensors s ON s.id = rb.sensor_id
       ${where}
@@ -149,19 +147,18 @@ interface WindowSqlRow {
   n: bigint;
 }
 
-/** Energy-mean LAeq per public sensor per ten minutes, [fromMs, toMs), on the device clock. */
+/** Energy-mean LAeq per public sensor per ten minutes, [fromMs, toMs), on the corrected clock. */
 export async function tenMinuteWindows(fromMs: number, toMs: number): Promise<TenMinuteWindow[]> {
   const rows = await prisma.$queryRawUnsafe<WindowSqlRow[]>(`
     SELECT r.sensor_id,
-           (EXTRACT(epoch FROM r.recorded_at)::bigint / ${WINDOW_S}) * ${WINDOW_S} AS t,
+           (EXTRACT(epoch FROM ${R_TIME})::bigint / ${WINDOW_S}) * ${WINDOW_S} AS t,
            10 * log(avg(power(10, r.laeq / 10))) AS laeq,
            count(*)::bigint AS n
     FROM readings r
     JOIN sensors s ON s.id = r.sensor_id
     WHERE ${PUBLIC_SENSOR_SQL}
       AND r.laeq IS NOT NULL
-      AND r.recorded_at >= '${new Date(fromMs).toISOString()}'::timestamptz
-      AND r.recorded_at < '${new Date(toMs).toISOString()}'::timestamptz
+      ${rTimeRangeSql(fromMs, toMs)}
     GROUP BY 1, 2`);
   return rows
     .map((r) => ({ sensorId: r.sensor_id, tMs: Number(r.t) * 1000, laeq: r.laeq, n: Number(r.n) }))

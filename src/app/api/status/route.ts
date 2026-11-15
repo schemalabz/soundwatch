@@ -86,11 +86,11 @@ export async function GET() {
     // label says Μετρήσεις ανά ώρα, not received-per-hour. The rollup makes it
     // ~10x cheaper than the equivalent raw scan.
     prisma.$queryRaw<IngestRow[]>`
-      SELECT extract(epoch FROM rb.bucket)::bigint / 3600 AS h, sum(rb.n)::bigint AS n
+      SELECT extract(epoch FROM rb.device_bucket)::bigint / 3600 AS h, sum(rb.n)::bigint AS n
       FROM readings_hour_bins rb
       JOIN sensors s ON s.id = rb.sensor_id
       WHERE ${PUBLIC_SENSOR_RAW}
-        AND rb.bucket > now() - make_interval(days => ${INGEST_DAYS}::int)
+        AND rb.device_bucket > now() - make_interval(days => ${INGEST_DAYS}::int)
       GROUP BY 1
       ORDER BY 1`,
   ]);

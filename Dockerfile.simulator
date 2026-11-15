@@ -18,6 +18,8 @@ COPY mqtt-ingester ./mqtt-ingester
 COPY simulator ./simulator
 COPY scripts ./scripts
 COPY src/types ./src/types
+# The clock estimator the backfill shares with the live ingester.
+COPY src/lib/fleet ./src/lib/fleet
 # tsconfig.json is required at runtime: tsx resolves the @/* path alias
 # (used by mqtt-ingester/parser.ts) from it.
 COPY tsconfig.json ./

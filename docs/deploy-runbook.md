@@ -74,6 +74,21 @@ ssh root@188.166.164.198 'docker logs -f $(docker ps --format "{{.Names}}" | gre
    (needs an A record to the droplet), HTTP basic auth enabled, and an
    `ADMIN_TOKEN` and `POSTGRES_PASSWORD` that are **not** production's.
 
+## Clock correction rollout (migration 0023, issue #12)
+
+The deploy that ships migration 0023 changes the `readings_hour_bins`
+definition, so `timescale-objects.ts` drops and rebuilds it from raw on boot
+(the stamp check). Queries stay correct while it rebuilds
+(`materialized_only = false`), only slower. After the deploy, correct the
+rows ingested before it, from inside the ingester container (it ships `scripts/` and `src/lib/fleet`):
+
+```bash
+npx tsx scripts/backfill-corrected-at.ts           # dry run: % of rows that move hour
+npx tsx scripts/backfill-corrected-at.ts --write   # update, then refresh the rollup
+```
+
+Until it runs, older rows keep their device-clock hour (today's behaviour).
+
 ## Verification
 
 ```bash

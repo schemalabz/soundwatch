@@ -5,6 +5,7 @@ import { deriveReadingRow } from "./row";
 import { parseFrameLogChunk } from "./framelog";
 import { recordBootIfAny, tailBrokerLog } from "./events";
 import { startAlerts } from "./alerts";
+import { ClockTracker } from "./clock";
 
 const MQTT_BROKER_URL = process.env.MQTT_BROKER_URL || "mqtt://localhost:1883";
 // Stock SmartCitizen firmware readings topic: device/sck/<token>/readings/raw.
@@ -34,6 +35,7 @@ const INFO_TOPIC_REGEX = /^device\/sck\/([^/]+)\/info$/;
 const BROKER_LOG_PATH = process.env.BROKER_LOG_PATH;
 
 const prisma = new PrismaClient();
+const clocks = new ClockTracker(prisma);
 
 async function upsertSensor(deviceId: string): Promise<string> {
   const sensor = await prisma.sensor.upsert({
@@ -64,11 +66,21 @@ async function handleMessage(topic: string, message: Buffer): Promise<void> {
 
   try {
     const sensorId = await upsertSensor(deviceId);
+    // Device clock correction (issue #12): when the sound happened, as best
+    // we can tell. Every row feeds the estimator, duplicates included — a
+    // duplicate is still evidence about the clock.
+    const clock = await clocks.correct(sensorId, row);
 
     // Replays are exact duplicates by (sensor, recorded_at); the unique
     // constraint rejects them and P2002 is the expected, silent outcome.
     await prisma.reading.create({
-      data: { sensorId, ...row, bandsDb: row.bandsDb ?? undefined },
+      data: {
+        sensorId,
+        ...row,
+        bandsDb: row.bandsDb ?? undefined,
+        correctedAt: clock.correctedAt,
+        correctedHourShift: clock.hourShift,
+      },
     });
     // After the insert: a failed restart check must never cost a reading.
     await recordBootIfAny(prisma, sensorId, row, receivedAt).catch((err) =>

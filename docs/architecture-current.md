@@ -78,7 +78,7 @@ The device is **integer-only per frame** (fixed-point FFT power path); the only 
 
 | group | columns | populated by |
 |---|---|---|
-| identity/time | `id`, `sensor_id`, `recorded_at` (device clock — when the sound happened), `received_at` (server insert time — distinguishes store-and-forward replays from live data) | ingester |
+| identity/time | `id`, `sensor_id`, `recorded_at` (device clock — off by the clock error, up to ~25 min), `received_at` (server insert time — distinguishes store-and-forward replays from live data), `corrected_at` (`recorded_at` minus the clock error estimated from prompt rows — the best guess at when the sound happened; NULL = no estimate, use `recorded_at`), `corrected_hour_shift` (corrected hour − device hour, −1/0/+1) | ingester (`src/lib/fleet/clockOffset.ts`) |
 | stock environment | `noise_dba`, `temperature`, `humidity`, `light_lux`, `pressure_pa`, `uv_a/b/c`, `pm1/25/4/10`, `pn_05/10/25/40/100`, `tps`, `battery`, `rssi`, `sd_card` | parsed 1:1 from stock ids — units, cadence and validated ranges in §4.1 |
 | Flavor 1 raw accumulators | `payload_version`, `energy_sum`, `frame_count`, `interval_s`, `max_energy`, `min_energy` | device (verbatim) |
 | Flavor 1 computed | `laeq` = 10·log₁₀(energy_sum/frame_count) + calib offset (placeholder 0), `realized_duty` = frame_count/(86.13·interval_s), `lmax_est`, `lmin_est` | ingester (`flavor1.ts`) |
@@ -88,6 +88,8 @@ The device is **integer-only per frame** (fixed-point FFT power path); the only 
 | saturation | `energy_saturations` | device — times the energy accumulator clamped at its ceiling. Non-zero means that interval's LAeq is a **lower bound**. Null (older firmware) is not the same as zero |
 
 **`frame_log_chunks`** — raw per-frame levels pulled off the SD card, stored as received: `(device_id, day, offset)` unique, `data`, `received_at`. One row per 360-byte wire slice; reassembly is `string_agg(data order by offset)` **within one day**. Not part of the public API, and not interval-shaped — see the frame-log section of the measurement contract before using it.
+
+**Time of day = corrected time.** `readings_hour_bins` is bucketed on `recorded_at` (a hypertable aggregate can only bucket on the partition column) and carries `hour_shift`; every reader takes the hour through `RB_HOUR` / raw rows through `R_TIME` in `src/lib/server/hourBucket.ts`, never `device_bucket` or `recorded_at` alone (issue #12: 20.4% of rows sat in the wrong hour on the device clock). Rows ingested before migration 0023 are corrected by `scripts/backfill-corrected-at.ts`.
 
 Indexes: `(sensor_id, recorded_at DESC)` for time-of-day queries and `(sensor_id, received_at DESC)` (migration 0017) for every latest-reading probe — **order by `received_at`, never `recorded_at`**, because device clocks drift forward between NTP syncs and snap back at reboot. Levels are **device-dB (uncalibrated)** until Flavor 3 (calibration vs a reference meter) sets the real offset.
 
