@@ -223,7 +223,7 @@ function FilterRail(p: FilterRailProps) {  devRenderCount("FilterRail");
             )}
             <p className="text-[15px] font-semibold leading-snug tracking-tight text-foreground">{sentence.title}</p>
             {/* keyed: the chip flashes with the ones beside the rail */}
-            <p key={sentence.qualifiers} className="sw-scope-chip -ml-1.5 mt-1 inline-block rounded-xl px-2 py-0.5 text-[12px] font-medium leading-snug text-foreground">
+            <p key={`${sentence.title}|${sentence.qualifiers}`} className="sw-scope-chip -ml-1.5 mt-1 inline-block rounded-xl px-2 py-0.5 text-[12px] font-medium leading-snug text-foreground">
               {sentence.qualifiers}
             </p>
           </div>

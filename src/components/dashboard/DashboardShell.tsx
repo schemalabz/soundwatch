@@ -82,6 +82,36 @@ function viewForPath(pathname: string): DashboardView {
   return pathname.replace(/\/+$/, "") === VIEW_PATH.summary ? "summary" : "map";
 }
 
+// The sensors are fitted into the part of the canvas each lens leaves
+// visible (from PR #15). The period lens shows the map through a cutout at
+// the top (46vh, at least 16rem: SummaryView's classes) with a chip in its
+// bottom-left; the moment lens has the switcher on top, the timebar along
+// the bottom (desktop) or the right edge (phones), and on desktop the legend
+// in its bottom-left corner. CSS pixels, kept in step with those classes by
+// hand.
+const SUMMARY_CUTOUT_VH = 0.46;
+const SUMMARY_CUTOUT_MIN_PX = 256;
+// The legend's width plus its inset: sensors are kept clear of it when the
+// canvas is wide enough for that not to cost zoom.
+const LEGEND_CLEARANCE_PX = 272;
+const LEGEND_CLEARANCE_MIN_CANVAS_PX = 1000;
+type Padding = { top: number; right: number; bottom: number; left: number };
+function viewPadding(view: DashboardView, canvas: HTMLElement, mobile: boolean): Padding {
+  const h = canvas.clientHeight;
+  if (view === "summary") {
+    const cutout = Math.min(h, Math.max(window.innerHeight * SUMMARY_CUTOUT_VH, SUMMARY_CUTOUT_MIN_PX));
+    // Leave at least a strip of map to fit into, whatever the viewport.
+    // The chip spans the cutout's foot on a phone; on desktop it sits in the
+    // corner, clear of a network fitted to the middle.
+    const bottom = Math.min(h - cutout + (mobile ? 64 : 20), Math.max(0, h - 120));
+    return { top: mobile ? 64 : 80, right: 24, bottom, left: 24 };
+  }
+  if (mobile) return { top: 64, right: 80, bottom: 104, left: 16 };
+  return { top: 84, right: 24, bottom: 112, left: canvas.clientWidth >= LEGEND_CLEARANCE_MIN_CANVAS_PX ? LEGEND_CLEARANCE_PX : 24 };
+}
+// A sensor fitted alone would otherwise zoom to the street.
+const FIT_MAX_ZOOM = 13.5;
+
 export default function DashboardShell({ initialView = "map" }: { initialView?: DashboardView }) {
   devRenderCount("DashboardShell");
 
@@ -130,6 +160,11 @@ export default function DashboardShell({ initialView = "map" }: { initialView?: 
   // Phones: the rail is a sheet. Controlled, so a departure tapped inside it
   // can close it and show the map it just moved.
   const [sheetOpen, setSheetOpen] = useState(false);
+  // A place to fly to once the lens it belongs to is up (a place's «now on
+  // the map»): consumed by the camera effect, which otherwise fits the
+  // sensors. The two must not race.
+  const pendingFlyRef = useRef<[number, number] | null>(null);
+  const fittedOnceRef = useRef(false);
   const skipSeq = useRef(0);
   const skipHoldUntilRef = useRef(0);
   // Stable identity: MapCanvas keys its (create/destroy!) effect on the
@@ -328,10 +363,12 @@ export default function DashboardShell({ initialView = "map" }: { initialView?: 
     return out;
   }, [view, aggData, aggKey]);
   // What the ranking is OF, said in the rail's own words.
-  const filterQualifiers = useMemo(
-    () => summarySentence(filters, rangeStartMs, nowMinute).qualifiers,
-    [filters, rangeStartMs, nowMinute],
-  );
+  // The whole selection, places included: a pin narrows the ranking as much
+  // as a weekend does, and away from the rail's title nothing else says so.
+  const filterQualifiers = useMemo(() => {
+    const s = summarySentence(filters, rangeStartMs, nowMinute);
+    return s.where ? `${s.qualifiers}, ${s.where}` : s.qualifiers;
+  }, [filters, rangeStartMs, nowMinute]);
 
   // The moment on display, to the minute: the frame the circles show ends
   // here. Everything «usual» keys off it.
@@ -445,13 +482,16 @@ export default function DashboardShell({ initialView = "map" }: { initialView?: 
     [showView],
   );
 
-  // Pin placement: arming jumps to the map (that's where you click); the
-  // pin lands immediately with a null label and the reverse-geocoded street
-  // name streams in when Mapbox answers.
+  // Pin placement happens on the period lens's own map (the cutout, which
+  // SummaryView scrolls back into view when this arms; on a phone the filter
+  // sheet gets out of the way). A pin is a filter of the period, so arming
+  // no longer leaves for the moment lens. The pin lands immediately with a
+  // null label and the reverse-geocoded street name streams in when Mapbox
+  // answers.
   const onTogglePlacing = useCallback(() => {
-    showView("map");
     setPlacingPin((prev) => !prev);
-  }, [showView]);
+    setSheetOpen(false);
+  }, []);
 
   const onPlacePin = useCallback((lng: number, lat: number) => {
     setPlacingPin(false);
@@ -470,21 +510,23 @@ export default function DashboardShell({ initialView = "map" }: { initialView?: 
     });
   }, []);
 
-  // Address search picks arrive labeled; show the new pin when the map is up.
+  // Address search picks arrive labeled; show the new pin where the map is
+  // visible on this lens.
   const onAddPin = useCallback(
     (lng: number, lat: number, label: string) => {
       setFilters((prev) => ({
         ...prev,
         locations: [...prev.locations, { lng, lat, radiusM: 500, label }],
       }));
-      if (view === "map")
-        mapInstance?.flyTo({
+      if (mapInstance && isMobile !== null)
+        mapInstance.flyTo({
           center: [lng, lat],
           zoom: Math.max(mapInstance.getZoom(), 12.5),
+          padding: viewPadding(view, mapInstance.getContainer(), isMobile),
           duration: 1200,
         });
     },
-    [view, mapInstance],
+    [view, mapInstance, isMobile],
   );
 
   const onRemovePin = useCallback((index: number) => {
@@ -515,12 +557,42 @@ export default function DashboardShell({ initialView = "map" }: { initialView?: 
   const onGoToMoment = useCallback(
     (id: string) => {
       const s = sensorList.find((x) => x.id === id);
+      if (s) pendingFlyRef.current = [s.longitude, s.latitude];
       showView("map");
       setSelectedSensorId(id);
-      if (s) mapInstance?.flyTo({ center: [s.longitude, s.latitude], zoom: 13.5, duration: 1400 });
     },
-    [mapInstance, showView, sensorList],
+    [showView, sensorList],
   );
+
+  // The camera follows the lens: each one fits every sensor into the part
+  // of the canvas it leaves visible, at once on first paint and eased when
+  // moving between lenses, unless a place was asked for. Before, Athens was
+  // centred on the whole canvas and the period's cutout showed only the
+  // northern half of the network.
+  useEffect(() => {
+    if (!mapInstance || isMobile === null || sensorList.length === 0) return;
+    const padding = viewPadding(view, mapInstance.getContainer(), isMobile);
+    const fly = pendingFlyRef.current;
+    pendingFlyRef.current = null;
+    if (fly) {
+      mapInstance.flyTo({ center: fly, zoom: FIT_MAX_ZOOM, padding, duration: 1400 });
+      fittedOnceRef.current = true;
+      return;
+    }
+    let w = Infinity, s = Infinity, e = -Infinity, n = -Infinity;
+    for (const { longitude: x, latitude: y } of sensorList) {
+      if (x < w) w = x;
+      if (x > e) e = x;
+      if (y < s) s = y;
+      if (y > n) n = y;
+    }
+    mapInstance.fitBounds([[w, s], [e, n]], {
+      padding,
+      maxZoom: FIT_MAX_ZOOM,
+      duration: fittedOnceRef.current ? 700 : 0,
+    });
+    fittedOnceRef.current = true;
+  }, [mapInstance, view, sensorList, isMobile]);
 
   // A departure in the rail: scrub to the end of its peak window (so the
   // frame on the map IS that window) and open the place.
@@ -703,6 +775,7 @@ export default function DashboardShell({ initialView = "map" }: { initialView?: 
                 onGoToMap={onGoToMoment}
                 onScopeHover={setScopeHover}
                 onScopeClick={onScopeClick}
+                placingPin={placingPin}
               />
             )}
             {/* The pane is the MOMENT's view of a place. On the period lens a

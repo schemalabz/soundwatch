@@ -10,7 +10,7 @@
 // seen and dragged through the cutout, and scrolls out of sight as the
 // ranking comes up.
 
-import { memo, useCallback, useState } from "react";
+import { memo, useCallback, useEffect, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 import { dashboardStrings as tr } from "@/lib/strings/dashboard";
 import MetricMention from "../MetricMention";
@@ -44,6 +44,7 @@ function SummaryView({
   onGoToMap,
   onScopeHover,
   onScopeClick,
+  placingPin,
 }: {
   aggData: Record<string, Record<AggKey, number> & { n: number }> | null;
   /** The filters moved and the ranking for them has not landed yet. */
@@ -70,6 +71,8 @@ function SummaryView({
   /** The selection chips on the sections: hover and click reach the rail. */
   onScopeHover?: (on: boolean) => void;
   onScopeClick?: () => void;
+  /** A pin is being placed on the map: the cutout scrolls back into view. */
+  placingPin: boolean;
 }) {
   devRenderCount("SummaryView");
   // Once the content has scrolled up under the floating lens switcher, a
@@ -78,9 +81,13 @@ function SummaryView({
   const onScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
     setScrolled(e.currentTarget.scrollTop > 8);
   }, []);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (placingPin) scrollRef.current?.scrollTo({ top: 0, behavior: "smooth" });
+  }, [placingPin]);
   return (
     <ScopeProvider text={filterQualifiers} onHover={onScopeHover} onClick={onScopeClick}>
-    <div className="pointer-events-none absolute inset-0 z-10 overflow-y-auto" onScroll={onScroll}>
+    <div ref={scrollRef} className="pointer-events-none absolute inset-0 z-10 overflow-y-auto" onScroll={onScroll}>
       <div
         aria-hidden="true"
         className={cn(

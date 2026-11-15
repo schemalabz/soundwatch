@@ -56,6 +56,14 @@ describe("summarySentence", () => {
     ).toBe("Ο θόρυβος σε διάφορες τοποθεσίες της Αθήνας");
   });
 
+  it("an unnamed pin reads as a point; `where` repeats the place only when pinned", () => {
+    const unnamed = { lng: 23.7, lat: 37.98, radiusM: 500, label: null };
+    const s = summarySentence(filters({ locations: [unnamed] }), DATA_START_90D, NOW);
+    expect(s.title).toBe("Ο θόρυβος κοντά στο επιλεγμένο σημείο");
+    expect(s.where).toBe("κοντά στο επιλεγμένο σημείο");
+    expect(summarySentence(filters({}), DATA_START_90D, NOW).where).toBeUndefined();
+  });
+
   it("hour combos share one μόνο, and days absorb it", () => {
     expect(summarySentence(filters({ hours: new Set(["evening", "night"]) }), DATA_START_90D, NOW).qualifiers).toBe(
       "τους τελευταίους 3 μήνες, μόνο τα βράδια και τις νύχτες"
