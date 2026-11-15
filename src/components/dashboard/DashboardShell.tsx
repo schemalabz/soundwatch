@@ -67,6 +67,8 @@ const FALLBACK_SPAN_DAYS = 90;
 const USUAL_REFRESH_MS = 10 * 60_000;
 // Longest the playback clock waits for a frame that is still loading.
 const MAX_BUFFER_HOLD_MS = 5000;
+// After a wait ran out, how long the clock steps without waiting again.
+const BUFFER_GIVE_UP_MS = 10_000;
 
 // Each lens has its own address, so a link to Σύνοψη opens Σύνοψη. Switching
 // lenses pushes the path natively (no page load: the map and its state stay);
@@ -182,7 +184,7 @@ export default function DashboardShell({ initialView = "map" }: { initialView?: 
   // Buffering: the map layer says whether the next frame is still loading,
   // and the clock waits for it (see the playback effect).
   const frameLoadingRef = useRef<((tMs: number) => boolean) | null>(null);
-  const bufferingSinceRef = useRef(0);
+  const bufferingRef = useRef({ forMs: 0, since: 0, giveUpUntil: 0 });
   // Stable identity: MapCanvas keys its (create/destroy!) effect on the
   // onReady callback, and the shell re-renders every second — an inline
   // arrow here would tear the map down each tick. setState is stable.
@@ -310,14 +312,14 @@ export default function DashboardShell({ initialView = "map" }: { initialView?: 
   // one data frame per tick, and filter-excluded periods are skipped by
   // advanceCursor. Mutable inputs flow through a ref so the interval starts
   // once per play and never loses its cadence.
-  const playbackInputs = useRef({ segments, liveAllowed, rangeStartMs });
+  const playbackInputs = useRef({ segments, liveAllowed, rangeStartMs, cursor });
   useEffect(() => {
-    playbackInputs.current = { segments, liveAllowed, rangeStartMs };
-  }, [segments, liveAllowed, rangeStartMs]);
+    playbackInputs.current = { segments, liveAllowed, rangeStartMs, cursor };
+  }, [segments, liveAllowed, rangeStartMs, cursor]);
 
   useEffect(() => {
     if (!playing) return;
-    bufferingSinceRef.current = 0;
+    bufferingRef.current = { forMs: 0, since: 0, giveUpUntil: 0 };
     const stepMs = PLAYBACK_SPEEDS[speedIndex].simSecondsPerRealSecond * 1000;
     const timer = setInterval(() => {
       // A skip is a held beat: the clock stands still on the landing frame
@@ -327,7 +329,22 @@ export default function DashboardShell({ initialView = "map" }: { initialView?: 
         segments: segs,
         liveAllowed: allowed,
         rangeStartMs: start,
+        cursor: current,
       } = playbackInputs.current;
+      // The next frame is still on its way: stand still this tick, like a
+      // video buffering, so every step the playhead takes shows its data.
+      // Decided out here, not in the updater below, which React may run twice.
+      // The wait is per frame (a scrub must not inherit an old one) and
+      // capped; after giving up once the clock runs free for a while, so one
+      // hung batch costs a single wait rather than one per frame in it.
+      const upcoming = advanceCursor(segs, current === "live" ? (segs[0]?.startMs ?? start) : current, stepMs);
+      const buffering = bufferingRef.current;
+      const tickMs = Date.now();
+      if (upcoming != null && tickMs >= buffering.giveUpUntil && frameLoadingRef.current?.(upcoming)) {
+        if (buffering.forMs !== upcoming) bufferingRef.current = { forMs: upcoming, since: tickMs, giveUpUntil: 0 };
+        if (tickMs - bufferingRef.current.since < MAX_BUFFER_HOLD_MS) return;
+        bufferingRef.current = { forMs: 0, since: 0, giveUpUntil: tickMs + BUFFER_GIVE_UP_MS };
+      }
       setCursor((prev) => {
         const from = prev === "live" ? (segs[0]?.startMs ?? start) : prev;
         const next = advanceCursor(segs, from, stepMs);
@@ -335,15 +352,6 @@ export default function DashboardShell({ initialView = "map" }: { initialView?: 
           setPlaying(false);
           return allowed ? "live" : prev;
         }
-        // The next frame is still on its way: stand still this tick, like a
-        // video buffering, so every step the playhead takes shows its data.
-        // Time-based (not a tick count) so a repeated call of this updater
-        // changes nothing; capped so a hung request cannot freeze playback.
-        if (frameLoadingRef.current?.(next)) {
-          if (bufferingSinceRef.current === 0) bufferingSinceRef.current = Date.now();
-          if (Date.now() - bufferingSinceRef.current < MAX_BUFFER_HOLD_MS) return prev;
-        }
-        bufferingSinceRef.current = 0;
         // Landing further than one step away means a gap was skipped: flash
         // the jump cut so the discontinuity reads as intentional.
         if (next - from > stepMs + 1) {
