@@ -8,7 +8,7 @@ import { memo, useMemo } from "react";
 import { dashboardStrings as tr, LOCALE } from "@/lib/strings/dashboard";
 import Link from "next/link";
 import Lockup from "@/components/brand/Lockup";
-import { CalendarPlus, MapPin, RotateCcw, X } from "lucide-react";
+import { ArrowRight, CalendarPlus, MapPin, RotateCcw, SlidersHorizontal, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { cn } from "@/lib/utils";
@@ -61,6 +61,9 @@ export interface FilterRailProps {
   onAddPin: (lng: number, lat: number, label: string) => void;
   /** A metric mention elsewhere in the app is hovered — light the picker. */
   metricGlow?: boolean;
+  /** A selection chip beside the rail is hovered or was clicked: the header
+   *  that chip repeats lights up. */
+  scopeGlow?: boolean;
   /** The frame span on display (map + instants only): the super-title. */
   snapshotLive?: boolean;
   snapshotStartMs?: number | null;
@@ -183,7 +186,22 @@ function FilterRail(p: FilterRailProps) {  devRenderCount("FilterRail");
       </div>
 
       {/* summary */}
-      <div className="border-y bg-card px-5 py-4">
+      {/* The header is the caption of everything beside the rail: it says so,
+          points at it (the notch), and its selection is the same chip those
+          sections carry (ScopeChip). */}
+      <div className={cn("relative border-y bg-card px-5 py-4 transition-[background-color,box-shadow] duration-200", p.scopeGlow && "bg-sound/10 ring-2 ring-inset ring-sound")}>
+        <span
+          aria-hidden="true"
+          className={cn("absolute -right-[6.5px] top-[1.15rem] z-20 size-3 rotate-45 border-r border-t bg-card transition-colors duration-200 max-md:hidden", p.scopeGlow && "border-sound")}
+        />
+        <p className="mb-1.5 flex items-center gap-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-sound">
+          <SlidersHorizontal className="size-3" />
+          <span>
+            {tr.scope.kicker}
+            <span className="max-md:hidden">{tr.scope.kickerRight}</span>
+          </span>
+          <ArrowRight className="size-3 max-md:hidden" />
+        </p>
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
             {p.snapshotStartMs != null && p.snapshotEndMs != null && (
@@ -204,7 +222,10 @@ function FilterRail(p: FilterRailProps) {  devRenderCount("FilterRail");
               <p className="text-[11px] leading-tight text-muted-foreground">{sentence.kicker}</p>
             )}
             <p className="text-[15px] font-semibold leading-snug tracking-tight text-foreground">{sentence.title}</p>
-            <p className="mt-0.5 text-[12px] leading-snug text-foreground/75">{sentence.qualifiers}</p>
+            {/* keyed: the chip flashes with the ones beside the rail */}
+            <p key={`${sentence.title}|${sentence.qualifiers}`} className="sw-scope-chip -ml-1.5 mt-1 inline-block rounded-xl px-2 py-0.5 text-[12px] font-medium leading-snug text-foreground">
+              {sentence.qualifiers}
+            </p>
           </div>
           {!unfiltered && (
             <Button

@@ -21,6 +21,10 @@ export interface SummarySentence {
   title: string;
   /** "τον τελευταίο μήνα, μόνο Σαββατοκύριακα" */
   qualifiers: string;
+  /** "κοντά στην Πυθαγόρα 4", only when location pins narrow the places.
+   *  The title already says it; this is for where the selection is repeated
+   *  without the title (the chips on the sections it governs). */
+  where?: string;
 }
 
 const DAY_MS = 86_400_000;
@@ -69,11 +73,11 @@ function rangePhrase(r: DateRange, nowMs: number): string {
 function locationPhrase(locations: readonly LocationPin[]): string {
   if (locations.length === 0) return "στην Αθήνα";
   if (locations.length > 2) return "σε διάφορες τοποθεσίες της Αθήνας";
-  const name = (p: LocationPin) => p.label ?? "επιλεγμένο σημείο";
+  // A pin has no name until its street is reverse-geocoded («σημείο» is
+  // neuter: «στο», not «στην»).
+  const at = (p: LocationPin) => (p.label ? `στην ${p.label}` : "στο επιλεγμένο σημείο");
   // Pins are radii, not exact addresses — the phrase says so.
-  return locations.length === 1
-    ? `κοντά στην ${name(locations[0])}`
-    : `κοντά στην ${name(locations[0])} και στην ${name(locations[1])}`;
+  return locations.length === 1 ? `κοντά ${at(locations[0])}` : `κοντά ${at(locations[0])} και ${at(locations[1])}`;
 }
 
 /** The trailing-window phrase when nothing narrows the period: read the
@@ -146,5 +150,6 @@ export function summarySentence(
     kicker: snapshot ? "στιγμιότυπο από" : undefined,
     title: snapshot ? `τον θόρυβο ${locationPhrase(f.locations)}` : `Ο θόρυβος ${locationPhrase(f.locations)}`,
     qualifiers: parts.join(", "),
+    where: f.locations.length > 0 ? locationPhrase(f.locations) : undefined,
   };
 }

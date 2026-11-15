@@ -7,29 +7,17 @@
 // (src/lib/dashboard/usual.ts), so the chart can never disagree with the
 // circle.
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo } from "react";
 import { levelColor, paletteStops } from "@/lib/dashboard/levels";
 import { usualEdges } from "@/lib/dashboard/usual";
 import type { UsualBand } from "@/lib/api/dashboard";
+import { useMeasuredWidth } from "./useMeasuredWidth";
 
 const H = 96;
 const PAD_L = 22;
 const PAD_R = 6;
 const PAD_T = 8;
 const PAD_B = 16;
-
-function useMeasuredWidth(): [React.RefObject<HTMLDivElement | null>, number] {
-  const ref = useRef<HTMLDivElement | null>(null);
-  const [width, setWidth] = useState(0);
-  useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    const ro = new ResizeObserver(([entry]) => setWidth(entry.contentRect.width));
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, []);
-  return [ref, width];
-}
 
 export default function UsualChart({
   profile,

@@ -98,3 +98,24 @@ export function resolveBucket(id: string | null | undefined, domainMs: number): 
   if (asked && bucketViable(domainMs, asked.seconds)) return asked;
   return defaultBucket(domainMs);
 }
+
+// A line chart about a thousand pixels wide cannot show more points than that:
+// 1,800 hourly points over three months draw a solid band, not a line.
+const MAX_READABLE_POINTS = 800;
+
+/**
+ * The bucket a CHART opens on. defaultBucket answers «the finest the server
+ * will compute», which is the right fallback for a request; a chart also has
+ * to be read. From an hour up, step to the next coarser viable bucket while
+ * the points outnumber the pixels. Sub-hour defaults are left alone: the last
+ * 24 hours at one minute is the workflow that bucket was built for.
+ */
+export function chartDefaultBucket(domainMs: number): BucketDef {
+  const base = defaultBucket(domainMs);
+  if (needsRawReadings(base.seconds)) return base;
+  for (const b of BUCKETS) {
+    if (b.seconds < base.seconds || !bucketViable(domainMs, b.seconds)) continue;
+    if (pointCount(domainMs, b.seconds) <= MAX_READABLE_POINTS) return b;
+  }
+  return base;
+}

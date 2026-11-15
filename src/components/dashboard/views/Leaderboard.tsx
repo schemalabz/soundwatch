@@ -8,16 +8,19 @@
 // quietest and loudest: stretched, a filter that lowers every place by 5 dB
 // (nights) redrew exactly the same bars, and the filters looked broken.
 
-import { memo, useMemo, useState } from "react";
-import { Check, ChevronDown, ChevronUp, Plus } from "lucide-react";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
+import { Check, ChevronDown, ChevronUp, Plus, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { dashboardStrings as tr } from "@/lib/strings/dashboard";
 import { levelColor, paletteStops } from "@/lib/dashboard/levels";
 import { fmtDb, fmtInt } from "@/lib/dashboard/format";
 import { COMPARE_COLORS, MAX_COMPARE } from "@/lib/dashboard/compare";
+import type { DashboardFilters } from "@/lib/dashboard/filters";
 import type { AggKey } from "@/lib/dashboard/metrics";
+import PlaceDetail from "./PlaceDetail";
 import type { SensorMeta } from "../SensorLayer";
 import MetricMention from "../MetricMention";
+import ScopeChip from "../ScopeChip";
 import { devRenderCount } from "@/lib/dashboard/devtools";
 
 /** The ranking opens on its head; the rest is one tap away. */
@@ -69,6 +72,11 @@ function Leaderboard({
   scope,
   compareIds,
   onCompareToggle,
+  selectedId,
+  onSelect,
+  aggQuery,
+  filters,
+  onGoToMap,
 }: {
   aggData: Record<string, Record<AggKey, number> & { n: number }> | null;
   metric: AggKey;
@@ -84,6 +92,15 @@ function Leaderboard({
   /** The places in the comparison; with onCompareToggle, each row gets a +. */
   compareIds?: readonly string[];
   onCompareToggle?: (id: string) => void;
+  /** The place opened in its row (also set by a click on its circle). */
+  selectedId?: string | null;
+  /** With aggQuery and filters: a row opens the place's period detail in
+   *  place, instead of handing the click to onSensorClick. */
+  onSelect?: (id: string | null) => void;
+  aggQuery?: string;
+  filters?: DashboardFilters;
+  /** «Show this place on the moment's map». */
+  onGoToMap?: (id: string) => void;
 }) {
   devRenderCount("Leaderboard");
   const [expanded, setExpanded] = useState(false);
@@ -97,10 +114,25 @@ function Leaderboard({
       .sort((a, b) => b.value - a.value);
   }, [aggData, metric]);
 
+  // A place opened from its circle may sit below the fold of the list: the
+  // list opens to show it.
+  const selectedIndex = rows && selectedId ? rows.findIndex((r) => r.id === selectedId) : -1;
+  const showAll = expanded || selectedIndex >= TOP_N;
   const visibleRows = useMemo(() => {
     if (!rows) return [];
-    return expanded ? rows : rows.slice(0, TOP_N);
-  }, [rows, expanded]);
+    return showAll ? rows : rows.slice(0, TOP_N);
+  }, [rows, showAll]);
+  const inline = onSelect != null && aggQuery != null && filters != null;
+  const selectedRef = useRef<HTMLLIElement | null>(null);
+  // On a new selection only. Keyed on the row's position too, a re-rank (the
+  // metric, the minute's refresh) pulled the page back to the row from
+  // wherever the reader had gone. The ref is set only on an open row.
+  useEffect(() => {
+    if (selectedId) selectedRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }, [selectedId]);
+  // The selected place has no row: it has no readings in this selection (a
+  // grey circle on the map above). Said, instead of the click doing nothing.
+  const unranked = inline && selectedId != null && rows != null && selectedIndex < 0 ? selectedId : null;
   const compareFull = (compareIds?.length ?? 0) >= MAX_COMPARE;
   const hiddenCount = rows ? Math.max(0, rows.length - TOP_N) : 0;
   const [lo, hi] = BAR_SCALE[metric];
@@ -113,9 +145,38 @@ function Leaderboard({
         <p className="mt-0.5 text-[11px] text-muted-foreground">
           {tr.board.subtitlePrefix}
           <MetricMention metric={metric} onHover={onMetricRefHover} />
-          {scope && tr.board.subtitleScope(scope)}
+          {scope && (
+            <>
+              {" · "}
+              <ScopeChip fallback={scope} />
+            </>
+          )}
         </p>
 
+        {unranked && (
+          <div className="mt-4 flex items-center gap-2 rounded-lg border border-dashed px-3 py-2 text-[12px]">
+            <p className="min-w-0 flex-1 text-muted-foreground">
+              <span className="font-semibold text-foreground">{meta.get(unranked)?.name ?? unranked.slice(0, 8)}</span> {tr.place.unranked}
+            </p>
+            {onGoToMap && (
+              <button
+                type="button"
+                onClick={() => onGoToMap(unranked)}
+                className="shrink-0 whitespace-nowrap rounded-md border px-2 py-1 text-[11.5px] font-medium text-foreground transition-colors hover:bg-secondary"
+              >
+                {tr.place.goToMoment}
+              </button>
+            )}
+            <button
+              type="button"
+              aria-label={tr.pane.close}
+              onClick={() => onSelect?.(null)}
+              className="grid size-7 shrink-0 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+            >
+              <X className="size-3.5" />
+            </button>
+          </div>
+        )}
         {rows == null ? (
           <div className="mt-6 flex flex-col gap-2">
             {Array.from({ length: TOP_N }, (_, i) => (
@@ -129,12 +190,34 @@ function Leaderboard({
             {visibleRows.map((row, i) => {
               const m = meta.get(row.id);
               const color = levelColor(row.value, stops);
+              const open = inline && row.id === selectedId;
               return (
-                <li key={row.id} className="flex items-center gap-1">
+                // Open, the row and its detail are ONE raised card: the row is
+                // its header (bold name, chevron up), the detail its body.
+                <li
+                  key={row.id}
+                  ref={open ? selectedRef : undefined}
+                  className={cn("scroll-mt-24", open && "-mx-2 my-2 overflow-hidden rounded-xl border border-foreground/20 bg-card shadow-md")}
+                >
+                  <div className={cn("flex items-center gap-1", open && "border-b bg-silver/20 px-2 py-1")}>
                   <button
                     type="button"
-                    onClick={() => onSensorClick(row.id)}
-                    className="group grid min-h-11 min-w-0 flex-1 grid-cols-[1.75rem_minmax(0,1fr)_4.5rem_auto] items-center gap-3 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-silver/20 sm:grid-cols-[2rem_minmax(7rem,11rem)_1fr_auto]"
+                    aria-expanded={inline ? open : undefined}
+                    onClick={() => {
+                      if (!inline) return onSensorClick(row.id);
+                      // A list opened for a place below the fold stays open
+                      // once that place is closed or another is picked:
+                      // forty rows must not vanish under the reader.
+                      if (showAll) setExpanded(true);
+                      onSelect(open ? null : row.id);
+                    }}
+                    className={cn(
+                      "group grid min-h-11 min-w-0 flex-1 items-center gap-2 rounded-md px-2 py-1.5 text-left transition-colors sm:gap-3",
+                      inline
+                        ? "grid-cols-[1.75rem_minmax(0,1fr)_3.25rem_auto_0.875rem] sm:grid-cols-[2rem_minmax(7rem,11rem)_1fr_auto_0.875rem]"
+                        : "grid-cols-[1.75rem_minmax(0,1fr)_4.5rem_auto] sm:grid-cols-[2rem_minmax(7rem,11rem)_1fr_auto]",
+                      !open && "hover:bg-silver/20"
+                    )}
                   >
                     <span
                       className={
@@ -146,7 +229,7 @@ function Leaderboard({
                       {i + 1}
                     </span>
                     <span className="truncate">
-                      <span className="block truncate text-[12.5px] font-medium leading-tight text-foreground">
+                      <span className={cn("block truncate text-[12.5px] leading-tight text-foreground", open ? "font-bold" : "font-medium")}>
                         {m?.name ?? row.id.slice(0, 8)}
                       </span>
                       <span className="block truncate text-[9.5px] leading-tight text-muted-foreground">
@@ -165,8 +248,31 @@ function Leaderboard({
                       </span>
                       <span className="ml-0.5 text-[9px] text-muted-foreground">dB</span>
                     </span>
+                    {inline && (
+                      <ChevronDown
+                        aria-hidden="true"
+                        className={cn("size-3.5 transition-transform duration-200", open ? "rotate-180 text-foreground" : "text-muted-foreground/60 group-hover:text-foreground")}
+                      />
+                    )}
                   </button>
                   {onCompareToggle && <CompareToggle name={m?.name ?? row.id.slice(0, 8)} slot={compareIds?.indexOf(row.id) ?? -1} full={compareFull} onToggle={() => onCompareToggle(row.id)} />}
+                  </div>
+                  {open && (
+                    <PlaceDetail
+                      sensorId={row.id}
+                      name={m?.name ?? row.id.slice(0, 8)}
+                      address={m?.address ?? null}
+                      rank={i + 1}
+                      total={rows.length}
+                      aggQuery={aggQuery}
+                      metric={metric}
+                      filters={filters}
+                      inCompare={compareIds?.includes(row.id) ?? false}
+                      compareFull={compareFull}
+                      onCompareToggle={onCompareToggle ? () => onCompareToggle(row.id) : undefined}
+                      onGoToMap={onGoToMap ? () => onGoToMap(row.id) : undefined}
+                    />
+                  )}
                 </li>
               );
             })}
@@ -175,12 +281,16 @@ function Leaderboard({
         {hiddenCount > 0 && (
           <button
             type="button"
-            aria-expanded={expanded}
-            onClick={() => setExpanded((v) => !v)}
+            aria-expanded={showAll}
+            onClick={() => {
+              // Folding the list away closes a place opened below the fold.
+              if (showAll && selectedIndex >= TOP_N) onSelect?.(null);
+              setExpanded(!showAll);
+            }}
             className="mt-2 flex min-h-11 w-full items-center justify-center gap-1.5 rounded-md border border-dashed text-[12px] font-medium text-foreground/80 transition-colors hover:bg-silver/20 hover:text-foreground"
           >
-            {expanded ? <ChevronUp className="size-3.5" /> : <ChevronDown className="size-3.5" />}
-            {expanded ? tr.board.showLess : tr.board.showAll(hiddenCount)}
+            {showAll ? <ChevronUp className="size-3.5" /> : <ChevronDown className="size-3.5" />}
+            {showAll ? tr.board.showLess : tr.board.showAll(hiddenCount)}
           </button>
         )}
       </div>

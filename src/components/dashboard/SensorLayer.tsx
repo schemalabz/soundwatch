@@ -90,6 +90,9 @@ interface MarkerHandle {
   circle: HTMLSpanElement;
   label: HTMLSpanElement;
   pill: HTMLSpanElement;
+  /** The hover label: the place's name and the level the circle shows. */
+  tip: HTMLSpanElement;
+  name: string;
 }
 
 // The label needs BOTH a close-enough zoom (city scale, not the whole
@@ -99,7 +102,7 @@ const LABEL_MIN_ZOOM = 12.2;
 // its scale means nothing without the zoom it was computed at.
 const LABEL_MIN_PX = 22;
 
-function makeMarkerElement(): { root: HTMLDivElement; circle: HTMLSpanElement; label: HTMLSpanElement; pill: HTMLSpanElement } {
+function makeMarkerElement(): { root: HTMLDivElement; circle: HTMLSpanElement; label: HTMLSpanElement; pill: HTMLSpanElement; tip: HTMLSpanElement } {
   const root = document.createElement("div");
   // NO inline `position`: mapbox's .mapboxgl-marker class positions the root
   // absolutely and drives it via transform — an inline position:relative
@@ -168,10 +171,42 @@ function makeMarkerElement(): { root: HTMLDivElement; circle: HTMLSpanElement; l
     "transform:translate(-50%,-50%)",
     "transition:opacity 300ms linear",
   ].join(";");
+  // The hover label: which place this is and its level, without a click. At
+  // city zoom the rings are too small to carry a number, so until now the
+  // only way to learn either was to open the pane, one circle at a time.
+  const tip = document.createElement("span");
+  tip.style.cssText = [
+    "position:absolute",
+    "left:50%",
+    "bottom:calc(100% + 4px)",
+    "transform:translateX(-50%)",
+    "padding:3px 7px",
+    "border-radius:6px",
+    "background:var(--sw-ink)",
+    "color:var(--sw-paper)",
+    "font-size:11px",
+    "font-weight:600",
+    "line-height:1.25",
+    "font-variant-numeric:tabular-nums",
+    "white-space:nowrap",
+    "pointer-events:none",
+    "user-select:none",
+    "opacity:0",
+    "transition:opacity 120ms linear",
+  ].join(";");
+  root.addEventListener("mouseenter", () => {
+    tip.style.opacity = "1";
+    root.style.zIndex = "5";
+  });
+  root.addEventListener("mouseleave", () => {
+    tip.style.opacity = "0";
+    root.style.zIndex = "";
+  });
   root.appendChild(circle);
   root.appendChild(label);
   root.appendChild(pill);
-  return { root, circle, label, pill };
+  root.appendChild(tip);
+  return { root, circle, label, pill, tip };
 }
 
 /**
@@ -203,7 +238,7 @@ function placePill(pill: HTMLSpanElement, scale: number): void {
 
 /** Apply one sensor's frame value to its circle. null = no data (gray). */
 function applyValue(
-  h: Pick<MarkerHandle, "circle" | "label" | "pill">,
+  h: Pick<MarkerHandle, "circle" | "label" | "pill" | "tip" | "name">,
   laeq: number | null,
   tweenMs: number,
   labelsOn: boolean,
@@ -215,6 +250,7 @@ function applyValue(
   h.circle.style.transitionDuration = `${tweenMs}ms,${tweenMs}ms,400ms,${tweenMs}ms`;
   h.circle.style.transitionTimingFunction = `${fn},${fn},linear,${fn}`;
   h.label.style.transitionDuration = `${tweenMs}ms,300ms`;
+  h.tip.textContent = laeq == null ? h.name : `${h.name} · ${Math.round(laeq)} dB`;
   if (laeq == null) {
     h.circle.style.borderColor = "color-mix(in srgb, var(--sw-silver) 55%, transparent)";
     h.circle.style.backgroundColor = "transparent";
@@ -344,7 +380,9 @@ function SensorLayer({ map, sensors, cursor, stepMs, segments, playing, metric, 
     import("mapbox-gl").then(({ default: gl }) => {
       if (disposed) return;
       for (const s of shownSensors) {
-        const { root, circle, label, pill } = makeMarkerElement();
+        const { root, circle, label, pill, tip } = makeMarkerElement();
+        const name = s.name ?? s.address ?? s.id.slice(0, 8);
+        root.setAttribute("aria-label", name);
         root.addEventListener("click", (e) => {
           e.stopPropagation();
           onSensorClickRef.current?.(s.id);
@@ -352,7 +390,7 @@ function SensorLayer({ map, sensors, cursor, stepMs, segments, playing, metric, 
         const marker = new gl.Marker({ element: root, anchor: "center" })
           .setLngLat([s.longitude, s.latitude])
           .addTo(map);
-        const handle = { marker, circle, label, pill };
+        const handle = { marker, circle, label, pill, tip, name };
         markers.set(s.id, handle);
         handles.push(handle);
       }

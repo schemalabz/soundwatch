@@ -22,7 +22,9 @@ import { fmtDb } from "@/lib/dashboard/format";
 import { heatGradient, heatScale } from "@/lib/dashboard/heat";
 import type { AggKey } from "@/lib/dashboard/metrics";
 import type { SeriesResponse } from "@/lib/api/dashboard";
+import { fetchHourlySeries, hourStableQuery } from "@/lib/dashboard/seriesCache";
 import MetricMention from "../MetricMention";
+import ScopeChip from "../ScopeChip";
 import ProfileChart, { type ProfileLine } from "../charts/ProfileChart";
 import WeekHeatmap from "../charts/WeekHeatmap";
 import type { SensorMeta } from "../SensorLayer";
@@ -58,23 +60,28 @@ function CompareSection({
   devRenderCount("CompareSection");
   const [loaded, setLoaded] = useState<Record<string, SeriesResponse>>({});
 
-  const keyFor = (id: string) => `${aggQuery}|${id}`;
-  const wanted = useMemo(() => (ids.length > 0 ? [NETWORK, ...ids] : []), [ids]);
-  const missing = wanted.filter((id) => !loaded[`${aggQuery}|${id}`]).join(",");
+  // Floored to the hour: a trailing period moves from= every minute, and an
+  // hourly series cannot change with it (see seriesCache).
+  const query = useMemo(() => hourStableQuery(aggQuery), [aggQuery]);
+  const keyFor = (id: string) => `${query}|${id}`;
+  const wanted = ids.length > 0 ? [NETWORK, ...ids].join(",") : "";
 
+  // Keyed on what is WANTED, not on what is still missing: keyed on the
+  // latter, every answer that arrived re-ran this, cancelled the requests
+  // still in flight and sent them again. A place already answered costs
+  // nothing to ask for again; the cache holds its request.
   useEffect(() => {
-    if (missing === "") return;
+    if (wanted === "") return;
     let cancelled = false;
-    for (const id of missing.split(",")) {
-      fetch(`/api/series?${aggQuery}&bucket=1h${id === NETWORK ? "" : `&sensor=${id}`}`, { cache: "no-store" })
-        .then((r) => r.json())
-        .then((body: SeriesResponse) => {
+    for (const id of wanted.split(",")) {
+      fetchHourlySeries(query, id === NETWORK ? undefined : id)
+        .then((body) => {
           if (cancelled) return;
           // Only the current query's answers are kept: a filter change starts over.
           setLoaded((prev) => {
             const next: Record<string, SeriesResponse> = {};
-            for (const [k, v] of Object.entries(prev)) if (k.startsWith(`${aggQuery}|`)) next[k] = v;
-            next[`${aggQuery}|${id}`] = body;
+            for (const [k, v] of Object.entries(prev)) if (k.startsWith(`${query}|`)) next[k] = v;
+            next[`${query}|${id}`] = body;
             return next;
           });
         })
@@ -83,7 +90,7 @@ function CompareSection({
     return () => {
       cancelled = true;
     };
-  }, [aggQuery, missing]);
+  }, [query, wanted]);
 
   const names = useMemo(() => new Map(sensors.map((s) => [s.id, s.name ?? s.address ?? s.id.slice(0, 8)])), [sensors]);
   const hourMask = useMemo(() => hourSelectionMask(filters), [filters]);
@@ -145,7 +152,7 @@ function CompareSection({
           tr.compare.subtitleEmpty
         ) : (
           <>
-            <MetricMention metric={metric} onHover={onMetricRefHover} /> · {scope}
+            <MetricMention metric={metric} onHover={onMetricRefHover} /> · <ScopeChip fallback={scope} />
           </>
         )}
       </p>

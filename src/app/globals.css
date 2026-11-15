@@ -187,6 +187,29 @@
 /* Liveness underline: a quiet breathing line under the live timestamp. */
 
 
+/* The selection chip (ScopeChip): the same token in the rail's header and on
+   every section it governs. It flashes when it (re)mounts, i.e. whenever the
+   selection changes, so a filter's effect is seen landing everywhere.
+   The colour is --sw-sound written out: this pipeline drops rules that put
+   color-mix() around a variable here. */
+@keyframes sw-scope-flash {
+  0% {
+    background-color: rgb(246 139 36 / 0.6);
+  }
+  100% {
+    background-color: rgb(246 139 36 / 0.16);
+  }
+}
+.sw-scope-chip {
+  background-color: rgb(246 139 36 / 0.16);
+  animation: sw-scope-flash 1100ms ease-out;
+}
+@media (prefers-reduced-motion: reduce) {
+  .sw-scope-chip {
+    animation: none;
+  }
+}
+
 /* A heatmap cell the filters exclude: hatched, so it reads as "not part of
    this view" and never as a very quiet hour. */
 .sw-heat-muted {

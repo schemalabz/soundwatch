@@ -8,28 +8,16 @@
 // Filter gaps are honest: buckets that aren't adjacent in time break the
 // line and the band, exactly like the muted washes on the timebar.
 
-import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { useId, useMemo, useState, type PointerEvent } from "react";
 import { levelColor, paletteStops } from "@/lib/dashboard/levels";
 import { fmtDb, fmtInt } from "@/lib/dashboard/format";
 import { LOCALE, dashboardStrings as tr } from "@/lib/strings/dashboard";
 import type { AggKey } from "@/lib/dashboard/metrics";
 import MetricMention from "../MetricMention";
 import type { SeriesPoint } from "@/lib/api/dashboard";
+import { useMeasuredWidth } from "./useMeasuredWidth";
 
 const DEFAULT_H = 200;
-
-function useMeasuredWidth(): [React.RefObject<HTMLDivElement | null>, number] {
-  const ref = useRef<HTMLDivElement | null>(null);
-  const [width, setWidth] = useState(0);
-  useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    const ro = new ResizeObserver(([entry]) => setWidth(entry.contentRect.width));
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, []);
-  return [ref, width];
-}
 
 export default function TimelineChart({
   points,
@@ -61,17 +49,22 @@ export default function TimelineChart({
   const [hovered, setHovered] = useState<number | null>(null);
   const stops = useMemo(() => paletteStops(), []);
 
+  // A weekday and an hour name a tick only while the chart spans less than a
+  // week: over a month «Τρί 16:00» is one of four Tuesdays. Past that the
+  // tick is the date.
+  const spanMs = points.length > 1 ? points[points.length - 1].t - points[0].t : 0;
+  const longSpan = spanMs > 6 * 86_400_000;
   const fmtTick = useMemo(
     () =>
       new Intl.DateTimeFormat(
         LOCALE,
         bucketSeconds < 3600
           ? { timeZone: "UTC", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }
-          : bucketSeconds < 86_400
+          : bucketSeconds < 86_400 && !longSpan
             ? { timeZone: "UTC", weekday: "short", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }
             : { timeZone: "UTC", day: "numeric", month: "short" }
       ),
-    [bucketSeconds]
+    [bucketSeconds, longSpan]
   );
   const fmtFull = useMemo(
     () =>
@@ -181,6 +174,14 @@ export default function TimelineChart({
 
   const hoveredPoint = hovered != null ? points[hovered] : null;
 
+  const readPoint = (e: PointerEvent<SVGSVGElement>) => {
+    if (!geom) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const px = e.clientX - rect.left;
+    const idx = Math.round(((px - PAD_L) / Math.max(1, geom.innerW)) * (points.length - 1));
+    setHovered(Math.max(0, Math.min(points.length - 1, idx)));
+  };
+
   return (
     <div ref={ref} className="relative w-full">
       <svg
@@ -188,14 +189,14 @@ export default function TimelineChart({
         width={Math.max(width, 1)}
         height={H}
         role="img"
-        onMouseMove={(e) => {
-          if (!geom) return;
-          const rect = e.currentTarget.getBoundingClientRect();
-          const px = e.clientX - rect.left;
-          const idx = Math.round(((px - PAD_L) / Math.max(1, geom.innerW)) * (points.length - 1));
-          setHovered(Math.max(0, Math.min(points.length - 1, idx)));
+        // Pointer events: a tap or a sideways drag of a finger reads a point
+        // too, and keeps it after the finger lifts.
+        style={{ touchAction: "pan-y" }}
+        onPointerDown={readPoint}
+        onPointerMove={readPoint}
+        onPointerLeave={(e) => {
+          if (e.pointerType === "mouse") setHovered(null);
         }}
-        onMouseLeave={() => setHovered(null)}
       >
         {geom && (
           <>
