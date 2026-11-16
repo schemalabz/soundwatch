@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { parseEpochMs } from "@/lib/dashboard/filters";
 import { usualWindow } from "@/lib/dashboard/usual";
-import { departureEpisodes, fleetUsual, tenMinuteWindows } from "@/lib/server/usual";
+import { cachedTenMinuteWindows, departureEpisodes, fleetUsual } from "@/lib/server/usual";
 import type { DeparturesResponse } from "@/lib/api/dashboard";
 
 // «Σήμερα ξεχώρισαν»: the Athens day containing `at`, up to `at`, cut into
@@ -14,14 +14,17 @@ export const dynamic = "force-dynamic";
 
 export async function GET(req: NextRequest) {
   const rawAt = req.nextUrl.searchParams.get("at");
-  const atMs = rawAt == null ? Date.now() : parseEpochMs(rawAt);
+  // Without at=, now to the minute: the dashboard always sends a
+  // minute-aligned at, and a millisecond-unique one would never share the
+  // cached day (see cachedTenMinuteWindows).
+  const atMs = rawAt == null ? Math.floor(Date.now() / 60_000) * 60_000 : parseEpochMs(rawAt);
   if (atMs === null) {
     return NextResponse.json({ error: "at= requires epoch ms" }, { status: 400 });
   }
   const win = usualWindow(atMs);
   const [usual, windows] = await Promise.all([
     fleetUsual(win.dayStartMs, win.dayType),
-    tenMinuteWindows(win.dayStartMs, atMs),
+    cachedTenMinuteWindows(win.dayStartMs, atMs),
   ]);
   const payload: DeparturesResponse = {
     at: atMs,

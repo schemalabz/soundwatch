@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
 import { PUBLIC_SENSOR_WHERE } from "@/lib/locations";
+import { resetUsualCache } from "@/lib/server/usual";
 import { readdirSync } from "node:fs";
 import { join } from "node:path";
 
@@ -129,6 +130,9 @@ const ARGS: Record<string, string> = {
 
 beforeEach(() => {
   queries.length = 0;
+  // /api/usual and /api/departures cache per process: a warm entry would
+  // hide the very query these tests inspect.
+  resetUsualCache();
   vi.clearAllMocks();
   findMany.mockReturnValue([SENSOR_ROW]);
   findUnique.mockReturnValue(null);

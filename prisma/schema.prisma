@@ -172,7 +172,9 @@ model Reading {
   sensor Sensor @relation(fields: [sensorId], references: [id])
 
   @@id([sensorId, recordedAt])
-  @@index([sensorId, recordedAt(sort: Desc)], map: "idx_readings_sensor_time")
+  // Covering in the database: INCLUDE (laeq, lmax_est), which Prisma cannot
+  // express. See migration 0023.
+  @@index([sensorId, recordedAt(sort: Desc)], map: "idx_readings_sensor_time_cover")
   // Latest-reading probes order on received_at (the device clock drifts) —
   // without this each one is a sort. See migration 0017.
   @@index([sensorId, receivedAt(sort: Desc)], map: "idx_readings_sensor_received")

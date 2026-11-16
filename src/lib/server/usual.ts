@@ -130,6 +130,7 @@ export function fleetUsual(dayStartMs: number, dayType: DayType): Promise<FleetU
 /** Test seam: forget everything computed so far. */
 export function resetUsualCache(): void {
   cache.clear();
+  windowsCache.clear();
 }
 
 /* --- departures: ten-minute figures of one day against the band ----------- */
@@ -166,6 +167,50 @@ export async function tenMinuteWindows(fromMs: number, toMs: number): Promise<Te
   return rows
     .map((r) => ({ sensorId: r.sensor_id, tMs: Number(r.t) * 1000, laeq: r.laeq, n: Number(r.n) }))
     .filter((w) => w.n >= WINDOW_MIN_READINGS);
+}
+
+// Every open live map asks for today's windows once a minute, all with the
+// same minute-aligned `at`, and each ask scans the whole day so far. Sharing
+// the answer per (from, to) makes that one scan a minute however many maps
+// are open, and concurrent asks share the query in flight.
+//
+// A range that ended within the last hour is kept for a minute: its last
+// windows can still be filling (ingest lag, a device flushing a short
+// buffer), and while it ends at now the next minute is a different key
+// anyway. An older one (a scrubbed-to day) only changes when a device
+// uploads a long backlog, so it is kept for ten.
+const LIVE_WINDOWS_TTL_MS = 60_000;
+const PAST_WINDOWS_TTL_MS = 10 * 60_000;
+const LIVE_EDGE_MS = 3600_000;
+// `at` is caller-chosen on a public route, and one entry is a whole day of
+// windows for every sensor: keep few. The live day plus a handful of
+// scrubbed-to days is all the dashboard ever shares.
+const WINDOWS_CACHE_MAX = 16;
+const windowsCache = new Map<string, { expires: number; value: Promise<TenMinuteWindow[]> }>();
+
+/** tenMinuteWindows, shared between callers asking for the same range. */
+export function cachedTenMinuteWindows(fromMs: number, toMs: number): Promise<TenMinuteWindow[]> {
+  const key = `${fromMs}:${toMs}`;
+  const now = Date.now();
+  const hit = windowsCache.get(key);
+  if (hit && hit.expires > now) {
+    // Map order is eviction order: a range in use moves to the back, so
+    // one-off ranges cannot push out the day every open map is asking for.
+    windowsCache.delete(key);
+    windowsCache.set(key, hit);
+    return hit.value;
+  }
+  const value = tenMinuteWindows(fromMs, toMs);
+  const ttl = toMs >= now - LIVE_EDGE_MS ? LIVE_WINDOWS_TTL_MS : PAST_WINDOWS_TTL_MS;
+  windowsCache.delete(key);
+  windowsCache.set(key, { expires: now + ttl, value });
+  // A failed query must not be served for the rest of its TTL.
+  value.catch(() => {
+    if (windowsCache.get(key)?.value === value) windowsCache.delete(key);
+  });
+  for (const [k, v] of windowsCache) if (v.expires <= now) windowsCache.delete(k);
+  while (windowsCache.size > WINDOWS_CACHE_MAX) windowsCache.delete(windowsCache.keys().next().value as string);
+  return value;
 }
 
 /**

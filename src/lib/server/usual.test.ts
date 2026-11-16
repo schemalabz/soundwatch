@@ -1,8 +1,16 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("@/lib/db", () => ({ prisma: {} }));
+const queryRaw = vi.hoisted(() => vi.fn());
+vi.mock("@/lib/db", () => ({ prisma: { $queryRawUnsafe: queryRaw } }));
 
-import { departureEpisodes, WINDOW_S, type FleetUsual, type TenMinuteWindow } from "./usual";
+import {
+  cachedTenMinuteWindows,
+  departureEpisodes,
+  resetUsualCache,
+  WINDOW_S,
+  type FleetUsual,
+  type TenMinuteWindow,
+} from "./usual";
 import {
   classify,
   countVersusUsual,
@@ -192,5 +200,79 @@ describe("departure episodes", () => {
 
   it("a sensor the fleet map does not know is skipped", () => {
     expect(departureEpisodes([win("bench", 10, 0, 120)], usual, t(15, 48))).toEqual([]);
+  });
+});
+
+describe("the shared day of ten-minute windows", () => {
+  const NOW = Date.UTC(2026, 10, 16, 8, 0);
+  const DAY_START = Date.UTC(2026, 10, 15, 22, 0);
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(NOW);
+    resetUsualCache();
+    queryRaw.mockReset();
+    queryRaw.mockResolvedValue([]);
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("runs one query for callers asking for the same range, also while it is in flight", async () => {
+    const a = cachedTenMinuteWindows(DAY_START, NOW);
+    const b = cachedTenMinuteWindows(DAY_START, NOW);
+    expect(b).toBe(a);
+    await a;
+    await cachedTenMinuteWindows(DAY_START, NOW);
+    expect(queryRaw).toHaveBeenCalledTimes(1);
+  });
+
+  it("asks again for the next minute, and for the same live range after a minute", async () => {
+    await cachedTenMinuteWindows(DAY_START, NOW);
+    await cachedTenMinuteWindows(DAY_START, NOW + 60_000);
+    expect(queryRaw).toHaveBeenCalledTimes(2);
+    vi.setSystemTime(NOW + 61_000);
+    await cachedTenMinuteWindows(DAY_START, NOW);
+    expect(queryRaw).toHaveBeenCalledTimes(3);
+  });
+
+  it("treats a range that ended within the hour as still filling", async () => {
+    const to = NOW - 30 * 60_000;
+    await cachedTenMinuteWindows(DAY_START, to);
+    vi.setSystemTime(NOW + 61_000);
+    await cachedTenMinuteWindows(DAY_START, to);
+    expect(queryRaw).toHaveBeenCalledTimes(2);
+  });
+
+  it("keeps a day that ended in the past for ten minutes", async () => {
+    const from = DAY_START - 5 * 86_400_000;
+    const to = from + 86_400_000 - 1;
+    await cachedTenMinuteWindows(from, to);
+    vi.setSystemTime(NOW + 9 * 60_000);
+    await cachedTenMinuteWindows(from, to);
+    expect(queryRaw).toHaveBeenCalledTimes(1);
+    vi.setSystemTime(NOW + 11 * 60_000);
+    await cachedTenMinuteWindows(from, to);
+    expect(queryRaw).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not keep a failed query", async () => {
+    queryRaw.mockRejectedValueOnce(new Error("db down"));
+    await expect(cachedTenMinuteWindows(DAY_START, NOW)).rejects.toThrow("db down");
+    await expect(cachedTenMinuteWindows(DAY_START, NOW)).resolves.toEqual([]);
+    expect(queryRaw).toHaveBeenCalledTimes(2);
+  });
+
+  it("holds a bounded number of ranges, and drops the least recently used", async () => {
+    await cachedTenMinuteWindows(DAY_START, NOW); // the day every map asks for
+    for (let i = 1; i <= 40; i++) {
+      await cachedTenMinuteWindows(DAY_START - i, NOW);
+      await cachedTenMinuteWindows(DAY_START, NOW);
+    }
+    queryRaw.mockClear();
+    await cachedTenMinuteWindows(DAY_START, NOW);
+    await cachedTenMinuteWindows(DAY_START - 40, NOW);
+    expect(queryRaw).not.toHaveBeenCalled();
+    await cachedTenMinuteWindows(DAY_START - 1, NOW);
+    expect(queryRaw).toHaveBeenCalledTimes(1);
   });
 });
