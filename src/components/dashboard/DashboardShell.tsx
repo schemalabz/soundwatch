@@ -57,6 +57,7 @@ import Timebar, { PLAYBACK_SPEEDS } from "./Timebar";
 import { type AggKey } from "@/lib/dashboard/metrics";
 import ViewSwitcher, { type DashboardView } from "./ViewSwitcher";
 import SummaryView from "./views/SummaryView";
+import { PERIOD_SHEET_HALF_SHARE } from "./views/PeriodSheet";
 import { devRenderCount } from "@/lib/dashboard/devtools";
 
 const MapCanvas = dynamic(() => import("./MapCanvas"), { ssr: false });
@@ -89,7 +90,7 @@ function viewForPath(pathname: string): DashboardView {
 // The sensors are fitted into the part of the canvas each lens leaves
 // visible (from PR #15). The period lens shows the map through a cutout at
 // the top (46vh, at least 16rem: SummaryView's classes) with a chip in its
-// bottom-left; the moment lens has the switcher on top, the timebar along
+// bottom-left, or on a phone above a bottom sheet (PeriodSheet); the moment lens has the switcher on top, the timebar along
 // the bottom (desktop) or the right edge (phones), and on desktop the legend
 // in its bottom-left corner. CSS pixels, kept in step with those classes by
 // hand.
@@ -103,12 +104,13 @@ type Padding = { top: number; right: number; bottom: number; left: number };
 function viewPadding(view: DashboardView, canvas: HTMLElement, mobile: boolean): Padding {
   const h = canvas.clientHeight;
   if (view === "summary") {
-    const cutout = Math.min(h, Math.max(window.innerHeight * SUMMARY_CUTOUT_VH, SUMMARY_CUTOUT_MIN_PX));
     // Leave at least a strip of map to fit into, whatever the viewport.
-    // The chip spans the cutout's foot on a phone; on desktop it sits in the
-    // corner, clear of a network fitted to the middle.
-    const bottom = Math.min(h - cutout + (mobile ? 64 : 20), Math.max(0, h - 120));
-    return { top: mobile ? 64 : 80, right: 24, bottom, left: 24 };
+    const fit = (bottom: number) => Math.min(bottom, Math.max(0, h - 120));
+    // On a phone the bottom sheet covers the map's lower part at its default stop.
+    if (mobile) return { top: 64, right: 24, bottom: fit(Math.round(h * PERIOD_SHEET_HALF_SHARE) + 16), left: 24 };
+    // Elsewhere the chip sits in the cutout's corner, clear of a network fitted to the middle.
+    const cutout = Math.min(h, Math.max(window.innerHeight * SUMMARY_CUTOUT_VH, SUMMARY_CUTOUT_MIN_PX));
+    return { top: 80, right: 24, bottom: fit(h - cutout + 20), left: 24 };
   }
   if (mobile) return { top: 64, right: 80, bottom: 104, left: 16 };
   return { top: 84, right: 24, bottom: 112, left: canvas.clientWidth >= LEGEND_CLEARANCE_MIN_CANVAS_PX ? LEGEND_CLEARANCE_PX : 24 };
@@ -527,7 +529,7 @@ export default function DashboardShell({ initialView = "map" }: { initialView?: 
 
   // Pin placement happens on the period lens's own map (the cutout, which
   // SummaryView scrolls back into view when this arms; on a phone the filter
-  // sheet gets out of the way). A pin is a filter of the period, so arming
+  // sheet and the period's bottom sheet get out of the way). A pin is a filter of the period, so arming
   // no longer leaves for the moment lens. The pin lands immediately with a
   // null label and the reverse-geocoded street name streams in when Mapbox
   // answers.
@@ -821,6 +823,7 @@ export default function DashboardShell({ initialView = "map" }: { initialView?: 
                 onScopeHover={setScopeHover}
                 onScopeClick={onScopeClick}
                 placingPin={placingPin}
+                sheet={isMobile === true}
               />
             )}
             {/* The pane is the MOMENT's view of a place. On the period lens a

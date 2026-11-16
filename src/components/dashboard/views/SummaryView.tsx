@@ -10,9 +10,10 @@
 // seen and dragged through the cutout, and scrolls out of sight as the
 // ranking comes up.
 //
-// On a touch screen the overlay takes the touches instead (see TOUCH_SCROLL):
-// there the page has to scroll from anywhere, and a finger on a map that
-// fills the top half of a phone would pan the map and never reach the page.
+// On a touch screen that is not a phone (a tablet) the overlay takes the
+// touches instead (see TOUCH_SCROLL): there the page has to scroll from
+// anywhere. On a phone none of this applies: the sections go into a bottom
+// sheet over a full-screen map (PeriodSheet).
 
 import { memo, useCallback, useEffect, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
@@ -25,6 +26,7 @@ import type { SensorMeta } from "../SensorLayer";
 import Leaderboard from "./Leaderboard";
 import ChartsView from "./ChartsView";
 import CompareSection from "./CompareSection";
+import PeriodSheet from "./PeriodSheet";
 import { devRenderCount } from "@/lib/dashboard/devtools";
 
 
@@ -56,6 +58,7 @@ function SummaryView({
   onScopeHover,
   onScopeClick,
   placingPin,
+  sheet,
 }: {
   aggData: Record<string, Record<AggKey, number> & { n: number }> | null;
   /** The filters moved and the ranking for them has not landed yet. */
@@ -82,8 +85,11 @@ function SummaryView({
   /** The selection chips on the sections: hover and click reach the rail. */
   onScopeHover?: (on: boolean) => void;
   onScopeClick?: () => void;
-  /** A pin is being placed on the map: the cutout scrolls back into view. */
+  /** A pin is being placed on the map: the cutout scrolls back into view
+   *  (on a phone, the sheet drops to its peek). */
   placingPin: boolean;
+  /** Phone layout: the sections ride in a bottom sheet over a full-screen map. */
+  sheet: boolean;
 }) {
   devRenderCount("SummaryView");
   // Once the content has scrolled up under the floating lens switcher, a
@@ -106,6 +112,68 @@ function SummaryView({
       .find((el) => el != null);
     marker?.click();
   }, []);
+  // What the circles on the map show: a chip on the cutout, the sheet's head on a phone.
+  const mapNote = (
+    <>
+      <span className="shrink-0 font-semibold text-foreground">{tr.summary.mapTitle}</span>
+      <span className="text-muted-foreground md:truncate">
+        <span className="hidden md:inline">· </span>
+        <MetricMention metric={metric} onHover={onMetricRefHover} /> · <ScopeChip fallback={filterQualifiers} />
+      </span>
+    </>
+  );
+  const sections = (
+    <>
+      <Leaderboard
+        embedded
+        stale={aggStale}
+        scope={filterQualifiers}
+        aggData={aggData}
+        metric={metric}
+        sensors={sensors}
+        onSensorClick={onSensorClick}
+        onMetricRefHover={onMetricRefHover}
+        compareIds={compareIds}
+        onCompareToggle={onCompareToggle}
+        selectedId={selectedId}
+        onSelect={onSelect}
+        aggQuery={aggQuery}
+        filters={filters}
+        onGoToMap={onGoToMap}
+      />
+      <div className="mx-auto my-6 h-px max-w-4xl bg-border" />
+      <CompareSection
+        ids={compareIds}
+        sensors={sensors}
+        aggQuery={aggQuery}
+        metric={metric}
+        filters={filters}
+        scope={filterQualifiers}
+        onRemove={onCompareToggle}
+        onClear={onCompareClear}
+        onMetricRefHover={onMetricRefHover}
+      />
+      <div className="mx-auto my-6 h-px max-w-4xl bg-border" />
+      <ChartsView
+        embedded
+        aggQuery={aggQuery}
+        metric={metric}
+        filters={filters}
+        domainStartMs={domainStartMs}
+        nowMs={nowMs}
+        onMetricRefHover={onMetricRefHover}
+      />
+    </>
+  );
+  if (sheet) {
+    return (
+      <ScopeProvider text={filterQualifiers} onHover={onScopeHover} onClick={onScopeClick}>
+        <PeriodSheet header={<span className="flex flex-col gap-0.5">{mapNote}</span>} selectedId={selectedId} placingPin={placingPin}>
+          {sections}
+        </PeriodSheet>
+      </ScopeProvider>
+    );
+  }
   return (
     <ScopeProvider text={filterQualifiers} onHover={onScopeHover} onClick={onScopeClick}>
     <div
@@ -125,53 +193,11 @@ function SummaryView({
       <div className="relative -mt-[4.5rem] h-[46vh] min-h-[16rem]" onClick={onCutoutClick}>
         {/* Stacks on a phone, one line from md up. */}
         <div className="pointer-events-auto absolute bottom-3 left-3 flex max-w-[calc(100%-1.5rem)] flex-col gap-0.5 rounded-lg border bg-card/95 px-3 py-1.5 text-[11.5px] shadow-sm backdrop-blur-sm md:flex-row md:items-center md:gap-1.5">
-          <span className="shrink-0 font-semibold text-foreground">{tr.summary.mapTitle}</span>
-          <span className="text-muted-foreground md:truncate">
-            <span className="hidden md:inline">· </span>
-            <MetricMention metric={metric} onHover={onMetricRefHover} /> · <ScopeChip fallback={filterQualifiers} />
-          </span>
+          {mapNote}
         </div>
       </div>
       <div className="pointer-events-auto border-t bg-background pt-6">
-        <Leaderboard
-          embedded
-          stale={aggStale}
-          scope={filterQualifiers}
-          aggData={aggData}
-          metric={metric}
-          sensors={sensors}
-          onSensorClick={onSensorClick}
-          onMetricRefHover={onMetricRefHover}
-          compareIds={compareIds}
-          onCompareToggle={onCompareToggle}
-          selectedId={selectedId}
-          onSelect={onSelect}
-          aggQuery={aggQuery}
-          filters={filters}
-          onGoToMap={onGoToMap}
-        />
-        <div className="mx-auto my-6 h-px max-w-4xl bg-border" />
-        <CompareSection
-          ids={compareIds}
-          sensors={sensors}
-          aggQuery={aggQuery}
-          metric={metric}
-          filters={filters}
-          scope={filterQualifiers}
-          onRemove={onCompareToggle}
-          onClear={onCompareClear}
-          onMetricRefHover={onMetricRefHover}
-        />
-        <div className="mx-auto my-6 h-px max-w-4xl bg-border" />
-        <ChartsView
-          embedded
-          aggQuery={aggQuery}
-          metric={metric}
-          filters={filters}
-          domainStartMs={domainStartMs}
-          nowMs={nowMs}
-          onMetricRefHover={onMetricRefHover}
-        />
+        {sections}
       </div>
     </div>
     </ScopeProvider>
