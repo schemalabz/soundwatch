@@ -235,6 +235,14 @@ describe("the shared day of ten-minute windows", () => {
     expect(queryRaw).toHaveBeenCalledTimes(3);
   });
 
+  it("treats a range that ended within the hour as still filling", async () => {
+    const to = NOW - 30 * 60_000;
+    await cachedTenMinuteWindows(DAY_START, to);
+    vi.setSystemTime(NOW + 61_000);
+    await cachedTenMinuteWindows(DAY_START, to);
+    expect(queryRaw).toHaveBeenCalledTimes(2);
+  });
+
   it("keeps a day that ended in the past for ten minutes", async () => {
     const from = DAY_START - 5 * 86_400_000;
     const to = from + 86_400_000 - 1;
@@ -254,13 +262,17 @@ describe("the shared day of ten-minute windows", () => {
     expect(queryRaw).toHaveBeenCalledTimes(2);
   });
 
-  it("holds a bounded number of ranges", async () => {
-    for (let i = 0; i < 200; i++) await cachedTenMinuteWindows(DAY_START - i, NOW);
+  it("holds a bounded number of ranges, and drops the least recently used", async () => {
+    await cachedTenMinuteWindows(DAY_START, NOW); // the day every map asks for
+    for (let i = 1; i <= 40; i++) {
+      await cachedTenMinuteWindows(DAY_START - i, NOW);
+      await cachedTenMinuteWindows(DAY_START, NOW);
+    }
     queryRaw.mockClear();
-    // The newest are still shared; the oldest were dropped.
-    await cachedTenMinuteWindows(DAY_START - 199, NOW);
-    expect(queryRaw).not.toHaveBeenCalled();
     await cachedTenMinuteWindows(DAY_START, NOW);
+    await cachedTenMinuteWindows(DAY_START - 40, NOW);
+    expect(queryRaw).not.toHaveBeenCalled();
+    await cachedTenMinuteWindows(DAY_START - 1, NOW);
     expect(queryRaw).toHaveBeenCalledTimes(1);
   });
 });

@@ -1,10 +1,10 @@
 -- Make the (sensor, time) index covering for the level columns.
 --
--- /api/frames, /api/departures and the sub-hour path of /api/series read only
--- laeq (and lmax_est) per (sensor, time range), but each matching row cost a
--- heap fetch of a ~800-byte row. Live inserts interleave the sensors, so one
--- sensor's rows for an hour sit on as many heap pages as it has rows. On cold
--- chunks that is where the seconds went.
+-- Playback frames (/api/frames), /api/departures and the sub-hour path of
+-- /api/series read only laeq (and lmax_est) per (sensor, time range), but
+-- each matching row cost a heap fetch of a ~800-byte row. Live inserts
+-- interleave the sensors, so one sensor's rows for an hour sit on as many
+-- heap pages as it has rows. On cold chunks that is where the seconds went.
 --
 -- With laeq and lmax_est carried in the index leaf, those queries become
 -- index-only scans. Measured on the local stack (75 days, chunks clustered by
@@ -12,24 +12,37 @@
 --   frames, 6 x 1 h windows:   2155 -> 274
 --   departures, one full day:  7754 -> 811
 --
--- Same name and key columns as before, so schema.prisma's @@index still
--- describes it (Prisma cannot express INCLUDE). The old index goes: the
--- primary key already serves plain (sensor_id, recorded_at) lookups, so
--- keeping both would only cost writes. Net size: about +25%.
+-- What it does NOT speed up:
+--   - Live frames (by=received) filter on received_at, which is not in this
+--     index. They read the last minutes, which are always in memory.
+--   - Rows too new to be marked all-visible. An index-only scan still visits
+--     the heap for those, and autovacuum reaches an insert-only chunk only
+--     after it grows by about a fifth. Today's departures are mostly such
+--     rows; what makes those cheap is the shared day in src/lib/server/usual.ts.
+--     Closed chunks get the full gain after their first vacuum: run
+--     `VACUUM readings` once after this lands.
 --
--- Index-only scans need the visibility map, which autovacuum maintains only
--- loosely on insert-only tables; closed chunks get it on their first vacuum.
--- A manual `VACUUM readings` after deploy makes the gain immediate.
+-- The old index goes: the primary key already serves plain
+-- (sensor_id, recorded_at) lookups, so keeping both would only cost writes.
+-- Net size: about +25%.
 --
--- Locking: CREATE INDEX blocks writes to readings while it builds (locally,
--- 5.2M rows: 8 s with a warm cache, 93 s cold). The new ingester runs this
--- migration before it subscribes; an old container still running during the
--- deploy has its inserts wait for the build. Devices store-and-forward, so a
--- stalled ingester delays readings rather than losing them.
-CREATE INDEX "idx_readings_sensor_time_cover"
+-- Locking and deploy: CREATE INDEX blocks writes to readings while it builds
+-- (locally, 5.2M rows: 8 s with a warm cache, 93 s cold), and for that long
+-- this migration holds Prisma's advisory lock. The app and the ingester both
+-- run `migrate deploy` at start and wait only ~10 s for that lock, so the
+-- loser exits and is restarted until the build is done.
+--
+-- To avoid both, build the index by hand before deploying; every statement
+-- here is IF [NOT] EXISTS, so the migration then finishes at once:
+--
+--   CREATE INDEX IF NOT EXISTS idx_readings_sensor_time_cover
+--     ON readings (sensor_id, recorded_at DESC) INCLUDE (laeq, lmax_est)
+--     WITH (timescaledb.transaction_per_chunk);
+--
+-- (transaction_per_chunk locks one chunk at a time; it cannot run inside a
+-- transaction, which is why it is not used below.)
+CREATE INDEX IF NOT EXISTS "idx_readings_sensor_time_cover"
   ON "readings" ("sensor_id", "recorded_at" DESC)
   INCLUDE ("laeq", "lmax_est");
 
-DROP INDEX "idx_readings_sensor_time";
-
-ALTER INDEX "idx_readings_sensor_time_cover" RENAME TO "idx_readings_sensor_time";
+DROP INDEX IF EXISTS "idx_readings_sensor_time";
