@@ -85,7 +85,8 @@ function SummaryView({
   /** The selection chips on the sections: hover and click reach the rail. */
   onScopeHover?: (on: boolean) => void;
   onScopeClick?: () => void;
-  /** A pin is being placed on the map: the cutout scrolls back into view. */
+  /** A pin is being placed on the map: the cutout scrolls back into view
+   *  (on a phone, the sheet drops to its peek). */
   placingPin: boolean;
   /** Phone layout: the sections ride in a bottom sheet over a full-screen map. */
   sheet: boolean;
