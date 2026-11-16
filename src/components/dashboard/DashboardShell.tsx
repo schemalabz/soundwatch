@@ -105,9 +105,10 @@ function viewPadding(view: DashboardView, canvas: HTMLElement, mobile: boolean):
   if (view === "summary") {
     const cutout = Math.min(h, Math.max(window.innerHeight * SUMMARY_CUTOUT_VH, SUMMARY_CUTOUT_MIN_PX));
     // Leave at least a strip of map to fit into, whatever the viewport.
-    // The chip spans the cutout's foot on a phone; on desktop it sits in the
-    // corner, clear of a network fitted to the middle.
-    const bottom = Math.min(h - cutout + (mobile ? 64 : 20), Math.max(0, h - 120));
+    // On a phone the same share is covered by the bottom sheet at its default
+    // stop (PeriodSheet's HALF_SHARE is the cutout's complement); on desktop
+    // the chip sits in the cutout's corner, clear of a network fitted to the middle.
+    const bottom = Math.min(h - cutout + (mobile ? 16 : 20), Math.max(0, h - 120));
     return { top: mobile ? 64 : 80, right: 24, bottom, left: 24 };
   }
   if (mobile) return { top: 64, right: 80, bottom: 104, left: 16 };
@@ -821,6 +822,7 @@ export default function DashboardShell({ initialView = "map" }: { initialView?: 
                 onScopeHover={setScopeHover}
                 onScopeClick={onScopeClick}
                 placingPin={placingPin}
+                sheet={isMobile === true}
               />
             )}
             {/* The pane is the MOMENT's view of a place. On the period lens a

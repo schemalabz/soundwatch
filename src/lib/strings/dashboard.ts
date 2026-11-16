@@ -13,6 +13,9 @@ export const dashboardStrings = {
   summary: {
     /** The chip on Σύνοψη's map: what the circles show. */
     mapTitle: "Κάθε θέση",
+    /** The phone's bottom sheet: its name for screen readers, and its grab handle. */
+    sheetTitle: "Κατάταξη, σύγκριση και γραφήματα της περιόδου",
+    sheetHandle: "Μετακίνηση του πίνακα πάνω ή κάτω",
     receipt: (count: string) => `≈ ${count} μετρήσεις`,
     zeroMeasurements: "0 μετρήσεις",
   },
