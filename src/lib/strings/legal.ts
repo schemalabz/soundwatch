@@ -22,19 +22,26 @@ export interface LegalDoc {
 
 export const CONTACT_EMAIL = "hello@schemalabs.gr";
 
+// The operator's legal identity, shown in both texts (asked for by our
+// lawyers, DLE, on 2026-11-17). Source: the Skroutz sponsorship agreement and
+// AADE records.
+export const OPERATOR_DETAILS =
+  "Schema Labs Αστική Μη Κερδοσκοπική Εταιρεία (ΑΜΚΕ) · Λαλέχου 1, 154 51 Νέο Ψυχικό · ΑΦΜ 802651795, ΔΟΥ ΚΕ.Β.ΕΙΣ. Αττικής";
+
 export const privacyStrings: LegalDoc = {
   meta: {
     title: "Απόρρητο",
     description: "Τι δεδομένα συλλέγει το Soundwatch: οι αισθητήρες μετρούν μόνο στάθμες θορύβου, χωρίς ηχογράφηση. Ο ιστότοπος δεν χρησιμοποιεί cookies ούτε analytics.",
   },
   title: "Πολιτική απορρήτου",
-  updated: "Τελευταία ενημέρωση: [Νοέμβριος 2026]",
+  updated: "Τελευταία ενημέρωση: 17 Νοεμβρίου 2026",
   lead: "Το Soundwatch μετρά τον θόρυβο της Αθήνας, όχι τους ανθρώπους της. Οι αισθητήρες δεν ηχογραφούν και ο ιστότοπος δεν σας ζητά και δεν κρατά στοιχεία σας. Παρακάτω, αναλυτικά.",
   sections: [
     {
       title: "Ποιος είναι υπεύθυνος",
       body: [
-        `Το Soundwatch το λειτουργεί η Schema Labs ΑΜΚΕ (Αθήνα), μη κερδοσκοπική εταιρεία. Για οτιδήποτε σχετικό με αυτή την πολιτική: ${CONTACT_EMAIL}.`,
+        "Το Soundwatch το λειτουργεί η Schema Labs ΑΜΚΕ, μη κερδοσκοπική εταιρεία, που είναι και υπεύθυνη επεξεργασίας για ό,τι περιγράφει αυτή η πολιτική.",
+        `${OPERATOR_DETAILS} · ${CONTACT_EMAIL}`,
       ],
     },
     {
@@ -75,13 +82,14 @@ export const termsStrings: LegalDoc = {
     description: "Οι όροι χρήσης του Soundwatch και των ανοιχτών δεδομένων του.",
   },
   title: "Όροι χρήσης",
-  updated: "Τελευταία ενημέρωση: [Νοέμβριος 2026]",
+  updated: "Τελευταία ενημέρωση: 17 Νοεμβρίου 2026",
   lead: "Το Soundwatch είναι ένα ανοιχτό, μη κερδοσκοπικό έργο. Μπορείτε να το χρησιμοποιείτε ελεύθερα. Ζητάμε μόνο να διαβάσετε τα παρακάτω.",
   sections: [
     {
       title: "Ποιος το λειτουργεί",
       body: [
         "Το Soundwatch (soundwatch.gr) το λειτουργεί η Schema Labs ΑΜΚΕ, με χορηγία της Skroutz. Οι αισθητήρες είναι εγκατεστημένοι σε σημεία της Skroutz.",
+        `${OPERATOR_DETAILS} · ${CONTACT_EMAIL}`,
       ],
     },
     {
