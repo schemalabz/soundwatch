@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { computeStage } from "@/lib/locations";
+import { rowStatus } from "@/lib/fleet/status";
 import { occupants } from "@/lib/server/siteBinding";
 
 // Gated like the rest of the install namespace: a valid token is the price of
@@ -21,7 +21,7 @@ export async function GET(
     orderBy: { name: "asc" },
     include: {
       sensors: {
-        select: { deviceId: true, provisionedAt: true, installedAt: true, lastSeenAt: true, retiredAt: true, isActive: true },
+        select: { deviceId: true, retiredAt: true, isActive: true, isExperimental: true, provisionedAt: true, handedOverAt: true, installedAt: true, lastSeenAt: true },
       },
     },
   });
@@ -39,7 +39,7 @@ export async function GET(
         longitude,
         address,
         occupied: other
-          ? { state: computeStage(other, now) === "installed_live" ? ("live" as const) : ("silent" as const) }
+          ? { state: rowStatus(other, now) === "live" ? ("live" as const) : ("silent" as const) }
           : null,
       };
     }),

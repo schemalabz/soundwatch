@@ -2,9 +2,14 @@
 // the sensor page colour a dot by it; /status counts "ενεργοί" by the stale
 // bound. Age ALWAYS reads receivedAt: a device clock 35 min fast would make
 // a dead unit look fresh and a healthy one look stale after an NTP resync.
+// Public screens only: the admin's lifecycle and silent bound, and the
+// installer's, are in lib/fleet/status.
 
 export const LIVE_S = 120;
 export const STALE_S = 3600;
+/** Silent longer than this = left the network, not just quiet this morning.
+ *  The live rail counts these apart from the merely silent. */
+export const OFFLINE_S = 7 * 86_400;
 
 export type LiveTone = "live" | "stale" | "dead" | "never";
 

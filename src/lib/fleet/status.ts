@@ -2,11 +2,21 @@
 // the fleet API, the unit page and the incident evaluator all decide through
 // here, so a threshold changes in one place and its truth table is tested.
 //
+// What the PUBLIC sees (map dots, /status counts) is lib/dashboard/liveness:
+// a different audience with its own bounds. Visibility to the public is
+// PUBLIC_SENSOR_WHERE in lib/locations. Everything admin- and installer-facing
+// derives from here.
+//
 // Every rule below came out of the Sep 30 investigation of the Skroutz fleet
 // (see docs/superpowers/specs/2026-10-03-admin-redesign-design.md).
 
 /** No arrival for this long = silent. Units report every ~30 s. */
 export const SILENT_AFTER_MS = 15 * 60 * 1000;
+
+/** "Is it publishing right now?" for someone standing at the box: the
+ *  installer's QR page and the bench's READY gate. Tighter than
+ *  SILENT_AFTER_MS because they are waiting on the answer. */
+export const INSTALL_LIVE_MS = 5 * 60 * 1000;
 
 /** "Watch": a live unit whose last 24 h look unhealthy. */
 export const WATCH_RSSI_DBM = -70;
@@ -110,6 +120,16 @@ export function lifecycleStatus(s: StatusInput, now: Date): FleetStatus {
   }
   const heard = s.lastReceivedAt != null && now.getTime() - s.lastReceivedAt.getTime() < SILENT_AFTER_MS;
   return heard ? "live" : "silent";
+}
+
+/** lifecycleStatus from a sensor row alone, for routes that don't load
+ *  readings: lastSeenAt is the ingester's server-side arrival stamp, so it
+ *  stands in for the newest reading's received_at. */
+export function rowStatus(
+  s: Omit<StatusInput, "lastReceivedAt"> & { lastSeenAt: Date | null },
+  now: Date,
+): FleetStatus {
+  return lifecycleStatus({ ...s, lastReceivedAt: s.lastSeenAt }, now);
 }
 
 /** Reasons a live unit is on the watch list; empty = healthy. */

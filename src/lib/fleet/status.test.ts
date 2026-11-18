@@ -11,6 +11,7 @@ import {
   isScheduledBoot,
   lifecycleStatus,
   needsCharge,
+  rowStatus,
   silentCause,
   watchReasons,
   type StatusInput,
@@ -162,5 +163,27 @@ describe("fleetGroup", () => {
 
   it("counts field units toward the target, never bench or retired", () => {
     expect(all.filter(countsTowardTarget)).toEqual(["minted", "in_box", "with_installer", "live", "watch", "silent"]);
+  });
+});
+
+describe("rowStatus", () => {
+  const row = { retiredAt: null, isActive: true, isExperimental: false, provisionedAt: new Date("2026-08-05T09:00:00Z"),
+    handedOverAt: null, installedAt: new Date("2026-08-28T12:00:00Z"), lastSeenAt: new Date("2026-10-03T11:59:30Z") };
+  const longAgo = new Date("2026-10-03T10:00:00Z");
+
+  it("reads lastSeenAt as the newest arrival", () => {
+    expect(rowStatus(row, now)).toBe("live");
+    expect(rowStatus({ ...row, lastSeenAt: longAgo }, now)).toBe("silent");
+    expect(rowStatus({ ...row, lastSeenAt: null }, now)).toBe("silent");
+  });
+
+  it("a boxed unit stays in_box even with a recent lastSeenAt from its office check", () => {
+    expect(rowStatus({ ...row, installedAt: null }, now)).toBe("in_box");
+  });
+
+  it("retired, hidden and bench rows are never live", () => {
+    expect(rowStatus({ ...row, retiredAt: longAgo }, now)).toBe("retired");
+    expect(rowStatus({ ...row, isActive: false }, now)).toBe("retired");
+    expect(rowStatus({ ...row, isExperimental: true }, now)).toBe("bench");
   });
 });

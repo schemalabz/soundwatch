@@ -21,9 +21,8 @@ import type { FreshnessResponse } from "@/types/freshness";
 import type { SensorMeta } from "./SensorLayer";
 import MapLegend from "./MapLegend";
 import { devRenderCount } from "@/lib/dashboard/devtools";
+import { OFFLINE_S } from "@/lib/dashboard/liveness";
 
-/** A unit silent longer than this has left the network, not just the morning. */
-const OFFLINE_S = 7 * 86_400;
 const DEPARTURES_SHOWN = 8;
 
 export interface NowRailProps {

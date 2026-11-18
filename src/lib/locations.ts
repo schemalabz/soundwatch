@@ -3,8 +3,6 @@
 
 import { parseLatLon } from "@/lib/api/adminInput";
 
-export const LIVE_WINDOW_MS = 5 * 60 * 1000;
-
 // What "a sensor exists" means to the PUBLIC (map, leaderboard): active, not a
 // bench/experimental unit, and actually somewhere. Without the last two clauses
 // the homepage showed every minted token and the whole bench fleet as nameless
@@ -15,8 +13,6 @@ export const PUBLIC_SENSOR_WHERE = {
   isExperimental: false,
   latitude: { not: null },
 } as const;
-
-export type SensorStage = "minted" | "in_box" | "installed_live" | "installed_silent" | "bench";
 
 export type ImportRow = {
   key: string;
@@ -76,29 +72,6 @@ export function displayName(u: { name: string | null; address: string | null }):
   if (name) return name;
   const address = u.address?.trim();
   return address || null;
-}
-
-// in_box deliberately ignores lastSeenAt: a field unit publishes during its
-// office prove phase, and that must not make a boxed unit look like a dead
-// deployment.
-//
-// Experimental (bench) units get one neutral stage: "installed" can never
-// happen to them, so lifecycle words like in_box carry no signal — and
-// liveness is the status dot's job, not the badge's.
-export function computeStage(
-  s: {
-    provisionedAt: Date | null;
-    installedAt: Date | null;
-    lastSeenAt: Date | null;
-    isExperimental?: boolean;
-  },
-  now: Date
-): SensorStage {
-  if (s.isExperimental) return "bench";
-  if (!s.provisionedAt && !s.installedAt) return "minted";
-  if (!s.installedAt) return "in_box";
-  const live = s.lastSeenAt != null && now.getTime() - s.lastSeenAt.getTime() < LIVE_WINDOW_MS;
-  return live ? "installed_live" : "installed_silent";
 }
 
 /** Readings a box sends at the office while it is flashed — the bench check —

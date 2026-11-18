@@ -1,7 +1,9 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { checkAdminAuth } from "../auth";
-import { computeStage, parseImportRows, slugifyKey } from "@/lib/locations";
+import { rowStatus } from "@/lib/fleet/status";
+import { parseImportRows, slugifyKey } from "@/lib/locations";
+import { adminNow } from "@/lib/server/clock";
 
 // The site list's source of truth is the operator's spreadsheet. This endpoint
 // makes re-import idempotent: upsert by key, never duplicate. Sites absent
@@ -35,12 +37,12 @@ export async function GET(request: Request) {
   const authError = checkAdminAuth(request);
   if (authError) return authError;
 
-  const now = new Date();
+  const now = adminNow();
   const sites = await prisma.plannedLocation.findMany({
     orderBy: { name: "asc" },
     include: {
       sensors: {
-        select: { deviceId: true, provisionedAt: true, installedAt: true, lastSeenAt: true },
+        select: { deviceId: true, retiredAt: true, isActive: true, isExperimental: true, provisionedAt: true, handedOverAt: true, installedAt: true, lastSeenAt: true },
       },
     },
   });
@@ -48,7 +50,7 @@ export async function GET(request: Request) {
   return NextResponse.json(
     sites.map(({ sensors, ...site }) => ({
       ...site,
-      filledBy: sensors.map((s) => ({ deviceId: s.deviceId, stage: computeStage(s, now) })),
+      filledBy: sensors.map((s) => ({ deviceId: s.deviceId, status: rowStatus(s, now) })),
     }))
   );
 }

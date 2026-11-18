@@ -1,10 +1,9 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
+import { INSTALL_LIVE_MS } from "@/lib/fleet/status";
 import { isSetupReading } from "@/lib/locations";
 
 export const dynamic = "force-dynamic";
-
-const LIVE_WINDOW_MS = 5 * 60 * 1000;
 
 /**
  * Is this device alive and publishing?
@@ -59,7 +58,7 @@ export async function GET(
   });
 
   const ageMs = latest ? Date.now() - latest.receivedAt.getTime() : null;
-  const live = ageMs !== null && ageMs < LIVE_WINDOW_MS;
+  const live = ageMs !== null && ageMs < INSTALL_LIVE_MS;
 
   // never_seen distinguishes "installed but not yet reporting" from "was working
   // and stopped" — the installer needs to know which of those they are looking at.

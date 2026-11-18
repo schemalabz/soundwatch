@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { checkAdminAuth } from "../auth";
 import { generateToken } from "@/lib/token";
-import { computeStage } from "@/lib/locations";
+import { rowStatus } from "@/lib/fleet/status";
+import { adminNow } from "@/lib/server/clock";
 
 export async function GET(request: Request) {
   const authError = checkAdminAuth(request);
@@ -13,19 +14,9 @@ export async function GET(request: Request) {
     include: { plannedLocation: { select: { name: true } } },
   });
 
-  const now = new Date();
-  const result = sensors.map((sensor) => ({
-    ...sensor,
-    status: sensor.lastSeenAt
-      ? now.getTime() - sensor.lastSeenAt.getTime() < 5 * 60 * 1000
-        ? "online"
-        : "offline"
-      : "never_seen",
-    // Lifecycle stage: unlike `status`, this distinguishes a provisioned unit
-    // sitting in a box (which HAS a lastSeenAt from its office prove phase)
-    // from a deployed unit that died.
-    stage: computeStage(sensor, now),
-  }));
+  // Same status vocabulary as the fleet and inventory (lib/fleet/status).
+  const now = adminNow();
+  const result = sensors.map((sensor) => ({ ...sensor, status: rowStatus(sensor, now) }));
 
   return NextResponse.json(result);
 }

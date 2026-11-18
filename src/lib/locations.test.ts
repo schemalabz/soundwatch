@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import {
-  computeStage,
   decideLocationWrite,
   displayName,
   isSetupReading,
@@ -91,30 +90,6 @@ describe("parseImportRows", () => {
       { name: "Same", latitude: 2, longitude: 2 },
     ]);
     expect((r as { error: string }).error).toContain("duplicate key");
-  });
-});
-
-describe("computeStage", () => {
-  const now = new Date("2026-08-03T12:00:00Z");
-  const recent = new Date("2026-08-03T11:58:00Z"); // inside 5-min window
-  const stale = new Date("2026-08-03T10:00:00Z");
-  it("minted: nothing but the row", () => {
-    expect(computeStage({ provisionedAt: null, installedAt: null, lastSeenAt: null }, now)).toBe("minted");
-  });
-  it("in_box: provisioned, not installed — even with a RECENT lastSeenAt (prove-phase trap)", () => {
-    expect(computeStage({ provisionedAt: stale, installedAt: null, lastSeenAt: recent }, now)).toBe("in_box");
-  });
-  it("installed_live: installed and seen within the window", () => {
-    expect(computeStage({ provisionedAt: stale, installedAt: stale, lastSeenAt: recent }, now)).toBe("installed_live");
-  });
-  it("installed_silent: installed, last seen too long ago (or never)", () => {
-    expect(computeStage({ provisionedAt: stale, installedAt: stale, lastSeenAt: stale }, now)).toBe("installed_silent");
-    expect(computeStage({ provisionedAt: stale, installedAt: stale, lastSeenAt: null }, now)).toBe("installed_silent");
-  });
-  it("experimental units are 'bench' regardless of lifecycle fields — liveness is the dot's job", () => {
-    expect(computeStage({ provisionedAt: stale, installedAt: null, lastSeenAt: recent, isExperimental: true }, now)).toBe("bench");
-    expect(computeStage({ provisionedAt: null, installedAt: stale, lastSeenAt: stale, isExperimental: true }, now)).toBe("bench");
-    expect(computeStage({ provisionedAt: null, installedAt: null, lastSeenAt: null, isExperimental: true }, now)).toBe("bench");
   });
 });
 
