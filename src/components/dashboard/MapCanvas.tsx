@@ -29,18 +29,28 @@ export default function MapCanvas({
     if (!TOKEN || !containerRef.current || mapRef.current) return;
 
     mapboxgl.accessToken = TOKEN;
-    const map = new mapboxgl.Map({
-      container: containerRef.current,
-      style: "mapbox://styles/mapbox/light-v11",
-      center: ATHENS_CENTER_LNGLAT,
-      zoom: ATHENS_OVERVIEW_ZOOM,
-      minZoom: 9,
-      maxZoom: 17,
-      dragRotate: false,
-      pitchWithRotate: false,
-      touchPitch: false,
-      attributionControl: false,
-    });
+    let map: mapboxgl.Map;
+    try {
+      map = new mapboxgl.Map({
+        container: containerRef.current,
+        style: "mapbox://styles/mapbox/light-v11",
+        center: ATHENS_CENTER_LNGLAT,
+        zoom: ATHENS_OVERVIEW_ZOOM,
+        minZoom: 9,
+        maxZoom: 17,
+        dragRotate: false,
+        pitchWithRotate: false,
+        touchPitch: false,
+        attributionControl: false,
+      });
+    } catch (e) {
+      // No WebGL (disabled, blocklisted GPU, headless browser): the
+      // constructor throws, and uncaught that takes the whole page down.
+      // Reported like the style error below: from outside the effect body.
+      console.warn("Map unavailable:", (e as Error).message);
+      queueMicrotask(() => setFailed(true));
+      return;
+    }
     map.on("error", (e) => {
       // Bad/expired token etc. — fall back instead of a broken canvas.
       if (!map.isStyleLoaded()) setFailed(true);
@@ -60,11 +70,17 @@ export default function MapCanvas({
     return (
       <div className="absolute inset-0 grid place-items-center bg-secondary">
         <div className="text-center max-w-xs px-6">
-          <div className="text-sm font-medium">Ο χάρτης χρειάζεται κλειδί Mapbox</div>
-          <p className="mt-1.5 text-xs text-muted-foreground leading-relaxed">
-            Ορίστε <code className="font-medium">NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN</code> στο{" "}
-            <code className="font-medium">.env</code> και κάντε επανεκκίνηση.
-          </p>
+          {TOKEN ? (
+            <div className="text-sm font-medium">Ο χάρτης δεν μπόρεσε να φορτώσει σε αυτόν τον browser</div>
+          ) : (
+            <>
+              <div className="text-sm font-medium">Ο χάρτης χρειάζεται κλειδί Mapbox</div>
+              <p className="mt-1.5 text-xs text-muted-foreground leading-relaxed">
+                Ορίστε <code className="font-medium">NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN</code> στο{" "}
+                <code className="font-medium">.env</code> και κάντε επανεκκίνηση.
+              </p>
+            </>
+          )}
         </div>
       </div>
     );

@@ -7,10 +7,12 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import dynamic from "next/dynamic";
 import { useAdmin } from "@/components/admin/AdminShell";
 import { STATUS_META, Strip, StripLegend, StatusDot, ChargeChip, ago, athens, boxCode } from "@/components/admin/fleetUi";
 import { NoteLine } from "@/components/admin/UnitNotes";
 import type { FleetResponse, FleetUnit } from "@/lib/api/admin";
+import type { FleetMapPoint } from "@/components/admin/FleetMap";
 import { SILENT_CAUSE_TEXT, FLEET_TARGET, fleetGroup, type FleetStatus } from "@/lib/fleet/status";
 
 type TabId = "deployed" | "live" | "watch" | "silent" | "boxed" | "bench" | "retired";
@@ -23,6 +25,12 @@ const TABS: { id: TabId; label: string; dot: string; match: (s: FleetStatus) => 
   { id: "bench", label: "Bench", dot: "bg-[#9aa3b5]", match: (s) => fleetGroup(s) === "bench" },
   { id: "retired", label: "Retired", dot: "bg-[#dcdde0]", match: (s) => fleetGroup(s) === "retired" },
 ];
+
+// mapbox-gl touches window on import, so the map loads in the browser only.
+const FleetMap = dynamic(() => import("@/components/admin/FleetMap"), {
+  ssr: false,
+  loading: () => <div className="h-[430px] rounded-xl border border-border bg-[#eef0f2]" />,
+});
 
 const ORDER: Record<FleetStatus, number> = { silent: 0, watch: 1, live: 2, with_installer: 3, in_box: 4, minted: 5, bench: 6, retired: 7 };
 
@@ -70,6 +78,10 @@ export default function FleetPage() {
   const routerRestarts = deployed.reduce((a, u) => a + u.network.routerRestarts7d, 0);
   const restartStores = deployed.filter((u) => u.network.routerRestarts7d > 0).length;
   const boxed = units.filter((u) => fleetGroup(u.status) === "ready");
+  const mapPoints = useMemo<FleetMapPoint[]>(() => units
+    .filter((u) => fleetGroup(u.status) === "store" && u.latitude != null && u.longitude != null)
+    .map((u) => ({ id: u.id, latitude: u.latitude!, longitude: u.longitude!, status: u.status, title: unitTitle(u).replace(/^Skroutz /, "") })),
+  [units]);
 
   const attention = [...silent, ...watch].sort((a, b) => ORDER[a.status] - ORDER[b.status] || (a.lastReceivedAt ?? "").localeCompare(b.lastReceivedAt ?? ""));
 
@@ -132,7 +144,7 @@ export default function FleetPage() {
         </div>
         <aside className="flex min-w-0 flex-1 flex-col gap-3">
           <h2 className="text-lg font-bold text-ink">Where they are</h2>
-          <MiniMap units={deployed} />
+          <FleetMap points={mapPoints} />
         </aside>
       </section>
 
@@ -298,25 +310,3 @@ function UnitRow({ u, now }: { u: FleetUnit; now: number }) {
 
 /** A schematic of where installed units are — no tiles, so it needs no map
  *  token and stays readable at a glance. The public map is the real map. */
-function MiniMap({ units }: { units: FleetUnit[] }) {
-  const pts = units.filter((u) => u.latitude != null && u.longitude != null);
-  if (pts.length === 0) return <div className="h-[430px] rounded-xl border border-border bg-[#eef0f2]" />;
-  const lats = pts.map((u) => u.latitude!), lngs = pts.map((u) => u.longitude!);
-  const pad = 0.008;
-  const [la0, la1, lo0, lo1] = [Math.min(...lats) - pad, Math.max(...lats) + pad, Math.min(...lngs) - pad, Math.max(...lngs) + pad];
-  return (
-    <div className="relative h-[430px] overflow-hidden rounded-xl border border-border bg-[#eef0f2]">
-      {pts.map((u) => {
-        const x = ((u.longitude! - lo0) / (lo1 - lo0)) * 100;
-        const y = ((la1 - u.latitude!) / (la1 - la0)) * 100;
-        return (
-          // Labels near the right edge flip to the left of their dot.
-          <Link key={u.id} href={`/admin/units/${u.id}`} className={`absolute flex -translate-y-[7px] items-center gap-1.5 ${x > 65 ? "-translate-x-[calc(100%-7px)] flex-row-reverse" : "-translate-x-[7px]"}`} style={{ left: `${x}%`, top: `${y}%` }}>
-            <span className={`size-3.5 rounded-full border-2 border-white shadow-[0_0_0_1px_#bfc0c0] ${STATUS_META[u.status].dot}`} />
-            <span className="rounded bg-white/85 px-1.5 text-xs font-medium text-ink">{unitTitle(u).replace(/^Skroutz /, "")}</span>
-          </Link>
-        );
-      })}
-    </div>
-  );
-}
