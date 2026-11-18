@@ -2,13 +2,11 @@ import { NextResponse } from "next/server";
 import type { InventoryResponse, InventoryToken } from "@/lib/api/admin";
 import { prisma } from "@/lib/db";
 import { groupBoxes } from "@/lib/fleet/inventory";
-import { lifecycleStatus } from "@/lib/fleet/status";
+import { FLEET_TARGET, lifecycleStatus } from "@/lib/fleet/status";
 import { adminNow } from "@/lib/server/clock";
 import { checkAdminAuth } from "../auth";
 
 export const dynamic = "force-dynamic";
-
-const TARGET = 50;
 
 interface LastRow { sensor_id: string; last_at: Date | null; battery: number | null; rssi: number | null; release: string | null }
 
@@ -66,6 +64,6 @@ export async function GET(request: Request) {
     };
   });
 
-  const payload: InventoryResponse = { generatedAt: now.toISOString(), target: TARGET, boxes };
+  const payload: InventoryResponse = { generatedAt: now.toISOString(), target: FLEET_TARGET, boxes };
   return NextResponse.json(payload);
 }

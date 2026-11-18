@@ -11,20 +11,17 @@ import { useAdmin } from "@/components/admin/AdminShell";
 import { STATUS_META, Strip, StripLegend, StatusDot, ChargeChip, ago, athens, boxCode } from "@/components/admin/fleetUi";
 import { NoteLine } from "@/components/admin/UnitNotes";
 import type { FleetResponse, FleetUnit } from "@/lib/api/admin";
-import { SILENT_CAUSE_TEXT, type FleetStatus } from "@/lib/fleet/status";
-
-/** The pilot's target: 50 units at Skroutz stores. */
-const TARGET_SITES = 50;
+import { SILENT_CAUSE_TEXT, FLEET_TARGET, fleetGroup, type FleetStatus } from "@/lib/fleet/status";
 
 type TabId = "deployed" | "live" | "watch" | "silent" | "boxed" | "bench" | "retired";
 const TABS: { id: TabId; label: string; dot: string; match: (s: FleetStatus) => boolean }[] = [
-  { id: "deployed", label: "Deployed", dot: "bg-ink", match: (s) => s === "live" || s === "watch" || s === "silent" },
+  { id: "deployed", label: "Deployed", dot: "bg-ink", match: (s) => fleetGroup(s) === "store" },
   { id: "live", label: "Live", dot: "bg-ok", match: (s) => s === "live" },
   { id: "watch", label: "Watch", dot: "bg-warn", match: (s) => s === "watch" },
   { id: "silent", label: "Silent", dot: "bg-loud", match: (s) => s === "silent" },
-  { id: "boxed", label: "In box", dot: "bg-slate", match: (s) => s === "in_box" || s === "with_installer" || s === "minted" },
-  { id: "bench", label: "Bench", dot: "bg-[#9aa3b5]", match: (s) => s === "bench" },
-  { id: "retired", label: "Retired", dot: "bg-[#dcdde0]", match: (s) => s === "retired" },
+  { id: "boxed", label: "In box", dot: "bg-slate", match: (s) => fleetGroup(s) === "ready" },
+  { id: "bench", label: "Bench", dot: "bg-[#9aa3b5]", match: (s) => fleetGroup(s) === "bench" },
+  { id: "retired", label: "Retired", dot: "bg-[#dcdde0]", match: (s) => fleetGroup(s) === "retired" },
 ];
 
 const ORDER: Record<FleetStatus, number> = { silent: 0, watch: 1, live: 2, with_installer: 3, in_box: 4, minted: 5, bench: 6, retired: 7 };
@@ -64,7 +61,7 @@ export default function FleetPage() {
   // The server's "now" (honours ADMIN_NOW in dev), so relative times agree with statuses.
   const now = fleet ? new Date(fleet.generatedAt).getTime() : 0;
 
-  const deployed = units.filter((u) => u.status === "live" || u.status === "watch" || u.status === "silent");
+  const deployed = units.filter((u) => fleetGroup(u.status) === "store");
   const live = deployed.filter((u) => u.status !== "silent");
   const silent = deployed.filter((u) => u.status === "silent");
   const watch = deployed.filter((u) => u.status === "watch");
@@ -72,7 +69,7 @@ export default function FleetPage() {
   const avgComp = comp.length ? comp.reduce((a, u) => a + (u.completeness7d ?? 0), 0) / comp.length : null;
   const routerRestarts = deployed.reduce((a, u) => a + u.network.routerRestarts7d, 0);
   const restartStores = deployed.filter((u) => u.network.routerRestarts7d > 0).length;
-  const boxed = units.filter((u) => u.status === "in_box" || u.status === "with_installer");
+  const boxed = units.filter((u) => fleetGroup(u.status) === "ready");
 
   const attention = [...silent, ...watch].sort((a, b) => ORDER[a.status] - ORDER[b.status] || (a.lastReceivedAt ?? "").localeCompare(b.lastReceivedAt ?? ""));
 
@@ -113,10 +110,10 @@ export default function FleetPage() {
         <Tile label="Store router restarts, 7 days" value={`${routerRestarts}`} unit={`at ${restartStores} ${restartStores === 1 ? "store" : "stores"}`}>
           <span className="text-[13px] text-slate">A unit reconnecting from a new public IP</span>
         </Tile>
-        <Tile label="Deployment" value={`${deployed.length}`} unit={`of ${TARGET_SITES} installed`}>
+        <Tile label="Deployment" value={`${deployed.length}`} unit={`of ${FLEET_TARGET} installed`}>
           <div className="flex h-2 overflow-hidden rounded-[3px] bg-[#eceded]">
-            <div className="bg-ok" style={{ width: `${(deployed.length / TARGET_SITES) * 100}%` }} />
-            <div className="bg-slate" style={{ width: `${(boxed.length / TARGET_SITES) * 100}%` }} />
+            <div className="bg-ok" style={{ width: `${(deployed.length / FLEET_TARGET) * 100}%` }} />
+            <div className="bg-slate" style={{ width: `${(boxed.length / FLEET_TARGET) * 100}%` }} />
           </div>
           <span className="text-[13px] text-slate">{boxed.length} more boxed, ready to ship</span>
         </Tile>

@@ -10,17 +10,10 @@ import DeviceLabel from "@/components/admin/DeviceLabel";
 import { useAdmin } from "@/components/admin/AdminShell";
 import { STATUS_META, StatusDot, ChargeChip, ago, athens, boxCode } from "@/components/admin/fleetUi";
 import type { InventoryBox, InventoryResponse } from "@/lib/api/admin";
-import { needsCharge, LOW_BATTERY_PCT } from "@/lib/fleet/status";
+import { needsCharge, LOW_BATTERY_PCT, fleetGroup, countsTowardTarget, FLEET_TARGET, type FleetGroup } from "@/lib/fleet/status";
 
-type Group = "store" | "ready" | "bench" | "retired";
-
-function groupOf(b: InventoryBox): Group {
-  const s = b.current.status;
-  if (s === "live" || s === "watch" || s === "silent") return "store";
-  if (s === "in_box" || s === "with_installer" || s === "minted") return "ready";
-  if (s === "bench") return "bench";
-  return "retired";
-}
+type Group = FleetGroup;
+const groupOf = (b: InventoryBox): Group => fleetGroup(b.current.status);
 
 const GROUP_META: Record<Group, { label: string; color: string }> = {
   store: { label: "At a store", color: "bg-ok" },
@@ -46,11 +39,12 @@ export default function InventoryPage() {
   const physical = boxes.filter((b) => groupOf(b) !== "retired");
   const by = (g: Group) => physical.filter((b) => groupOf(b) === g);
   const store = by("store"), ready = by("ready"), bench = by("bench");
+  const field = physical.filter((b) => countsTowardTarget(b.current.status));
   const dupes = boxes.filter((b) => b.duplicates.length > 0);
   const retiredTokens = (inv?.boxes ?? []).flatMap((b) =>
     [b.current, ...b.previous].filter((t) => t.retiredAt).map((t) => ({ t, box: b })),
   );
-  const target = inv?.target ?? 50;
+  const target = inv?.target ?? FLEET_TARGET;
   const now = inv ? new Date(inv.generatedAt).getTime() : 0;
 
   async function retireDuplicates() {
@@ -107,20 +101,20 @@ export default function InventoryPage() {
 
       <section className="flex flex-col gap-3.5 rounded-xl border border-border bg-white px-6 py-5">
         <div className="flex items-baseline gap-2.5">
-          <span className="text-[26px] font-bold tabular-nums text-ink">{inv ? physical.length : "—"}</span>
-          <span className="text-[15px] text-slate">physical boxes toward a target of {target}</span>
+          <span className="text-[26px] font-bold tabular-nums text-ink">{inv ? field.length : "—"}</span>
+          <span className="text-[15px] text-slate">field boxes toward a target of {target}</span>
           <span className="flex-1" />
-          {inv && <span className="text-[13px] text-slate">{Math.max(0, target - physical.length)} still to build</span>}
+          {inv && <span className="text-[13px] text-slate">{Math.max(0, target - field.length)} still to build</span>}
         </div>
         <div className="flex h-3.5 gap-0.5 overflow-hidden rounded bg-[#eceded]">
-          {(["store", "ready", "bench"] as Group[]).map((g) => (
+          {(["store", "ready"] as Group[]).map((g) => (
             <div key={g} className={GROUP_META[g].color} style={{ width: `${(by(g).length / target) * 100}%` }} />
           ))}
         </div>
         <div className="grid grid-cols-2 gap-4 md:grid-cols-3">
           <GroupStat g="store" n={store.length} sub={`${store.filter((b) => b.current.status !== "silent").length} sending · ${store.filter((b) => b.current.status === "silent").length} silent`} />
           <GroupStat g="ready" n={ready.length} sub={`${ready.filter((b) => b.current.status === "with_installer").length} with the installer`} />
-          <GroupStat g="bench" n={bench.length} sub={bench.map((b) => b.current.apName ? boxCode(b.current.apName) : b.current.deviceId).join(" · ")} />
+          <GroupStat g="bench" n={bench.length} sub={`not counted · ${bench.map((b) => b.current.apName ? boxCode(b.current.apName) : b.current.deviceId).join(" · ")}`} />
         </div>
       </section>
 

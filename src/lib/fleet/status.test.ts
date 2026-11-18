@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
   cellState,
+  countsTowardTarget,
+  fleetGroup,
+  type FleetStatus,
   duringInstall,
   fleetStatus,
   INSTALL_GRACE_MS,
@@ -143,5 +146,21 @@ describe("low battery", () => {
   });
   it("a battery that drained into the floor still reads as on battery", () => {
     expect(silentCause({ batteryMin: 8, batteryMax: 60, batteryLast: 8 })).toBe("on_battery");
+  });
+});
+
+describe("fleetGroup", () => {
+  const all: FleetStatus[] = ["retired", "bench", "minted", "in_box", "with_installer", "live", "watch", "silent"];
+
+  it("buckets every status", () => {
+    expect(Object.fromEntries(all.map((s) => [s, fleetGroup(s)]))).toEqual({
+      retired: "retired", bench: "bench",
+      minted: "ready", in_box: "ready", with_installer: "ready",
+      live: "store", watch: "store", silent: "store",
+    });
+  });
+
+  it("counts field units toward the target, never bench or retired", () => {
+    expect(all.filter(countsTowardTarget)).toEqual(["minted", "in_box", "with_installer", "live", "watch", "silent"]);
   });
 });

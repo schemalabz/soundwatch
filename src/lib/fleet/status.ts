@@ -49,6 +49,38 @@ export type FleetStatus =
   | "watch"
   | "silent";
 
+/** The pilot's target: 50 field units at Skroutz stores. */
+export const FLEET_TARGET = 50;
+
+/** Where a box is, for counting: at a store, boxed and ready to ship, on the
+ *  bench, or retired. The fleet and inventory pages both bucket through here,
+ *  so a status can't be "deployed" on one page and something else on another. */
+export type FleetGroup = "store" | "ready" | "bench" | "retired";
+
+export function fleetGroup(s: FleetStatus): FleetGroup {
+  switch (s) {
+    case "live":
+    case "watch":
+    case "silent":
+      return "store";
+    case "minted":
+    case "in_box":
+    case "with_installer":
+      return "ready";
+    case "bench":
+      return "bench";
+    case "retired":
+      return "retired";
+  }
+}
+
+/** Field units count toward FLEET_TARGET. Bench boxes are experimental —
+ *  test and dev boards — and never do. */
+export function countsTowardTarget(s: FleetStatus): boolean {
+  const g = fleetGroup(s);
+  return g === "store" || g === "ready";
+}
+
 export interface StatusInput {
   retiredAt: Date | null;
   /** false = hidden from the public; a unit switched off before retirement
